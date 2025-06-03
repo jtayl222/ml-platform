@@ -1,0 +1,102 @@
+---
+# Verify prerequisites
+- name: Ensure kubeconfig exists
+  ansible.builtin.stat:
+    path: "{{ kubeconfig_path }}"
+  register: kubeconfig_stat
+  delegate_to: "{{ groups['ansible_controller'][0] }}"
+  become: false
+
+- name: Fail if kubeconfig doesn't exist
+  ansible.builtin.fail:
+    msg: "Kubeconfig not found at {{ kubeconfig_path }}. Please run the kubeconfig tasks first."
+  when: not kubeconfig_stat.stat.exists
+  delegate_to: "{{ groups['ansible_controller'][0] }}"
+  become: false
+
+# Clone repository
+- name: Clone homelab-mlops-demo repository
+  ansible.builtin.git:
+    repo: "{{ mlops_demo_app_repo_url }}"
+    dest: "{{ mlops_demo_app_repo_path }}"
+    version: "{{ mlops_demo_app_repo_branch }}"
+    force: "{{ mlops_demo_app_force_clone }}"
+  delegate_to: "{{ groups['ansible_controller'][0] }}"
+  become: false
+
+- name: Debug controller service status
+  ansible.builtin.command: kubectl --kubeconfig="{{ kubeconfig_path }}" get svc -n {{ sealed_secrets_namespace }} {{ sealed_secrets_controller_name }}
+  register: service_status
+  changed_when: false
+  delegate_to: "{{ groups['ansible_controller'][0] }}"
+  become: false
+
+- name: Wait for SealedSecret CRD to be available
+  ansible.builtin.shell: |
+    kubectl --kubeconfig="{{ kubeconfig_path }}" get crd sealedsecrets.bitnami.com
+  register: crd_check
+  until: crd_check.rc == 0
+  retries: 30
+  delay: 10
+  changed_when: false
+  delegate_to: "{{ groups['ansible_controller'][0] }}"
+  become: false
+
+- name: Apply Sealed Secrets (MinIO + Workflow)
+  ansible.builtin.command: kubectl --kubeconfig="{{ kubeconfig_path }}" apply -f "{{ playbook_dir }}/../manifests/sealed-secrets/"
+  delegate_to: "{{ groups['ansible_controller'][0] }}"
+  become: false
+  changed_when: "'configured' in result.stdout or 'created' in result.stdout"
+  register: result
+
+# Apply RBAC configurations
+- name: Apply RBAC configurations
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    src: "{{ mlops_demo_app_repo_path }}/applications/{{ item }}"
+  loop: "{{ mlops_demo_app_rbac_files }}"
+  delegate_to: "{{ groups['ansible_controller'][0] }}"
+  become: false
+
+# Apply ArgoCD Application manifests
+- name: Apply Argo CD Application manifests
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    src: "{{ mlops_demo_app_repo_path }}/applications/{{ item }}"
+  loop: "{{ mlops_demo_app_application_files }}"
+  delegate_to: "{{ groups['ansible_controller'][0] }}"
+  become: false
+
+- name: Apply ArgoCD Application for demo-iris-pipeline
+  ansible.builtin.command: kubectl --kubeconfig="{{ kubeconfig_path }}" apply -f "{{ mlops_demo_app_repo_path }}/argocd-apps/demo-iris-pipeline.yaml"
+  delegate_to: "{{ groups['ansible_controller'][0] }}"
+  become: false
+  changed_when: "'configured' in result.stdout or 'created' in result.stdout"
+  register: result
+
+# Verify deployment
+- name: Wait for Argo CD Application to be synchronized
+  ansible.builtin.shell: |
+    kubectl --kubeconfig={{ kubeconfig_path }} get applications.argoproj.io demo-iris-pipeline -n argocd -o jsonpath='{.status.sync.status}'
+  register: sync_status
+  until: sync_status.stdout == 'Synced'
+  retries: 10
+  delay: 30
+  changed_when: false
+  delegate_to: "{{ groups['ansible_controller'][0] }}"
+  become: false
+  ignore_errors: true
+
+- name: Display deployment status
+  ansible.builtin.debug:
+    msg:
+      - "=========== MLOPS DEMO DEPLOYMENT STATUS ==========="
+      - "Repository: {{ mlops_demo_app_repo_url }}"
+      - "Branch: {{ mlops_demo_app_repo_branch }}"
+      - "Sync Status: {{ sync_status.stdout if sync_status.rc == 0 else 'Unknown' }}"
+      - ""
+      - "You can access the demo pipeline in the Argo CD UI"
+      - "Application: demo-iris-pipeline"
+      - "=================================================="

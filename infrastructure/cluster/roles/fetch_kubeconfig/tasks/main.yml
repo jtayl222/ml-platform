@@ -1,0 +1,75 @@
+---
+- name: Create directory for kubeconfig
+  ansible.builtin.file:
+    path: "{{ kubeconfig_dir }}"  # Use the variable from common.yml
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+
+- name: Check if k3s.yaml exists on control plane
+  ansible.builtin.stat:
+    path: "{{ k3s_server_path }}"
+  register: k3s_stat
+  delegate_to: "{{ control_plane_host }}"
+  become: true
+
+- name: Show k3s.yaml status
+  ansible.builtin.debug:
+    msg: "K3s.yaml exists on {{ control_plane_host }}: {{ k3s_stat.stat.exists | default(false) }}"
+  delegate_to: localhost
+
+- name: Try direct copy via SSH
+  ansible.builtin.shell: |
+    mkdir -p "{{ kubeconfig_dir }}"
+    ssh {{ hostvars[control_plane_host]['ansible_host'] }} "sudo cat {{ k3s_server_path }}" > "{{ kubeconfig_path }}"
+    chmod 600 "{{ kubeconfig_path }}"
+  delegate_to: localhost
+  register: direct_copy
+  ignore_errors: true
+  changed_when: direct_copy.rc == 0
+
+- name: Check if direct copy was successful
+  ansible.builtin.stat:
+    path: "{{ kubeconfig_path }}"
+  register: direct_copy_stat
+  delegate_to: localhost
+
+- name: Report direct copy status
+  ansible.builtin.debug:
+    msg: "Direct copy successful: {{ direct_copy_stat.stat.exists | default(false) }}"
+
+- name: Fetch kubeconfig from control plane
+  ansible.builtin.fetch:
+    src: "{{ k3s_server_path }}"
+    dest: "{{ kubeconfig_path }}"
+    flat: true
+  become: true
+  delegate_to: "{{ control_plane_host }}"
+  when:
+    - k3s_stat.stat.exists | default(false)
+
+- name: Update kubeconfig to use external IP (after direct copy)
+  ansible.builtin.replace:
+    path: "{{ kubeconfig_path }}"
+    regexp: 'https://127.0.0.1:6443'
+    replace: 'https://{{ hostvars[control_plane_host].ansible_host }}:6443'
+  delegate_to: localhost
+  when:
+    - direct_copy_stat.stat.exists | default(false)
+
+- name: Update kubeconfig to use external IP
+  ansible.builtin.replace:
+    path: "{{ kubeconfig_path }}"
+    regexp: 'https://127.0.0.1:6443'
+    replace: 'https://{{ hostvars[control_plane_host].ansible_host }}:6443'
+  delegate_to: localhost
+  when:
+    - k3s_stat.stat.exists | default(false)
+
+- name: Delete local kubeconfig when uninstalling K3s
+  ansible.builtin.file:
+    path: "{{ kubeconfig_path }}"
+    state: absent
+  delegate_to: localhost
+  become: false
+  when: k3s_state == 'absent'

@@ -1,0 +1,222 @@
+ansible_python_interpreter: /usr/bin/python3
+
+# K3s and Kubeconfig settings
+k3s_server_path: /etc/rancher/k3s/k3s.yaml
+kubeconfig_dir: "{{ playbook_dir }}/../fetched_tokens"
+kubeconfig_path: "{{ kubeconfig_dir }}/k3s-kubeconfig"
+control_plane_host: "{{ groups['k3s_control_plane'][0] }}"
+control_plane_ip: "{{ hostvars[groups['k3s_control_plane'][0]]['ansible_host'] }}"
+k3s_state: present
+
+k3s_version: v1.33.1+k3s1
+k3s_channel: stable
+k3s_install_script: /usr/local/bin/k3s-install.sh
+
+# Global settings - ADD THIS SECTION
+global_storage_class: "nfs-shared"
+
+# NFS variables - Add these missing ones
+nfs_server: "{{ groups['nfs_server'][0] if groups['nfs_server'] is defined and groups['nfs_server'] | length > 0 else 'localhost' }}"
+nfs_server_ip: "{{ hostvars[groups['nfs_server'][0]]['ansible_host'] }}"  # Add this line
+nfs_path: "/srv/nfs/kubernetes"
+nfs_allowed_networks: "192.168.1.0/24"  # Add this line
+
+elastic_namespace: "elastic"
+prometheus_namespace: "monitoring"
+prometheus_release_name: "prometheus"
+# ADD PROMETHEUS NODEPORT - MISSING
+prometheus_nodeport: 30090
+
+# ECK (Elastic Cloud on Kubernetes) variables
+eck_version: "3.0.0"  # Use a stable ECK version
+eck_namespace: "elastic-system"
+operator_namespace: "{{ eck_namespace }}"  # ECK operator namespace
+elasticsearch_version: "9.0.1"  # Compatible Elasticsearch version
+kibana_version: "9.0.1"  # Should match Elasticsearch version
+
+# Elasticsearch cluster configuration - Much more generous
+elasticsearch_node_count: 3  # Scale to 3 nodes for HA
+elasticsearch_cluster_name: "homelab-cluster"
+elasticsearch_storage_size: "200Gi"  # Increased from 50Gi
+elasticsearch_memory_request: "16Gi"  # Increased from 8Gi
+elasticsearch_memory_limit: "24Gi"   # Increased from 16Gi
+elasticsearch_cpu_request: "4"       # Increased from 2
+elasticsearch_cpu_limit: "8"         # Increased from 4
+
+# Traefik configuration
+traefik_namespace: "kube-system"
+traefik_enable_dashboard: true
+traefik_dashboard_domain: "traefik.local"
+traefik_insecure_dashboard: true
+traefik_log_level: "INFO"
+dashboard_subdomain: "traefik"
+
+# Traefik resources
+traefik_memory_request: "2Gi"   # Increased from 512Mi
+traefik_memory_limit: "4Gi"     # Increased from 1Gi
+traefik_cpu_request: "1"        # Increased from 100m
+traefik_cpu_limit: "2"          # Increased from 500m
+
+# Traefik ports
+traefik_web_port: 8000
+traefik_websecure_port: 8443
+traefik_api_port: 8080
+
+# MinIO configuration - Simplified for homelab
+minio_chart_name: "minio"
+minio_namespace: "minio"
+minio_release_name: "minio"
+minio_chart_version: "14.7.5"
+minio_access_key: "minioadmin"
+minio_secret_key: "minioadmin123"
+minio_app_version: "2025.5.24"
+minio_nodeport: 30900
+minio_console_nodeport: 30901
+
+# MinIO mode - CHANGED TO STANDALONE
+minio_mode: "standalone"  # Not distributed
+minio_replicas: 1         # Just one instance
+
+# MinIO Traefik routing variables (keep for future use)
+minio_subdomain: "minio"
+minio_console_subdomain: "minio-console"
+minio_domain: "local"
+minio_host: "{{ minio_subdomain }}.{{ minio_domain }}"
+minio_console_host: "{{ minio_console_subdomain }}.{{ minio_domain }}"
+
+# MinIO resources - Generous but reasonable for standalone
+minio_memory_request: "4Gi"   # Reduced from 8Gi (single instance)
+minio_memory_limit: "8Gi"     # Reduced from 16Gi
+minio_cpu_request: "2"        # Reduced from 4 (single instance)
+minio_cpu_limit: "4"          # Reduced from 8
+minio_storage_size: "500Gi"   # Keep large storage for ML artifacts
+
+# MinIO endpoint for other services (using NodePort)
+minio_endpoint: "http://{{ control_plane_ip }}:{{ minio_nodeport }}"
+minio_console_endpoint: "http://{{ control_plane_ip }}:{{ minio_console_nodeport }}"
+minio_internal_endpoint: "http://minio.minio.svc.cluster.local:9000"  # Internal cluster access
+
+# Kibana resources - More generous
+kibana_memory_request: "4Gi"  # Increased from 2Gi
+kibana_memory_limit: "8Gi"    # Increased from 4Gi
+kibana_cpu_request: "2"       # Increased from 1
+kibana_cpu_limit: "4"         # Increased from 2
+kibana_password: "kibana123"
+kibana_subdomain: "kibana"
+kibana_domain: "local"
+kibana_host: "{{ kibana_subdomain }}.{{ kibana_domain }}"
+kibana_nodeport: 30500
+kibana_url: "https://{{ kibana_host }}"
+
+# MLflow configuration
+mlflow_namespace: "mlflow"
+mlflow_release_name: "mlflow"
+mlflow_chart_version: "0.7.19"  # Use a stable version
+mlflow_subdomain: "mlflow"
+mlflow_domain: "local"
+mlflow_host: "{{ mlflow_subdomain }}.{{ mlflow_domain }}"
+mlflow_nodeport: 30800
+mlflow_image: "ghcr.io/mlflow/mlflow:v2.13.0"  # Official MLflow image
+mlflow_version: "2.13.0"  # MLflow version
+
+# MLflow resources - More generous
+mlflow_memory_request: "4Gi"  # Increased from 1Gi
+mlflow_memory_limit: "8Gi"    # Increased from 2Gi
+mlflow_cpu_request: "2"       # Increased from 500m
+mlflow_cpu_limit: "4"         # Increased from 1
+mlflow_pvc_size: "100Gi"      # Increased from 20Gi
+mlflow_db_pvc_name: "mlflow-db-pvc"      # For database storage
+mlflow_db_pvc_size: "50Gi"    # Increased from 10Gi
+
+# MLflow storage configuration - Fix the endpoint
+mlflow_artifact_store: "s3"
+mlflow_s3_bucket: "mlflow-artifacts"
+mlflow_s3_endpoint: "http://minio.minio.svc.cluster.local:9000"  # Use internal service name
+mlflow_s3_access_key: "{{ minio_access_key }}"
+mlflow_s3_secret_key: "{{ minio_secret_key }}"
+
+# MLflow database configuration
+mlflow_db_type: "sqlite"
+mlflow_db_path: "/mnt/database/mlflow.db"  # Update path to match mount
+mlflow_artifacts_path: "/mnt/mlflow"  # Local artifacts path
+
+# MLflow TLS/SSL configuration
+enable_tls: false  # Set to true if you want HTTPS, false for HTTP
+mlflow_tls_secret_name: "mlflow-tls"  # TLS secret name if enable_tls is true
+
+# Seldon configuration - ALTERNATIVE REPO
+seldon_namespace: "seldon-system"
+seldon_release_name: "seldon-core"
+seldon_chart_version: "1.17.1"
+seldon_chart_repo: "https://storage.googleapis.com/seldon-charts"
+seldon_chart_repo_name: "seldon"
+seldon_chart_name: "seldon-core-operator"  # Change to just "seldon-core-operator"
+seldon_subdomain: "seldon"
+seldon_domain: "local"
+seldon_host: "{{ seldon_subdomain }}.{{ seldon_domain }}"
+seldon_nodeport: 30900
+
+# Seldon resources - More generous
+seldon_memory_request: "4Gi"  # Increased from 1Gi
+seldon_memory_limit: "8Gi"    # Increased from 2Gi
+seldon_cpu_request: "2"       # Increased from 500m
+seldon_cpu_limit: "4"         # Increased from 1
+
+# Seldon Core Operator configuration
+seldon_operator_memory_request: "2Gi"  # Increased from 512Mi
+seldon_operator_memory_limit: "4Gi"    # Increased from 1Gi
+seldon_operator_cpu_request: "1"       # Increased from 100m
+seldon_operator_cpu_limit: "2"         # Increased from 500m
+
+# Seldon Ambassador/Istio configuration
+seldon_gateway: "istio"  # or "ambassador" or "none"
+seldon_enable_istio: false
+seldon_enable_ambassador: false
+
+# Seldon MinIO configuration
+seldon_minio_secret_name: "seldon-minio-secret"
+seldon_minio_endpoint: "{{ minio_endpoint }}"
+seldon_minio_access_key: "{{ minio_access_key }}"
+seldon_minio_secret_key: "{{ minio_secret_key }}"
+seldon_minio_bucket: "seldon-models"
+seldon_enable_minio: true
+
+# Seldon Core additional settings
+seldon_enable_analytics: true
+seldon_analytics_memory_request: "512Mi"
+seldon_analytics_memory_limit: "1Gi"
+
+# Grafana configuration
+grafana_namespace: "monitoring"
+grafana_release_name: "grafana"
+grafana_chart_version: "9.2.2"  # Use a stable version
+grafana_admin_user: "admin"
+grafana_admin_password: "admin123"  # Change this to a secure password
+grafana_subdomain: "grafana"
+grafana_domain: "local"
+grafana_host: "{{ grafana_subdomain }}.{{ grafana_domain }}"
+grafana_nodeport: 30300
+
+# Grafana resources - More generous
+grafana_memory_request: "4Gi"  # Increased from 1Gi
+grafana_memory_limit: "8Gi"    # Increased from 2Gi
+grafana_cpu_request: "2"       # Increased from 500m
+grafana_cpu_limit: "4"         # Increased from 1
+grafana_storage_size: "50Gi"   # Increased from 10Gi
+
+# ADD THESE MISSING VARIABLES FOR ARGO CD
+argocd_nodeport: 30080
+prometheus_storage_size: "50Gi"
+
+# Add Argo Workflows resources - New
+argo_workflows_memory_request: "2Gi"
+argo_workflows_memory_limit: "4Gi"
+argo_workflows_cpu_request: "1"
+argo_workflows_cpu_limit: "2"
+argo_workflows_namespace: "argowf"
+
+# Add this sealed secrets configuration:
+
+# Sealed Secrets configuration
+sealed_secrets_namespace: "kube-system"
+sealed_secrets_controller_name: "sealed-secrets"

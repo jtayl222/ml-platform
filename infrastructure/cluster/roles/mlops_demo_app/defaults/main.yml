@@ -1,0 +1,15 @@
+---
+# mlops_demo_app
+# MLOps demo application defaults
+mlops_demo_app_repo_url: https://github.com/jtayl222/homelab-mlops-demo.git
+mlops_demo_app_repo_path: /tmp/homelab-mlops-demo
+mlops_demo_app_repo_branch: main
+mlops_demo_app_force_clone: yes
+
+# List of manifests to apply
+mlops_demo_app_rbac_files:
+  - argocd-workflow-rbac.yaml
+  - argowf-seldon-rbac.yaml
+
+mlops_demo_app_application_files:
+  - demo-iris-pipeline-app.yaml

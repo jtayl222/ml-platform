@@ -1,0 +1,25 @@
+---
+- name: Install NFS client packages
+  apt:
+    name:
+      - nfs-common
+    state: present
+    update_cache: yes
+  become: true
+
+- name: Create local mount point
+  file:
+    path: /mnt/nfs
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: Test NFS connectivity
+  command: showmount -e {{ nfs_server_ip }}
+  register: nfs_exports
+  failed_when: false
+  changed_when: false
+
+- name: Display NFS exports
+  debug:
+    var: nfs_exports.stdout_lines

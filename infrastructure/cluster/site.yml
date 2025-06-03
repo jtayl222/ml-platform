@@ -1,0 +1,226 @@
+---
+# Professional MLOps Platform Deployment
+# All variables are defined in inventory/production/group_vars/all.yml
+
+# Step 1: Setup K3s Cluster
+- name: Configure K3s Control Plane
+  hosts: k3s_control_plane
+  become: true
+  gather_facts: true
+  roles:
+    - role: k3s_control_plane
+      tags: [k3s, control_plane]
+
+- name: Fetch kubeconfig to localhost
+  hosts: localhost
+  gather_facts: false
+  roles:
+    - role: fetch_kubeconfig
+      tags: [k3s, kubeconfig]
+
+- name: Configure K3s Worker Nodes
+  hosts: k3s_workers
+  become: true
+  gather_facts: true
+  roles:
+    - role: k3s_workers
+      tags: [k3s, workers]
+
+# Step 2: Setup Storage Infrastructure
+- name: Configure NFS Server
+  hosts: nfs_server
+  gather_facts: true
+  become: true
+  roles:
+    - role: nfs_server
+      tags: [storage, nfs, nfs-server]
+
+- name: Configure NFS Clients
+  hosts: k3s_control_plane:k3s_workers
+  gather_facts: true
+  become: true
+  roles:
+    - role: nfs_clients
+      tags: [storage, nfs, nfs-clients]
+
+- name: Setup NFS Provisioner in Kubernetes
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  roles:
+    - role: nfs_provisioner
+      tags: [storage, nfs, nfs-provisioner]
+
+# Add this after NFS provisioner but before core infrastructure:
+
+- name: Setup Security Infrastructure
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  roles:
+    - role: sealed_secrets
+      tags: [security, sealed-secrets]
+
+# Step 3: Core Infrastructure (Helm-based)
+- name: Deploy Core Infrastructure
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Add Helm repositories
+      kubernetes.core.helm_repository:
+        name: "{{ item.name }}"
+        repo_url: "{{ item.url }}"
+        kubeconfig: "{{ kubeconfig_path }}"
+      loop:
+        - { name: "prometheus-community", url: "https://prometheus-community.github.io/helm-charts" }
+        - { name: "grafana", url: "https://grafana.github.io/helm-charts" }
+        - { name: "bitnami", url: "https://charts.bitnami.com/bitnami" }
+        - { name: "minio", url: "https://charts.min.io/" }
+        - { name: "argo", url: "https://argoproj.github.io/argo-helm" }
+        - { name: "seldon", url: "https://storage.googleapis.com/seldon-charts" }
+      tags: [core, helm-repos]
+
+    - name: Deploy MinIO (S3-compatible storage)
+      kubernetes.core.helm:
+        name: minio
+        chart_ref: minio/minio
+        release_namespace: minio
+        create_namespace: true
+        kubeconfig: "{{ kubeconfig_path }}"
+        values:
+          mode: "{{ minio_mode | default('standalone') }}"
+          replicas: "{{ minio_replicas | default(1) }}"
+          persistence:
+            enabled: true
+            size: "{{ minio_storage_size }}"
+            storageClass: "{{ global_storage_class | default('nfs-shared') }}"
+          auth:
+            rootUser: "{{ minio_access_key }}"
+            rootPassword: "{{ minio_secret_key }}"
+          service:
+            type: NodePort
+            nodePorts:
+              api: "{{ minio_nodeport }}"
+              console: "{{ minio_console_nodeport }}"
+          resources:
+            requests:
+              memory: "{{ minio_memory_request }}"
+              cpu: "{{ minio_cpu_request }}"
+            limits:
+              memory: "{{ minio_memory_limit }}"
+              cpu: "{{ minio_cpu_limit }}"
+      tags: [core, storage, minio]
+
+    - name: Deploy Prometheus Stack
+      kubernetes.core.helm:
+        name: kube-prometheus-stack
+        chart_ref: prometheus-community/kube-prometheus-stack
+        release_namespace: monitoring
+        create_namespace: true
+        kubeconfig: "{{ kubeconfig_path }}"
+        values:
+          grafana:
+            adminPassword: "{{ grafana_admin_password }}"
+            service:
+              type: NodePort
+              nodePort: "{{ grafana_nodeport }}"
+            persistence:
+              enabled: true
+              storageClassName: "{{ global_storage_class | default('nfs-shared') }}"
+              size: "{{ grafana_storage_size | default('10Gi') }}"
+          prometheus:
+            service:
+              type: NodePort
+              nodePort: "{{ prometheus_nodeport }}"
+            prometheusSpec:
+              storageSpec:
+                volumeClaimTemplate:
+                  spec:
+                    storageClassName: "{{ global_storage_class | default('nfs-shared') }}"
+                    resources:
+                      requests:
+                        storage: "{{ prometheus_storage_size | default('50Gi') }}"
+      tags: [core, monitoring]
+
+    - name: Deploy Seldon Core
+      kubernetes.core.helm:
+        name: seldon-core
+        chart_ref: seldon/seldon-core-operator
+        release_namespace: seldon-system
+        create_namespace: true
+        kubeconfig: "{{ kubeconfig_path }}"
+      tags: [mlops, seldon]
+
+    - name: Deploy Argo CD
+      kubernetes.core.helm:
+        name: argocd
+        chart_ref: argo/argo-cd
+        release_namespace: argocd
+        create_namespace: true
+        kubeconfig: "{{ kubeconfig_path }}"
+        values:
+          server:
+            service:
+              type: NodePort
+              nodePort: "{{ argocd_nodeport | default(30080) }}"
+      tags: [mlops, argocd]
+
+    - name: Deploy Argo Workflows
+      kubernetes.core.helm:
+        name: argo-workflows
+        chart_ref: argo/argo-workflows
+        release_namespace: argowf  # Changed from 'argo' to 'argowf'
+        create_namespace: true
+        kubeconfig: "{{ kubeconfig_path }}"
+      tags: [mlops, workflows]
+
+# Step 4: Deploy MLOps Components (Moved to separate play)
+- name: Deploy MLOps Components
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  roles:
+    - role: mlflow
+      tags: [mlops, mlflow]
+
+# Step 5: Demo ML Application
+- name: Deploy Demo ML Pipeline
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Create ML demo namespace
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig_path }}"
+        name: ml-demo
+        api_version: v1
+        kind: Namespace
+        state: present
+      tags: [demo, namespace]
+
+  roles:
+    - role: mlops_demo_app
+      tags: [demo, mlops-demo]
+
+# Step 6: Display deployment summary
+- name: Display deployment complete banner
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Show access URLs
+      debug:
+        msg:
+          - "🎉 MLOps Platform Deployment Complete!"
+          - ""
+          - "Access your services:"
+          - "- Grafana: http://{{ control_plane_ip }}:{{ grafana_nodeport }}"
+          - "- Prometheus: http://{{ control_plane_ip }}:{{ prometheus_nodeport }}"
+          - "- MinIO Console: http://{{ control_plane_ip }}:{{ minio_console_nodeport }}"
+          - "- MLflow: http://{{ control_plane_ip }}:{{ mlflow_nodeport }}"
+          - "- Argo CD: http://{{ control_plane_ip }}:{{ argocd_nodeport | default(30080) }}"
+          - ""
+          - "Credentials:"
+          - "- Grafana: admin / {{ grafana_admin_password }}"
+          - "- MinIO: {{ minio_access_key }} / {{ minio_secret_key }}"
+      tags: [summary]

@@ -1,0 +1,6 @@
+---
+- name: Test k3s_workers role
+  hosts: ansible_controller
+  remote_user: user
+  roles:
+    - k3s_workers

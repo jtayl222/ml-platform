@@ -1,0 +1,6 @@
+---
+- name: Test mlops_demo_app role
+  hosts: ansible_controller
+  remote_user: user
+  roles:
+    - mlops_demo_app

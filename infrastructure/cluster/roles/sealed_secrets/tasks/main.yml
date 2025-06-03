@@ -1,0 +1,65 @@
+---
+# Verify prerequisites
+- name: Ensure kubeconfig exists
+  ansible.builtin.stat:
+    path: "{{ kubeconfig_path }}"
+  register: kubeconfig_stat
+  delegate_to: "{{ groups['ansible_controller'][0] }}"
+  become: false
+
+- name: Fail if kubeconfig doesn't exist
+  ansible.builtin.fail:
+    msg: "Kubeconfig not found at {{ kubeconfig_path }}. Please run the kubeconfig tasks first."
+  when: not kubeconfig_stat.stat.exists
+  delegate_to: "{{ groups['ansible_controller'][0] }}"
+  become: false
+
+- name: Add Bitnami Helm repo
+  kubernetes.core.helm_repository:
+    name: sealed-secrets
+    repo_url: https://bitnami-labs.github.io/sealed-secrets
+
+- name: Install Sealed Secrets Controller
+  kubernetes.core.helm:
+    name: sealed-secrets
+    chart_ref: sealed-secrets/sealed-secrets
+    release_namespace: kube-system
+    create_namespace: false
+    kubeconfig: "{{ kubeconfig_path }}"
+
+- name: Wait for Sealed Secrets Controller pod to be ready
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: kube-system
+    label_selectors:
+      - "app.kubernetes.io/name=sealed-secrets"  # Correct label
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_condition:
+      type: Ready
+      status: "True"
+    wait_timeout: 300
+
+- name: Ensure namespaces exist for sealed secrets
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ item }}"
+  loop:
+    - minio
+    - monitoring
+    - argowf
+    - argocd
+    - mlflow
+
+- name: Apply sealed secrets manifests
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    src: "{{ item }}"
+  with_fileglob:
+    - "{{ playbook_dir }}/../manifests/sealed-secrets/*.yaml"
+  tags: [sealed-secrets, secrets]

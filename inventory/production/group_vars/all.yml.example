@@ -1,0 +1,176 @@
+ansible_python_interpreter: /usr/bin/python3
+#
+k3s_server_path: /etc/rancher/k3s/k3s.yaml
+kubeconfig_dir: "{{ playbook_dir }}/../fetched_tokens"
+kubeconfig_path: "{{ kubeconfig_dir }}/k3s-kubeconfig"
+control_plane_host: "{{ groups['k3s_control_plane'][0] }}"
+control_plane_ip: "{{ hostvars[groups['k3s_control_plane'][0]]['ansible_host'] }}"
+k3s_state: present  # Set to 'absent' for uninstallation
+
+k3s_version: v1.33.1+k3s1  # Specify the desired k3s version
+k3s_channel: stable  # Specify the channel, e.g., 'stable', 'latest', etc.
+k3s_install_script: /usr/local/bin/k3s-install.sh  # Path to the k3s install script
+
+# NFS variables
+nfs_server: "{{ groups['nfs_server'][0] if groups['nfs_server'] is defined and groups['nfs_server'] | length > 0 else 'localhost' }}"
+nfs_path: "/srv/nfs/kubernetes"
+
+elastic_namespace: "elastic"
+prometheus_namespace: "monitoring"
+prometheus_release_name: "prometheus"
+traefik_namespace: "kube-system"
+
+# ECK (Elastic Cloud on Kubernetes) variables
+eck_version: "3.0.0"  # Use a stable ECK version
+eck_namespace: "elastic-system"
+operator_namespace: "{{ eck_namespace }}"  # ECK operator namespace
+elasticsearch_version: "9.0.1"  # Compatible Elasticsearch version
+kibana_version: "9.0.1"  # Should match Elasticsearch version
+
+# Elasticsearch cluster configuration - Updated for generous allocations
+elasticsearch_node_count: 1
+elasticsearch_cluster_name: "homelab-cluster"
+elasticsearch_storage_size: "50Gi"  # Increased from 10Gi
+elasticsearch_memory_request: "8Gi"  # Increased from 1Gi
+elasticsearch_memory_limit: "16Gi"  # Increased from 2Gi
+elasticsearch_cpu_request: "2"      # Increased from 500m
+elasticsearch_cpu_limit: "4"        # Increased from 1000m
+
+# Traefik dashboard variables
+dashboard_subdomain: "traefik"
+dashboard_domain: "local"
+dashboard_host: "{{ dashboard_subdomain }}.{{ dashboard_domain }}"
+
+minio_chart_name: "minio"
+minio_namespace: "minio"
+minio_release_name: "minio"
+minio_chart_version: "14.7.5"
+minio_access_key: "minioadmin"
+minio_secret_key: "minioadmin"
+minio_app_version: "2025.5.24"
+minio_nodeport: 30900
+minio_console_nodeport: 30901
+
+# MinIO Traefik routing variables
+minio_subdomain: "minio"
+minio_console_subdomain: "minio-console"
+minio_domain: "local"  # or your actual domain
+minio_host: "{{ minio_subdomain }}.{{ minio_domain }}"
+minio_console_host: "{{ minio_console_subdomain }}.{{ minio_domain }}"
+
+# MinIO resources - also increase these
+minio_memory_request: "2Gi"
+minio_memory_limit: "4Gi"
+minio_cpu_request: "1"
+minio_cpu_limit: "2"
+minio_storage_size: "100Gi"  # Increased storage
+
+# Kibana resources and configuration
+kibana_memory_request: "2Gi"
+kibana_memory_limit: "4Gi"
+kibana_cpu_request: "1"
+kibana_cpu_limit: "2"
+kibana_password: "kibana123"
+kibana_subdomain: "kibana"
+kibana_domain: "local"
+kibana_host: "{{ kibana_subdomain }}.{{ kibana_domain }}"
+kibana_nodeport: 30500
+kibana_url: "https://{{ kibana_host }}"
+
+# MLflow configuration
+mlflow_namespace: "mlflow"
+mlflow_release_name: "mlflow"
+mlflow_chart_version: "0.7.19"  # Use a stable version
+mlflow_subdomain: "mlflow"
+mlflow_domain: "local"
+mlflow_host: "{{ mlflow_subdomain }}.{{ mlflow_domain }}"
+mlflow_nodeport: 30800
+mlflow_image: "ghcr.io/mlflow/mlflow:v2.13.0"  # Official MLflow image
+mlflow_version: "2.13.0"  # MLflow version
+
+# MLflow resources
+mlflow_memory_request: "1Gi"
+mlflow_memory_limit: "2Gi"
+mlflow_cpu_request: "500m"
+mlflow_cpu_limit: "1"
+mlflow_pvc_size: "20Gi"
+mlflow_pvc_name: "mlflow-artifacts-pvc"  # For artifacts storage
+mlflow_db_pvc_name: "mlflow-db-pvc"      # For database storage
+mlflow_db_pvc_size: "10Gi"               # Database storage size
+
+# MLflow storage configuration
+mlflow_artifact_store: "s3"
+mlflow_s3_bucket: "mlflow-artifacts"
+mlflow_s3_endpoint: "http://minio.{{ minio_domain }}:{{ minio_nodeport }}"
+mlflow_s3_access_key: "{{ minio_access_key }}"
+mlflow_s3_secret_key: "{{ minio_secret_key }}"
+minio_endpoint: "http://{{ control_plane_ip }}:{{ minio_nodeport }}"
+
+# MLflow database configuration
+mlflow_db_type: "sqlite"
+mlflow_db_path: "/mnt/database/mlflow.db"  # Update path to match mount
+mlflow_artifacts_path: "/mnt/mlflow"  # Local artifacts path
+
+# MLflow TLS/SSL configuration
+enable_tls: false  # Set to true if you want HTTPS, false for HTTP
+mlflow_tls_secret_name: "mlflow-tls"  # TLS secret name if enable_tls is true
+
+# Seldon configuration - ALTERNATIVE REPO
+seldon_namespace: "seldon-system"
+seldon_release_name: "seldon-core"
+seldon_chart_version: "1.17.1"
+seldon_chart_repo: "https://storage.googleapis.com/seldon-charts"
+seldon_chart_repo_name: "seldon"
+seldon_chart_name: "seldon-core-operator"  # Change to just "seldon-core-operator"
+seldon_subdomain: "seldon"
+seldon_domain: "local"
+seldon_host: "{{ seldon_subdomain }}.{{ seldon_domain }}"
+seldon_nodeport: 30900
+
+# Seldon resources
+seldon_memory_request: "1Gi"
+seldon_memory_limit: "2Gi"
+seldon_cpu_request: "500m"
+seldon_cpu_limit: "1"
+
+# Seldon Core Operator configuration
+seldon_operator_memory_request: "512Mi"
+seldon_operator_memory_limit: "1Gi"
+seldon_operator_cpu_request: "100m"
+seldon_operator_cpu_limit: "500m"
+
+# Seldon Ambassador/Istio configuration
+seldon_gateway: "istio"  # or "ambassador" or "none"
+seldon_enable_istio: false
+seldon_enable_ambassador: false
+
+# Seldon MinIO configuration
+seldon_minio_secret_name: "seldon-minio-secret"
+seldon_minio_endpoint: "{{ minio_endpoint }}"
+seldon_minio_access_key: "{{ minio_access_key }}"
+seldon_minio_secret_key: "{{ minio_secret_key }}"
+seldon_minio_bucket: "seldon-models"
+seldon_enable_minio: true
+
+# Seldon Core additional settings
+seldon_enable_analytics: true
+seldon_analytics_memory_request: "512Mi"
+seldon_analytics_memory_limit: "1Gi"
+
+# Grafana configuration
+grafana_namespace: "monitoring"
+grafana_release_name: "grafana"
+grafana_chart_version: "9.2.2"  # Use a stable version
+grafana_admin_user: "admin"
+grafana_admin_password: "admin123"  # Change this to a secure password
+grafana_subdomain: "grafana"
+grafana_domain: "local"
+grafana_host: "{{ grafana_subdomain }}.{{ grafana_domain }}"
+grafana_nodeport: 30300
+
+# Grafana resources
+grafana_memory_request: "1Gi"
+grafana_memory_limit: "2Gi"
+grafana_cpu_request: "500m"
+grafana_cpu_limit: "1"
+grafana_storage_size: "10Gi"

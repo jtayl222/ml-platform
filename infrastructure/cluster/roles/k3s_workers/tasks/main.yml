@@ -1,0 +1,143 @@
+- name: Set control plane endpoint fact
+  ansible.builtin.set_fact:
+    k3s_control_plane_endpoint: "{{ groups['k3s_control_plane'][0] }}"
+  when: k3s_state == 'present'
+
+- name: Fetch k3s token from control node
+  ansible.builtin.slurp:
+    src: /var/lib/rancher/k3s/server/node-token
+  register: node_token_b64
+  delegate_to: "{{ k3s_control_plane_endpoint }}"
+  when: k3s_state == 'present'
+  ignore_errors: "{{ k3s_state == 'absent' }}"
+
+- name: Set k3s token fact
+  ansible.builtin.set_fact:
+    k3s_token: "{{ node_token_b64['content'] | b64decode | trim }}"
+  when: k3s_state == 'present' and node_token_b64 is defined and node_token_b64.content is defined
+
+- name: Get control node IP
+  ansible.builtin.set_fact:
+    k3s_control_plane_endpoint_ip:
+      "{{
+        hostvars[k3s_control_plane_endpoint]['ansible_host'] |
+        default(hostvars[k3s_control_plane_endpoint]['ansible_default_ipv4']['address'])
+      }}"
+  when: k3s_state == 'present'
+
+- name: Install prerequisites
+  ansible.builtin.apt:
+    name:
+      - curl
+      - apt-transport-https
+    state: present
+    update_cache: yes
+  become: true
+  when: k3s_state == 'present'
+
+- name: Install networking diagnostic utilities
+  ansible.builtin.apt:
+    name:
+      - net-tools
+      - netcat-openbsd
+      - curl
+      - traceroute
+      - iproute2
+      - iputils-ping
+      - dnsutils
+    state: present
+    update_cache: yes
+  become: true
+  when: k3s_state == 'present'
+
+- name: Download k3s install script
+  ansible.builtin.get_url:
+    url: https://get.k3s.io
+    dest: /tmp/k3s-install.sh
+    mode: "0755"
+  become: true
+  when: k3s_state == 'present'
+
+- name: Install k3s worker
+  ansible.builtin.shell: |
+    export K3S_URL="https://{{ k3s_control_plane_endpoint_ip }}:6443"
+    export K3S_TOKEN="{{ k3s_token }}"
+    /tmp/k3s-install.sh
+  args:
+    creates: /usr/local/bin/k3s
+    executable: /bin/bash
+  become: true
+  when: k3s_state == 'present'
+
+- name: Ensure k3s service is enabled and started
+  ansible.builtin.systemd:
+    name: k3s-agent
+    enabled: yes
+    state: started
+  become: true
+  when: k3s_state == 'present'
+
+- name: Wait for node to register
+  ansible.builtin.pause:
+    seconds: 10
+  when: k3s_state == 'present'
+
+- name: Verify k3s worker node status (from control plane)
+  ansible.builtin.command: kubectl get nodes
+  register: nodes_status
+  delegate_to: "{{ k3s_control_plane_endpoint }}"
+  become: true
+  changed_when: false
+  when: k3s_state == 'present'
+
+- name: Display nodes status
+  ansible.builtin.debug:
+    msg: "{{ nodes_status.stdout_lines }}"
+  when: k3s_state == 'present' and nodes_status is defined
+
+# Uninstallation tasks - only run when k3s_state is absent
+- name: Check if k3s is installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s
+  register: k3s_binary
+  when: k3s_state == 'absent'
+
+- name: Download k3s uninstall script
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s-agent-uninstall.sh
+  register: uninstall_script
+  when: k3s_state == 'absent'
+
+- name: Run k3s uninstall script
+  ansible.builtin.command: /usr/local/bin/k3s-agent-uninstall.sh
+  register: uninstall_result
+  changed_when: true  # Uninstall will always make changes when it runs
+  become: true
+  when: k3s_state == 'absent' and uninstall_script.stat.exists
+
+- name: Manual cleanup if uninstall script doesn't exist
+  when: k3s_state == 'absent' and k3s_binary.stat.exists and not uninstall_script.stat.exists
+  become: true
+  block:
+    - name: Stop k3s-agent service
+      ansible.builtin.systemd:
+        name: k3s-agent
+        state: stopped
+        enabled: no
+      register: stop_service
+      failed_when: stop_service.failed and "Could not find the requested service" not in stop_service.msg
+
+    - name: Remove k3s binary
+      ansible.builtin.file:
+        path: /usr/local/bin/k3s
+        state: absent
+
+    - name: Remove k3s directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - /etc/rancher/k3s
+        - /var/lib/rancher/k3s
+        - /var/lib/kubelet
+        - /var/lib/cni

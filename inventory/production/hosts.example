@@ -1,0 +1,35 @@
+# inventory/hosts
+
+# All nodes in the cluster
+[all]
+k3s-control-1 ansible_host=192.168.1.10 ansible_user=user
+k3s-control-2 ansible_host=192.168.1.11 ansible_user=user
+k3s-control-3 ansible_host=192.168.1.12 ansible_user=user
+k3s-worker-1 ansible_host=192.168.1.20 ansible_user=user
+k3s-worker-2 ansible_host=192.168.1.21 ansible_user=user
+external-node ansible_host=192.168.1.30 ansible_user=user
+
+# Define which node(s) will run the Kubernetes control-plane (server)
+[k3s_control_plane]
+k3s-control-1
+k3s-control-2
+k3s-control-3
+
+# Define which nodes will be workers
+[k3s_workers]
+k3s-worker-1
+k3s-worker-2
+
+# Define utility nodes (not part of the K8s cluster)
+[ansible_controller]
+external-node
+
+[nfs_server]
+external-node
+
+[nfs_clients]
+k3s-control-1
+k3s-control-2
+k3s-control-3
+k3s-worker-1
+k3s-worker-2

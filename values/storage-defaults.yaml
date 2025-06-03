@@ -1,0 +1,32 @@
+# Default storage configuration for all components
+global:
+  storageClass: "nfs-shared"
+  
+# Component-specific overrides
+mlflow:
+  persistence:
+    storageClass: "nfs-shared"
+    size: "20Gi"
+
+grafana:
+  persistence:
+    storageClassName: "nfs-shared"
+    size: "10Gi"
+
+prometheus:
+  prometheusSpec:
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: "nfs-shared"
+          resources:
+            requests:
+              storage: "50Gi"
+
+# Add MinIO NFS persistence
+minio:
+  persistence:
+    enabled: true
+    storageClass: "nfs-shared"
+    size: "100Gi"
+  mode: standalone  # Use standalone mode for NFS

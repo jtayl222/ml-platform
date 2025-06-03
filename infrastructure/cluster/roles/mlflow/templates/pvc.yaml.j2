@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mlflow-data
+  namespace: {{ mlflow_namespace }}
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: {{ global_storage_class }}
+  resources:
+    requests:
+      storage: {{ mlflow_pvc_size }}
