@@ -1,2 +1,29 @@
-null
-...
+---
+# K3s version and channel
+k3s_version: "v1.33.1+k3s1"
+k3s_channel: "stable"
+k3s_state: "present"
+
+# K3s configuration
+k3s_data_dir: "/var/lib/rancher/k3s"
+k3s_config_dir: "/etc/rancher/k3s"
+k3s_token_file: "{{ k3s_data_dir }}/server/node-token"
+
+# K3s server configuration
+k3s_server_args:
+  - "--write-kubeconfig-mode=644"
+  - "--disable=traefik"
+  - "--disable=servicelb"
+  - "--flannel-backend=vxlan"
+
+# Network configuration
+k3s_cluster_cidr: "10.42.0.0/16"
+k3s_service_cidr: "10.43.0.0/16"
+
+# Security
+k3s_selinux: false
+k3s_rootless: false
+
+# Installation
+k3s_install_dir: "/usr/local/bin"
+k3s_install_script_url: "https://get.k3s.io"

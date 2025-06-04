@@ -1,38 +1,77 @@
-Role Name
-=========
+# Kubernetes Cluster Roles
 
-A brief description of the role goes here.
+This directory contains Ansible roles for deploying and managing Kubernetes cluster components.
 
-Requirements
-------------
+## Available Roles
 
-Any pre-requisites that may not be covered by Ansible itself or the role should be mentioned here. For instance, if the role uses the EC2 module, it may be a good idea to mention in this section that the boto package is required.
+### sealed_secrets
 
-Role Variables
---------------
+Deploys and manages Sealed Secrets controller for encrypting Kubernetes secrets.
 
-A description of the settable variables for this role should go here, including any variables that are in defaults/main.yml, vars/main.yml, and any variables that can/should be set via parameters to the role. Any variables that are read from other roles and/or the global scope (ie. hostvars, group vars, etc.) should be mentioned here as well.
+**Purpose**: 
+- Install Sealed Secrets controller via Helm
+- Create required namespaces
+- Generate sealed secrets from scripts
+- Apply sealed secret manifests to cluster
 
-Dependencies
-------------
+**Requirements**:
+- Kubernetes cluster must be running
+- `kubectl` and `kubeseal` CLI tools installed
+- Helm repositories accessible
+- Valid kubeconfig file
 
-A list of other roles hosted on Galaxy should go here, plus any details in regards to parameters that may need to be set for other roles, or variables that are used from other roles.
+**Variables**:
+```yaml
+kubeconfig_path: "/path/to/kubeconfig"  # Required
+playbook_dir: "{{ ansible_playbook_dir }}"  # Auto-detected
+```
 
-Example Playbook
-----------------
+**Dependencies**:
+- `fetch_kubeconfig` role (must run first)
+- Kubernetes cluster must be ready
+- `kubernetes.core` Ansible collection
 
-Including an example of how to use your role (for instance, with variables passed in as parameters) is always nice for users too:
+**Tags**:
+- `sealed-secrets` - Run entire role
+- `controller` - Deploy only the controller
+- `namespaces` - Create only namespaces
+- `scripts` - Run only script generation
+- `manifests` - Apply only manifests
 
-    - hosts: servers
-      roles:
-         - { role: username.rolename, x: 42 }
+**Usage**:
+```yaml
+# In your playbook
+- name: Deploy Sealed Secrets
+  include_role:
+    name: sealed_secrets
+  tags: [security, sealed-secrets]
+```
 
-License
--------
+**Command line examples**:
+```bash
+# Deploy everything
+ansible-playbook site.yml --tags="sealed-secrets"
 
-BSD
+# Deploy only controller
+ansible-playbook site.yml --tags="controller"
 
-Author Information
-------------------
+# Generate and apply secrets only
+ansible-playbook site.yml --tags="scripts,manifests"
+```
 
-An optional section for the role authors to include contact information, or a website (HTML is not allowed).
+**Files created**:
+- Sealed Secrets controller in `kube-system` namespace
+- Application namespaces: minio, monitoring, argowf, argocd, mlflow
+- Sealed secret manifests in `infrastructure/manifests/sealed-secrets/`
+
+### Other Roles
+
+Additional roles can be documented here as they are created.
+
+## License
+
+MIT
+
+## Author Information
+
+K3s Homelab MLOps Platform

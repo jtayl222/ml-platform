@@ -1,0 +1,41 @@
+---
+- name: Ensure K3s service is enabled and started
+  ansible.builtin.systemd:
+    name: k3s
+    enabled: true
+    state: started
+    daemon_reload: true
+  tags: [configure, k3s, control_plane]
+
+- name: Wait for K3s API server to be ready
+  ansible.builtin.wait_for:
+    port: 6443
+    host: "{{ ansible_default_ipv4.address }}"
+    delay: 10
+    timeout: 300
+  tags: [configure, k3s, control_plane]
+
+- name: Extract node token
+  ansible.builtin.slurp:
+    src: /var/lib/rancher/k3s/server/node-token
+  register: node_token_file
+  ignore_errors: true
+  tags: [configure, k3s, control_plane]
+
+- name: Set node token fact
+  ansible.builtin.set_fact:
+    k3s_node_token: "{{ node_token_file.content | b64decode | trim }}"
+  when: node_token_file is succeeded
+  tags: [configure, k3s, control_plane]
+
+- name: Display configuration status
+  ansible.builtin.debug:
+    msg: "✅ K3s control plane configured successfully - Node token available for workers"
+  when: k3s_node_token is defined
+  tags: [always]
+
+- name: Configuration warning
+  ansible.builtin.debug:
+    msg: "⚠️  Warning: Could not extract node token - workers may not be able to join"
+  when: k3s_node_token is not defined
+  tags: [always]

@@ -1,0 +1,13 @@
+---
+# Debian/Ubuntu specific variables for K3s
+k3s_dependencies:
+  - curl
+  - wget
+  - apt-transport-https
+  - ca-certificates
+  - gnupg
+  - lsb-release
+
+# System configuration
+package_manager: apt
+service_manager: systemd

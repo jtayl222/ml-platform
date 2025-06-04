@@ -1,0 +1,87 @@
+---
+- name: Check if K3s uninstall script exists
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s-uninstall.sh
+  register: k3s_uninstall_script
+  tags: [control_plane, k3s, uninstall]
+
+- name: Stop K3s service
+  ansible.builtin.systemd:
+    name: k3s
+    state: stopped
+    enabled: false
+  ignore_errors: true
+  register: service_stop
+  tags: [control_plane, k3s, uninstall]
+
+- name: Run K3s uninstall script
+  ansible.builtin.shell: /usr/local/bin/k3s-uninstall.sh
+  when: k3s_uninstall_script.stat.exists
+  register: uninstall_result
+  ignore_errors: true
+  tags: [control_plane, k3s, uninstall]
+
+- name: Display uninstall summary
+  ansible.builtin.debug:
+    msg: |
+      K3s Uninstall Summary:
+      - Script found: {{ k3s_uninstall_script.stat.exists }}
+      - Service stopped: {{ service_stop.changed | default(false) }}
+      - Uninstall result: {{ 'Success' if uninstall_result.rc | default(1) == 0 else 'Manual cleanup required' }}
+  when: k3s_uninstall_script.stat.exists
+  tags: [always]
+
+- name: Manual cleanup if uninstall script not found
+  block:
+    - name: Remove K3s binary
+      ansible.builtin.file:
+        path: /usr/local/bin/k3s
+        state: absent
+      register: binary_removal
+
+    - name: Remove K3s directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /var/lib/rancher/k3s
+        - /etc/rancher/k3s
+        - /var/lib/kubelet
+        - /var/log/pods
+        - /var/log/containers
+      register: directory_removal
+
+    - name: Remove K3s systemd service
+      ansible.builtin.file:
+        path: /etc/systemd/system/k3s.service
+        state: absent
+      notify: reload systemd
+
+    - name: Manual cleanup summary
+      ansible.builtin.debug:
+        msg: |
+          Manual K3s Cleanup Complete:
+          - Binary removed: {{ binary_removal.changed }}
+          - Directories cleaned: {{ directory_removal.results | selectattr('changed') | list | length }}/{{ directory_removal.results | length }}
+      tags: [always]
+
+  when: not k3s_uninstall_script.stat.exists
+  tags: [control_plane, k3s, uninstall]
+
+- name: Verify K3s removal
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s
+  register: k3s_verification
+  tags: [control_plane, k3s, uninstall]
+
+- name: Final verification
+  ansible.builtin.debug:
+    msg: "✅ K3s completely removed" 
+  when: not k3s_verification.stat.exists
+  tags: [always]
+
+- name: Cleanup warning
+  ansible.builtin.debug:
+    msg: "⚠️  Warning: K3s binary still exists - manual intervention may be required"
+  when: k3s_verification.stat.exists
+  tags: [always]

@@ -1,0 +1,47 @@
+---
+- name: Check K3s service status
+  ansible.builtin.systemd:
+    name: k3s
+  register: k3s_service
+  tags: [verify, k3s, control_plane]
+
+- name: Verify K3s API with authentication
+  ansible.builtin.uri:
+    url: "https://{{ ansible_default_ipv4.address }}:6443/version"
+    client_cert: /var/lib/rancher/k3s/server/tls/client-admin.crt
+    client_key: /var/lib/rancher/k3s/server/tls/client-admin.key
+    ca_path: /var/lib/rancher/k3s/server/tls/server-ca.crt
+    timeout: 10
+  register: api_check
+  ignore_errors: true
+  tags: [verify, k3s, control_plane]
+
+- name: Check cluster nodes
+  ansible.builtin.shell: /usr/local/bin/k3s kubectl get nodes
+  register: nodes_check
+  ignore_errors: true
+  tags: [verify, k3s, control_plane]
+
+- name: Display verification results
+  ansible.builtin.debug:
+    msg: |
+      K3s Verification Results:
+      ✅ Service Status: {{ k3s_service.status.ActiveState }}
+      ✅ API Response: {{ 'OK' if api_check is succeeded else 'Failed' }}
+      ✅ Cluster Nodes: {{ nodes_check.stdout_lines | length if nodes_check is succeeded else 'Unable to check' }}
+  tags: [always]
+
+- name: Verification success
+  ansible.builtin.debug:
+    msg: "✅ K3s control plane verification completed successfully"
+  when: 
+    - k3s_service.status.ActiveState == "active"
+    - api_check is succeeded
+  tags: [always]
+
+- name: Verification warnings
+  ansible.builtin.debug:
+    msg: "⚠️  Warning: Some verification checks failed - cluster may not be fully ready"
+  when: 
+    - k3s_service.status.ActiveState != "active" or api_check is failed
+  tags: [always]

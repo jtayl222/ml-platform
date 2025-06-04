@@ -1,0 +1,23 @@
+---
+- name: Verify system requirements
+  assert:
+    that:
+      - ansible_distribution in ['Ubuntu', 'Debian', 'CentOS', 'RedHat']
+      - ansible_architecture in ['x86_64', 'aarch64']
+      - ansible_memtotal_mb >= 512
+    fail_msg: "System does not meet K3s requirements"
+  tags: [validation, prerequisites]
+
+- name: Check network connectivity
+  uri:
+    url: "https://get.k3s.io"
+    method: HEAD
+    timeout: 10
+  delegate_to: localhost
+  run_once: true
+  tags: [validation, prerequisites]
+
+- name: Display validation success
+  debug:
+    msg: "✅ All prerequisites validated successfully"
+  tags: [always]

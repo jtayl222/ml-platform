@@ -1,138 +1,28 @@
 ---
-- name: TEST - Role is executing
-  ansible.builtin.debug:
-    msg: "K3s Control Plane role is running with k3s_state={{ k3s_state | default('undefined') }}"
+- name: Include platform-specific variables
+  include_vars: "{{ ansible_os_family }}.yml"
   tags: [always]
-  
-- name: Debug k3s_state variable
-  ansible.builtin.debug:
-    msg: 
-      - "k3s_state is: {{ k3s_state | default('undefined') }}"
-      - "k3s_state is defined: {{ k3s_state is defined }}"
-      - "k3s_state == 'absent': {{ k3s_state is defined and k3s_state == 'absent' }}"
-      - "Should run deployment: {{ k3s_state is not defined or k3s_state != 'absent' }}"
-      - "Should run removal: {{ k3s_state is defined and k3s_state == 'absent' }}"
-  tags: [always, debug]  # ADD debug tag
 
-- name: Deploy K3s Control Plane
-  block:
-    - name: Debug - entering deployment block
-      ansible.builtin.debug:
-        msg: "Entering K3s deployment block"
-      tags: [always, debug]  # ADD debug tag
+- name: Validate prerequisites
+  include_tasks: validate.yml
+  tags: [validation, prerequisites]
 
-    - name: Install prerequisites
-      ansible.builtin.apt:
-        name:
-          - curl
-          - apt-transport-https
-        state: present
-        update_cache: yes
-      become: true
-      when: k3s_state == 'present'
+- name: Install K3s control plane
+  include_tasks: install.yml
+  when: k3s_state == "present"
+  tags: [install, k3s, control_plane]
 
-    - name: Install networking diagnostic utilities
-      ansible.builtin.apt:
-        name:
-          - net-tools
-          - netcat-openbsd
-          - curl
-          - traceroute
-          - iproute2
-          - iputils-ping
-          - dnsutils
-        state: present
-        update_cache: yes
-      become: true
-      when: k3s_state == 'present'
+- name: Configure K3s control plane
+  include_tasks: configure.yml
+  when: k3s_state == "present"
+  tags: [configure, k3s, control_plane]
 
-    - name: Download k3s install script
-      ansible.builtin.get_url:
-        url: https://get.k3s.io
-        dest: /tmp/k3s-install.sh
-        mode: "0755"
-      become: true
-      when: k3s_state == 'present'
+- name: Remove K3s control plane
+  include_tasks: uninstall.yml
+  when: k3s_state == "absent"
+  tags: [uninstall, k3s, control_plane]
 
-    - name: Install k3s control plane
-      ansible.builtin.command: /tmp/k3s-install.sh
-      environment:
-        INSTALL_K3S_EXEC: --datastore-endpoint='sqlite:///var/lib/rancher/k3s/server.db'
-      args:
-        creates: /usr/local/bin/k3s
-      become: true
-      when: k3s_state == 'present'
-
-    - name: Ensure k3s service is enabled and started
-      ansible.builtin.systemd:
-        name: k3s
-        enabled: yes
-        state: started
-      become: true
-      when: k3s_state == 'present'
-
-    - name: Wait for k3s to be up and running
-      ansible.builtin.wait_for:
-        port: 6443
-        delay: 10
-      become: true
-      when: k3s_state == 'present'
-
-    - name: Get the node token from the control plane
-      ansible.builtin.command: cat /var/lib/rancher/k3s/server/node-token
-      register: node_token
-      changed_when: false
-      become: true
-      when: k3s_state == 'present'
-
-    - name: Store node token
-      ansible.builtin.set_fact:
-        k3s_token: "{{ node_token.stdout }}"
-      when: k3s_state == 'present' and node_token is defined
-
-    - name: Display the node token
-      ansible.builtin.debug:
-        msg: Node token is {{ k3s_token }}
-      when: k3s_state == 'present' and k3s_token is defined
-
-  when: k3s_state is not defined or k3s_state != "absent"
-  tags: [k3s, control_plane]
-
-
-- name: Remove K3s Control Plane
-  block:
-    - name: Debug - entering removal block
-      ansible.builtin.debug:
-        msg: "Entering K3s removal block"
-      tags: [always, debug]  # ADD debug tag
-
-    - name: Stop K3s service
-      ansible.builtin.systemd:
-        name: k3s
-        state: stopped
-        enabled: false
-      ignore_errors: true
-
-    - name: Run K3s uninstall script
-      ansible.builtin.shell: /usr/local/bin/k3s-uninstall.sh
-      ignore_errors: true
-
-    - name: Remove K3s binary
-      ansible.builtin.file:
-        path: /usr/local/bin/k3s
-        state: absent
-
-    - name: Clean up K3s directories
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - /etc/rancher/k3s
-        - /var/lib/rancher/k3s
-        - /var/lib/kubelet
-        - /var/log/pods
-        - /var/log/containers
-      ignore_errors: true
-
-  when: k3s_state is defined and k3s_state == "absent"
-  tags: [k3s, control_plane]
+- name: Verify installation
+  include_tasks: verify.yml
+  when: k3s_state == "present"
+  tags: [verify, k3s, control_plane]

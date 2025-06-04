@@ -1,2 +1,14 @@
-null
-...
+---
+- name: restart k3s
+  systemd:
+    name: k3s
+    state: restarted
+    daemon_reload: true
+
+- name: wait for k3s
+  wait_for:
+    port: 6443
+    host: "{{ ansible_default_ipv4.address }}"
+    timeout: 300
+    delay: 10
+  listen: "wait for k3s"
