@@ -1,5 +1,26 @@
 # Production MLOps Platform on Kubernetes
 
+## Platform Architecture
+```
+🏗️ K3s Homelab MLOps Platform
+├── Infrastructure Layer
+│   ├── K3s Cluster (1 control + 4 workers)
+│   ├── NFS Storage (persistent volumes)
+│   └── Sealed Secrets (GitOps-ready)
+├── MLOps Layer  
+│   ├── MLflow (experiment tracking)
+│   ├── Argo CD (GitOps deployments)
+│   ├── JupyterHub (development environment)
+│   └── Kubeflow Pipelines (workflow orchestration)
+├── Monitoring Layer
+│   ├── Prometheus (metrics collection)
+│   ├── Grafana (observability dashboards)
+│   └── Kubernetes Dashboard (cluster management)
+└── Storage Layer
+    ├── MinIO (S3-compatible object storage)
+    └── NFS (shared filesystem storage)
+```
+
 > **A complete MLOps infrastructure demonstrating enterprise-grade machine learning operations on Kubernetes**
 
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-K3s-blue)](https://k3s.io/)
