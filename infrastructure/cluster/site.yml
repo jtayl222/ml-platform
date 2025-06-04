@@ -1,226 +1,244 @@
 ---
 # Professional MLOps Platform Deployment
-# All variables are defined in inventory/production/group_vars/all.yml
 
-# Step 1: Setup K3s Cluster
-- name: Configure K3s Control Plane
+# Play 1a: K3s Control Plane
+- name: Setup K3s Control Plane
   hosts: k3s_control_plane
   become: true
   gather_facts: true
-  roles:
-    - role: k3s_control_plane
+  tasks:
+    - name: Debug before calling control plane role
+      ansible.builtin.debug:
+        msg: "About to call k3s_control_plane role with k3s_state={{ k3s_state | default('undefined') }}"
+      tags: [k3s, control_plane, debug]
+
+    - name: Deploy or Remove K3s Control Plane
+      include_role:
+        name: k3s_control_plane
       tags: [k3s, control_plane]
 
-- name: Fetch kubeconfig to localhost
-  hosts: localhost
-  gather_facts: false
-  roles:
-    - role: fetch_kubeconfig
-      tags: [k3s, kubeconfig]
-
-- name: Configure K3s Worker Nodes
+# Play 1b: K3s Workers
+- name: Setup K3s Workers
   hosts: k3s_workers
   become: true
   gather_facts: true
-  roles:
-    - role: k3s_workers
+  tasks:
+    - name: Deploy or Remove K3s Workers
+      include_role:
+        name: k3s_workers
       tags: [k3s, workers]
 
-# Step 2: Setup Storage Infrastructure
-- name: Configure NFS Server
-  hosts: nfs_server
+# Play 2: NFS Infrastructure Setup
+- name: Setup NFS Infrastructure
+  hosts: nfs_server:k3s_control_plane:k3s_workers
   gather_facts: true
   become: true
-  roles:
-    - role: nfs_server
+  tasks:
+    # NFS Server
+    - name: Deploy NFS Server
+      include_role:
+        name: nfs_server
+      when: 
+        - inventory_hostname in groups['nfs_server']
+        - k3s_state is not defined or k3s_state != "absent"
       tags: [storage, nfs, nfs-server]
 
-- name: Configure NFS Clients
-  hosts: k3s_control_plane:k3s_workers
-  gather_facts: true
-  become: true
-  roles:
-    - role: nfs_clients
+    # NFS Clients
+    - name: Deploy NFS Clients
+      include_role:
+        name: nfs_clients
+      when: 
+        - inventory_hostname in groups['k3s_control_plane'] or inventory_hostname in groups['k3s_workers']
+        - k3s_state is not defined or k3s_state != "absent"
       tags: [storage, nfs, nfs-clients]
 
-- name: Setup NFS Provisioner in Kubernetes
-  hosts: localhost
-  connection: local
-  gather_facts: false
-  roles:
-    - role: nfs_provisioner
-      tags: [storage, nfs, nfs-provisioner]
-
-# Add this after NFS provisioner but before core infrastructure:
-
-- name: Setup Security Infrastructure
-  hosts: localhost
-  connection: local
-  gather_facts: false
-  roles:
-    - role: sealed_secrets
-      tags: [security, sealed-secrets]
-
-# Step 3: Core Infrastructure (Helm-based)
-- name: Deploy Core Infrastructure
+# Play 3: Kubernetes Infrastructure Setup
+- name: Setup Kubernetes Infrastructure
   hosts: localhost
   connection: local
   gather_facts: false
   tasks:
-    - name: Add Helm repositories
-      kubernetes.core.helm_repository:
-        name: "{{ item.name }}"
-        repo_url: "{{ item.url }}"
-        kubeconfig: "{{ kubeconfig_path }}"
-      loop:
-        - { name: "prometheus-community", url: "https://prometheus-community.github.io/helm-charts" }
-        - { name: "grafana", url: "https://grafana.github.io/helm-charts" }
-        - { name: "bitnami", url: "https://charts.bitnami.com/bitnami" }
-        - { name: "minio", url: "https://charts.min.io/" }
-        - { name: "argo", url: "https://argoproj.github.io/argo-helm" }
-        - { name: "seldon", url: "https://storage.googleapis.com/seldon-charts" }
-      tags: [core, helm-repos]
+    - name: Deploy Kubernetes Components
+      block:
+        # Kubeconfig
+        - name: Fetch kubeconfig
+          include_role:
+            name: fetch_kubeconfig
+          tags: [k3s, kubeconfig]
 
-    - name: Deploy MinIO (S3-compatible storage)
-      kubernetes.core.helm:
-        name: minio
-        chart_ref: minio/minio
-        release_namespace: minio
-        create_namespace: true
-        kubeconfig: "{{ kubeconfig_path }}"
-        values:
-          mode: "{{ minio_mode | default('standalone') }}"
-          replicas: "{{ minio_replicas | default(1) }}"
-          persistence:
-            enabled: true
-            size: "{{ minio_storage_size }}"
-            storageClass: "{{ global_storage_class | default('nfs-shared') }}"
-          auth:
-            rootUser: "{{ minio_access_key }}"
-            rootPassword: "{{ minio_secret_key }}"
-          service:
-            type: NodePort
-            nodePorts:
-              api: "{{ minio_nodeport }}"
-              console: "{{ minio_console_nodeport }}"
-          resources:
-            requests:
-              memory: "{{ minio_memory_request }}"
-              cpu: "{{ minio_cpu_request }}"
-            limits:
-              memory: "{{ minio_memory_limit }}"
-              cpu: "{{ minio_cpu_limit }}"
-      tags: [core, storage, minio]
+        # NFS Provisioner
+        - name: Deploy NFS Provisioner
+          include_role:
+            name: nfs_provisioner
+          tags: [storage, nfs, nfs-provisioner]
 
-    - name: Deploy Prometheus Stack
-      kubernetes.core.helm:
-        name: kube-prometheus-stack
-        chart_ref: prometheus-community/kube-prometheus-stack
-        release_namespace: monitoring
-        create_namespace: true
-        kubeconfig: "{{ kubeconfig_path }}"
-        values:
-          grafana:
-            adminPassword: "{{ grafana_admin_password }}"
-            service:
-              type: NodePort
-              nodePort: "{{ grafana_nodeport }}"
-            persistence:
-              enabled: true
-              storageClassName: "{{ global_storage_class | default('nfs-shared') }}"
-              size: "{{ grafana_storage_size | default('10Gi') }}"
-          prometheus:
-            service:
-              type: NodePort
-              nodePort: "{{ prometheus_nodeport }}"
-            prometheusSpec:
-              storageSpec:
-                volumeClaimTemplate:
-                  spec:
-                    storageClassName: "{{ global_storage_class | default('nfs-shared') }}"
-                    resources:
-                      requests:
-                        storage: "{{ prometheus_storage_size | default('50Gi') }}"
-      tags: [core, monitoring]
+        # Sealed Secrets
+        - name: Deploy Sealed Secrets
+          include_role:
+            name: sealed_secrets
+          tags: [security, sealed-secrets]
 
-    - name: Deploy Seldon Core
-      kubernetes.core.helm:
-        name: seldon-core
-        chart_ref: seldon/seldon-core-operator
-        release_namespace: seldon-system
-        create_namespace: true
-        kubeconfig: "{{ kubeconfig_path }}"
-      tags: [mlops, seldon]
+      when: k3s_state is not defined or k3s_state != "absent"
 
-    - name: Deploy Argo CD
-      kubernetes.core.helm:
-        name: argocd
-        chart_ref: argo/argo-cd
-        release_namespace: argocd
-        create_namespace: true
-        kubeconfig: "{{ kubeconfig_path }}"
-        values:
-          server:
-            service:
-              type: NodePort
-              nodePort: "{{ argocd_nodeport | default(30080) }}"
-      tags: [mlops, argocd]
-
-    - name: Deploy Argo Workflows
-      kubernetes.core.helm:
-        name: argo-workflows
-        chart_ref: argo/argo-workflows
-        release_namespace: argowf  # Changed from 'argo' to 'argowf'
-        create_namespace: true
-        kubeconfig: "{{ kubeconfig_path }}"
-      tags: [mlops, workflows]
-
-# Step 4: Deploy MLOps Components (Moved to separate play)
-- name: Deploy MLOps Components
-  hosts: localhost
-  connection: local
-  gather_facts: false
-  roles:
-    - role: mlflow
-      tags: [mlops, mlflow]
-
-# Step 5: Demo ML Application
-- name: Deploy Demo ML Pipeline
+# Play 4: Core Platform Deployment (All Helm charts)
+- name: Deploy Core Platform
   hosts: localhost
   connection: local
   gather_facts: false
   tasks:
-    - name: Create ML demo namespace
-      kubernetes.core.k8s:
-        kubeconfig: "{{ kubeconfig_path }}"
-        name: ml-demo
-        api_version: v1
-        kind: Namespace
-        state: present
-      tags: [demo, namespace]
+    - name: Deploy All Core Components
+      block:
+        # Helm repositories
+        - name: Add Helm repositories
+          kubernetes.core.helm_repository:
+            name: "{{ item.name }}"
+            repo_url: "{{ item.url }}"
+            kubeconfig: "{{ kubeconfig_path }}"
+          loop:
+            - { name: "prometheus-community", url: "https://prometheus-community.github.io/helm-charts" }
+            - { name: "grafana", url: "https://grafana.github.io/helm-charts" }
+            - { name: "bitnami", url: "https://charts.bitnami.com/bitnami" }
+            - { name: "argo", url: "https://argoproj.github.io/argo-helm" }
+            - { name: "seldon", url: "https://storage.googleapis.com/seldon-charts" }
+          tags: [core, helm-repos]
 
-  roles:
-    - role: mlops_demo_app
+        # MinIO
+        - name: Deploy MinIO (S3-compatible storage)
+          kubernetes.core.helm:
+            name: minio
+            chart_ref: bitnami/minio
+            release_namespace: minio
+            create_namespace: true
+            kubeconfig: "{{ kubeconfig_path }}"
+            wait: true
+            wait_timeout: 600s
+            values:
+              mode: "{{ minio_mode | default('standalone') }}"
+              replicas: "{{ minio_replicas | default(1) }}"
+              persistence:
+                enabled: true
+                size: "{{ minio_storage_size }}"
+                storageClass: "{{ global_storage_class | default('nfs-shared') }}"
+              auth:
+                rootUser: "{{ minio_access_key }}"
+                rootPassword: "{{ minio_secret_key }}"
+              service:
+                type: NodePort
+                nodePorts:
+                  api: "{{ minio_nodeport | int }}"
+              consoleService:
+                type: NodePort
+                nodePorts:
+                  console: "{{ minio_console_nodeport | int }}"
+              resources:
+                requests:
+                  memory: "{{ minio_memory_request }}"
+                  cpu: "{{ minio_cpu_request }}"
+                limits:
+                  memory: "{{ minio_memory_limit }}"
+                  cpu: "{{ minio_cpu_limit }}"
+          tags: [core, storage, minio]
+
+        # Prometheus Stack
+        - name: Deploy Prometheus Stack
+          kubernetes.core.helm:
+            name: prometheus-stack
+            chart_ref: prometheus-community/kube-prometheus-stack
+            release_namespace: monitoring
+            create_namespace: true
+            kubeconfig: "{{ kubeconfig_path }}"
+            wait: true
+            wait_timeout: 600s
+            values:
+              grafana:
+                service:
+                  type: NodePort
+                  nodePort: "{{ grafana_nodeport }}"
+              prometheus:
+                service:
+                  type: NodePort
+                  nodePort: "{{ prometheus_nodeport }}"
+          tags: [core, monitoring, prometheus]
+
+        # Argo CD
+        - name: Deploy Argo CD
+          kubernetes.core.helm:
+            name: argocd
+            chart_ref: argo/argo-cd
+            release_namespace: argocd
+            create_namespace: true
+            kubeconfig: "{{ kubeconfig_path }}"
+            wait: true
+            wait_timeout: 600s
+            values:
+              server:
+                service:
+                  type: NodePort
+                  nodePort: "{{ argocd_nodeport | default(30080) }}"
+          tags: [mlops, argocd]
+
+        # Argo Workflows
+        - name: Deploy Argo Workflows
+          kubernetes.core.helm:
+            name: argo-workflows
+            chart_ref: argo/argo-workflows
+            release_namespace: argowf
+            create_namespace: true
+            kubeconfig: "{{ kubeconfig_path }}"
+            wait: true
+            wait_timeout: 600s
+          tags: [mlops, workflows]
+
+        # MLflow
+        - name: Deploy MLflow
+          include_role:
+            name: mlflow
+          tags: [mlops, mlflow]
+
+      when: k3s_state is not defined or k3s_state != "absent"
+
+# Play 4: Demo Application
+- name: Deploy Demo Application
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Deploy ML Demo Pipeline
+      block:
+        - include_role:
+            name: mlops_demo_app
+      when: k3s_state is not defined or k3s_state != "absent"
       tags: [demo, mlops-demo]
 
-# Step 6: Display deployment summary
-- name: Display deployment complete banner
-  hosts: localhost
+# Play 5: Summary and Cleanup
+- name: Deployment Summary and Cleanup
+  hosts: localhost:nfs_server
   gather_facts: false
   tasks:
-    - name: Show access URLs
+    # Deployment Summary (localhost only)
+    - name: Show deployment summary
       debug:
         msg:
           - "🎉 MLOps Platform Deployment Complete!"
           - ""
           - "Access your services:"
-          - "- Grafana: http://{{ control_plane_ip }}:{{ grafana_nodeport }}"
-          - "- Prometheus: http://{{ control_plane_ip }}:{{ prometheus_nodeport }}"
-          - "- MinIO Console: http://{{ control_plane_ip }}:{{ minio_console_nodeport }}"
-          - "- MLflow: http://{{ control_plane_ip }}:{{ mlflow_nodeport }}"
-          - "- Argo CD: http://{{ control_plane_ip }}:{{ argocd_nodeport | default(30080) }}"
-          - ""
-          - "Credentials:"
-          - "- Grafana: admin / {{ grafana_admin_password }}"
-          - "- MinIO: {{ minio_access_key }} / {{ minio_secret_key }}"
+          - "- Grafana: http://{{ hostvars[groups['k3s_control_plane'][0]]['ansible_default_ipv4']['address'] }}:{{ grafana_nodeport }}"
+          - "- Prometheus: http://{{ hostvars[groups['k3s_control_plane'][0]]['ansible_default_ipv4']['address'] }}:{{ prometheus_nodeport }}"
+          - "- MinIO Console: http://{{ hostvars[groups['k3s_control_plane'][0]]['ansible_default_ipv4']['address'] }}:{{ minio_console_nodeport }}"
+          - "- MLflow: http://{{ hostvars[groups['k3s_control_plane'][0]]['ansible_default_ipv4']['address'] }}:{{ mlflow_nodeport }}"
+          - "- Argo CD: http://{{ hostvars[groups['k3s_control_plane'][0]]['ansible_default_ipv4']['address'] }}:{{ argocd_nodeport | default(30080) }}"
+      when: 
+        - inventory_hostname == 'localhost'
+        - k3s_state is not defined or k3s_state != "absent"
       tags: [summary]
+
+    # NFS Cleanup (nfs_server only)
+    - name: Clean up NFS storage
+      shell: |
+        find /srv/nfs/kubernetes/ -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} \;
+        echo "Cleaned up NFS storage"
+      become: true
+      when: 
+        - inventory_hostname in groups['nfs_server']
+        - k3s_state is defined and k3s_state == "absent"
+      tags: [cleanup, nfs-cleanup]

@@ -42,13 +42,6 @@
   delegate_to: "{{ groups['ansible_controller'][0] }}"
   become: false
 
-- name: Apply Sealed Secrets (MinIO + Workflow)
-  ansible.builtin.command: kubectl --kubeconfig="{{ kubeconfig_path }}" apply -f "{{ playbook_dir }}/../manifests/sealed-secrets/"
-  delegate_to: "{{ groups['ansible_controller'][0] }}"
-  become: false
-  changed_when: "'configured' in result.stdout or 'created' in result.stdout"
-  register: result
-
 # Apply RBAC configurations
 - name: Apply RBAC configurations
   kubernetes.core.k8s:

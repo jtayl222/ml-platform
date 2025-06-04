@@ -1,0 +1,136 @@
+# =============================================================================
+# K3s Homelab - Sensitive Files & Build Artifacts
+# =============================================================================
+
+# Kubernetes & Ansible Sensitive Files
+# -------------------------------------
+*.kubeconfig
+kubeconfig*
+.kube/
+**/kubeconfig
+**/kubeconfig.*
+
+# Sealed Secrets - Generated Files
+# ---------------------------------
+infrastructure/manifests/sealed-secrets/*.yaml
+infrastructure/manifests/sealed-secrets/*.yml
+!infrastructure/manifests/sealed-secrets/.gitkeep
+!infrastructure/manifests/sealed-secrets/README.md
+
+# kubernetes Secrets & ConfigMaps
+# --------------------------------
+infrastructure/fetched_tokens/*
+
+# Ansible Sensitive Files
+# ------------------------
+inventory/production/group_vars/all.yml
+inventory/staging/group_vars/all.yml
+inventory/*/host_vars/*
+**/vault_pass.txt
+.vault_pass*
+ansible_vault_*
+
+# SSH Keys & Certificates
+# ------------------------
+*.pem
+*.key
+*.crt
+*.csr
+**/ssh_keys/
+**/certificates/
+**/tls/
+
+# Environment & Configuration Files
+# ----------------------------------
+.env
+.env.*
+*.env
+config.local.*
+secrets.yml
+secrets.yaml
+
+# Temporary & Cache Files
+# -----------------------
+*.tmp
+*.temp
+.ansible/
+.cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Helm & Kubernetes Temporary Files
+# ----------------------------------
+charts/*.tgz
+.helm/
+**/Chart.lock
+**/charts/*.tgz
+
+# Logs & Debugging
+# -----------------
+*.log
+logs/
+debug.log
+ansible.log
+kubectl-*.log
+
+# IDE & Editor Files
+# -------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Backup Files
+# -------------
+*.bak
+*.backup
+*.old
+*_backup
+*_old
+
+# OS Generated Files
+# -------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Terraform (if used later)
+# --------------------------
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+terraform.tfvars
+*.tfvars
+
+# Docker & Container Files
+# -------------------------
+.dockerignore
+docker-compose.override.yml
+.docker/
+
+# Application Specific
+# ---------------------
+node_modules/
+dist/
+build/
+target/
+
+# Custom Homelab Files
+# ---------------------
+# Add any custom files specific to your setup
+monitoring-data/
+backup-data/
+local-storage/

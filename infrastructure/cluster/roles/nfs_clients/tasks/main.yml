@@ -1,25 +1,39 @@
 ---
-- name: Install NFS client packages
-  apt:
-    name:
-      - nfs-common
-    state: present
-    update_cache: yes
-  become: true
+- name: Install NFS client
+  block:
+    - name: Install NFS client packages
+      apt:
+        name:
+          - nfs-common
+        state: present
+        update_cache: yes
+      become: true
 
-- name: Create local mount point
-  file:
-    path: /mnt/nfs
-    state: directory
-    mode: '0755'
-  become: true
+    - name: Create local mount point
+      file:
+        path: /mnt/nfs
+        state: directory
+        mode: '0755'
+      become: true
 
-- name: Test NFS connectivity
-  command: showmount -e {{ nfs_server_ip }}
-  register: nfs_exports
-  failed_when: false
-  changed_when: false
+    - name: Test NFS connectivity
+      command: showmount -e {{ nfs_server_ip }}
+      register: nfs_exports
+      failed_when: false
+      changed_when: false
 
-- name: Display NFS exports
-  debug:
-    var: nfs_exports.stdout_lines
+    - name: Display NFS exports
+      debug:
+        var: nfs_exports.stdout_lines
+  when: k3s_state is not defined or k3s_state != "absent"
+
+- name: Cleanup NFS mounts
+  block:
+    - name: Unmount NFS shares
+      mount:
+        path: "{{ item }}"
+        state: unmounted
+      loop:
+        - /mnt/nfs
+      ignore_errors: true
+  when: k3s_state is defined and k3s_state == "absent"
