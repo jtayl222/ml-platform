@@ -37,4 +37,20 @@ cd "$(dirname "$0")/.."
   AWS_SECRET_ACCESS_KEY=minioadmin123 \
   MLFLOW_S3_ENDPOINT_URL=http://minio.minio.svc.cluster.local:9000
 
-echo "All sealed secrets created successfully!"  
+# Create Argo Workflows admin credentials secret
+./scripts/create-sealed-secret.sh argo-workflows-admin argowf \
+  username=admin \
+  password=mlopsadmin123
+
+# Create JupyterHub admin password secret  
+./scripts/create-sealed-secret.sh jupyterhub-admin jupyterhub \
+  password=mlops123
+
+echo "All sealed secrets created successfully!"
+echo ""
+echo "Generated sealed secrets:"
+echo "- MinIO credentials (minio, argowf namespaces)"
+echo "- Grafana admin password (monitoring namespace)"
+echo "- MLflow S3 credentials (mlflow namespace)"
+echo "- Argo Workflows admin credentials (argowf namespace)"
+echo "- JupyterHub admin password (jupyterhub namespace)"

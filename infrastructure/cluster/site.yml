@@ -203,7 +203,33 @@
             kubeconfig: "{{ kubeconfig_path }}"
             wait: true
             wait_timeout: 600s
+            values:
+              server:
+                authModes: ["server"]
+                serviceType: NodePort
+                serviceNodePort: 32746
+                extraArgs:
+                  - --auth-mode=server
+              controller:
+                workflowNamespaces:
+                  - argowf
+                  - default
+                resources:
+                  requests:
+                    memory: "{{ argowf_memory_request | default('256Mi') }}"
+                    cpu: "{{ argowf_cpu_request | default('100m') }}"
+                  limits:
+                    memory: "{{ argowf_memory_limit | default('512Mi') }}"
+                    cpu: "{{ argowf_cpu_limit | default('500m') }}"
           tags: [mlops, workflows]
+
+        # Apply Argo Workflows sealed secret
+        - name: Apply Argo Workflows Sealed Secret
+          kubernetes.core.k8s:
+            kubeconfig: "{{ kubeconfig_path }}"
+            src: "{{ playbook_dir }}/manifests/argo-workflows-admin-sealed-secret.yaml"
+            state: present
+          tags: [mlops, workflows, sealed-secrets]
 
         # MLflow
         - name: Deploy MLflow
