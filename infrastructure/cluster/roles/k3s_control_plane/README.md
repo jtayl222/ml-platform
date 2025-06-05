@@ -115,6 +115,37 @@ k3s_token: "{{ node_token.stdout }}"  # Generated during installation
 - **State Validation** - Shows how state variables are interpreted
 - **Error Handling** - Graceful error handling with `ignore_errors`
 
+### ✅ Firewall Configuration
+- **UFW Integration** - Automatically configures firewall rules for K3s
+- **Port Management** - Opens required ports (6443, 10250, 8472)
+- **Network Security** - Allows pod and service network CIDRs
+- **Node Communication** - Enables inter-node cluster communication
+
+#### Required Ports
+```bash
+# Control Plane Ports
+6443/tcp    # Kubernetes API server
+10250/tcp   # Kubelet API
+8472/udp    # Flannel VXLAN overlay
+9100/tcp    # Node exporter (monitoring)
+
+# Service Access
+30000-32767/tcp  # NodePort range
+
+# Internal Networks
+10.42.0.0/16     # Pod network CIDR
+10.43.0.0/16     # Service network CIDR
+```
+
+#### Firewall Tasks
+```yaml
+# Automatic UFW configuration
+- name: Configure UFW for K3s
+  include_tasks: firewall.yml
+  when: configure_ufw | default(true)
+  tags: [k3s, firewall]
+```
+
 ## Architecture
 
 ### K3s Configuration

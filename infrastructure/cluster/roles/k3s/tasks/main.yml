@@ -1,0 +1,10 @@
+---
+# Configure firewall before K3s installation
+- name: Configure UFW for K3s
+  include_tasks: firewall.yml
+  when: configure_ufw | default(true)
+  tags: [k3s, firewall]
+
+# Existing K3s installation tasks...
+- name: Install K3s server
+  # ... your existing K3s installation
