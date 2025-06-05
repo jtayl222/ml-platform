@@ -1,0 +1,30 @@
+---
+# Prometheus Stack Configuration
+prometheus_stack_namespace: monitoring
+prometheus_stack_name: prometheus-stack
+prometheus_stack_chart_ref: prometheus-community/kube-prometheus-stack
+
+# Grafana Configuration
+grafana_nodeport: 30300
+grafana_admin_password: admin123
+
+# Prometheus Configuration  
+prometheus_nodeport: 30090
+prometheus_storage_size: 10Gi
+prometheus_storage_class: nfs-shared
+
+# Resource Configuration
+prometheus_memory_request: 512Mi
+prometheus_memory_limit: 2Gi
+prometheus_cpu_request: 200m
+prometheus_cpu_limit: 1000m
+
+grafana_memory_request: 128Mi
+grafana_memory_limit: 512Mi
+grafana_cpu_request: 100m
+grafana_cpu_limit: 500m
+
+# Helm Configuration
+helm_wait_timeout: 600s
+helm_retries: 3
+helm_retry_delay: 30

@@ -1,0 +1,109 @@
+---
+- name: Add Bitnami Helm repository
+  kubernetes.core.helm_repository:
+    name: bitnami
+    repo_url: https://charts.bitnami.com/bitnami
+    kubeconfig: "{{ kubeconfig_path }}"
+  retries: 3
+  delay: 10
+  tags: [storage, helm-repos]
+
+- name: Create MinIO namespace
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    name: "{{ minio_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+  tags: [storage, namespace]
+
+- name: Deploy MinIO (S3-compatible storage)
+  kubernetes.core.helm:
+    name: "{{ minio_name }}"
+    chart_ref: "{{ minio_chart_ref }}"
+    release_namespace: "{{ minio_namespace }}"
+    create_namespace: true
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_timeout: "{{ helm_wait_timeout }}"
+    values:
+      mode: "{{ minio_mode }}"
+      replicas: "{{ minio_replicas }}"
+      persistence:
+        enabled: true
+        size: "{{ minio_storage_size }}"
+        storageClass: "{{ minio_storage_class }}"
+      auth:
+        rootUser: "{{ minio_access_key }}"
+        rootPassword: "{{ minio_secret_key }}"
+      service:
+        type: NodePort
+        nodePorts:
+          api: "{{ minio_nodeport | int }}"
+      consoleService:
+        type: NodePort
+        nodePorts:
+          console: "{{ minio_console_nodeport | int }}"
+      resources:
+        requests:
+          memory: "{{ minio_memory_request }}"
+          cpu: "{{ minio_cpu_request }}"
+        limits:
+          memory: "{{ minio_memory_limit }}"
+          cpu: "{{ minio_cpu_limit }}"
+  register: minio_deployment
+  retries: "{{ helm_retries }}"
+  delay: 30
+  tags: [storage, minio, helm-deploy]
+
+- name: Wait for MinIO to be ready
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: apps/v1
+    kind: Deployment
+    name: "{{ minio_name }}"
+    namespace: "{{ minio_namespace }}"
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 300
+  tags: [storage, minio, verify]
+
+- name: Create MinIO buckets for MLOps
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: batch/v1
+      kind: Job
+      metadata:
+        name: minio-setup-buckets
+        namespace: "{{ minio_namespace }}"
+      spec:
+        template:
+          spec:
+            containers:
+            - name: mc
+              image: minio/mc:latest
+              command: ["/bin/sh"]
+              args:
+                - -c
+                - |
+                  mc alias set myminio http://{{ minio_name }}.{{ minio_namespace }}.svc.cluster.local:9000 {{ minio_access_key }} {{ minio_secret_key }}
+                  mc mb myminio/mlflow-artifacts --ignore-existing
+                  mc mb myminio/argo-artifacts --ignore-existing
+                  mc mb myminio/kubeflow-artifacts --ignore-existing
+                  echo "Buckets created successfully"
+            restartPolicy: OnFailure
+  tags: [storage, minio, buckets]
+
+- name: Display MinIO deployment summary
+  debug:
+    msg:
+      - "🎉 MinIO deployment completed successfully!"
+      - "📦 MinIO API: http://{{ ansible_host | default('192.168.1.85') }}:{{ minio_nodeport }}"
+      - "🎛️ MinIO Console: http://{{ ansible_host | default('192.168.1.85') }}:{{ minio_console_nodeport }}"
+      - "🔑 Access Key: {{ minio_access_key }}"
+      - "🔒 Secret Key: {{ minio_secret_key }}"
+      - "🪣 Buckets: mlflow-artifacts, argo-artifacts, kubeflow-artifacts"
+      - "📁 Namespace: {{ minio_namespace }}"
+  tags: [storage, summary]

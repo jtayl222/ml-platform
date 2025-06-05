@@ -1,0 +1,163 @@
+---
+- name: Add JupyterHub Helm repository
+  kubernetes.core.helm_repository:
+    name: jupyterhub
+    repo_url: https://hub.jupyter.org/helm-chart/
+    kubeconfig: "{{ kubeconfig_path }}"
+  retries: 3
+  delay: 10
+  tags: [platform, helm-repos]
+
+- name: Create JupyterHub namespace
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    name: "{{ jupyterhub_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+  tags: [platform, namespace]
+
+- name: Deploy JupyterHub
+  kubernetes.core.helm:
+    name: "{{ jupyterhub_name }}"
+    chart_ref: "{{ jupyterhub_chart_ref }}"
+    release_namespace: "{{ jupyterhub_namespace }}"
+    create_namespace: true
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_timeout: "{{ helm_wait_timeout }}"
+    values:
+      proxy:
+        service:
+          type: "{{ jupyterhub_service_type }}"
+          nodePorts:
+            http: "{{ jupyterhub_nodeport }}"
+        chp:
+          resources:
+            requests:
+              memory: 320Mi
+              cpu: 0.2                    # ✅ Number format
+            limits:
+              memory: 320Mi
+              cpu: 0.2                    # ✅ Number format
+      
+      hub:
+        config:
+          DummyAuthenticator:
+            password: "{{ jupyterhub_password }}"
+          JupyterHub:
+            authenticator_class: "{{ jupyterhub_auth_type }}"
+            admin_access: true
+        resources:
+          requests:
+            memory: "{{ jupyterhub_hub_memory_request }}"
+            cpu: "{{ jupyterhub_hub_cpu_request }}"    # This will be 0.2
+          limits:
+            memory: "{{ jupyterhub_hub_memory_limit }}"
+            cpu: "{{ jupyterhub_hub_cpu_limit }}"      # This will be 0.5
+        extraEnv:
+          JUPYTER_ENABLE_LAB: "yes"
+      
+      singleuser:
+        image:
+          name: "{{ jupyterhub_image_name }}"
+          tag: "{{ jupyterhub_image_tag }}"
+        defaultUrl: "{{ jupyterhub_default_url }}"
+        storage:
+          type: "{{ jupyterhub_storage_type }}"
+          capacity: "{{ jupyterhub_storage_size }}"
+          dynamic:
+            storageClass: "{{ jupyterhub_storage_class }}"
+        
+        # ✅ FIXED: CPU values as numbers
+        cpu:
+          limit: "{{ jupyterhub_user_cpu_limit }}"       # Will be 1.0
+          guarantee: "{{ jupyterhub_user_cpu_request }}" # Will be 0.1
+        
+        # Memory values remain as strings
+        memory:
+          limit: "{{ jupyterhub_user_memory_limit }}"       # "2Gi"
+          guarantee: "{{ jupyterhub_user_memory_request }}" # "1Gi"
+        
+        # MLOps-specific environment
+        extraEnv:
+          MLFLOW_TRACKING_URI: "http://mlflow.mlflow.svc.cluster.local:5000"
+          MINIO_ENDPOINT_URL: "http://minio.minio.svc.cluster.local:9000"
+        
+        # Pre-install MLOps packages
+        lifecycleHooks:
+          postStart:
+            exec:
+              command:
+                - "bash"
+                - "-c"
+                - |
+                  pip install --quiet mlflow boto3 scikit-learn pandas numpy matplotlib seaborn
+      
+      # Resource scheduling
+      scheduling:
+        userScheduler:
+          enabled: true
+        podPriority:
+          enabled: true
+        userPlaceholder:
+          enabled: true
+          replicas: 1
+
+  register: jupyterhub_deployment
+  retries: "{{ helm_retries }}"
+  delay: "{{ helm_retry_delay }}"
+  tags: [platform, jupyter, helm-deploy]
+
+- name: Wait for JupyterHub to be ready
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: apps/v1
+    kind: Deployment
+    name: hub
+    namespace: "{{ jupyterhub_namespace }}"
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 300
+  tags: [platform, jupyter, verify]
+
+- name: Create JupyterHub MLOps ConfigMap
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: mlops-config
+        namespace: "{{ jupyterhub_namespace }}"
+      data:
+        mlflow_tracking_uri: "http://mlflow.mlflow.svc.cluster.local:5000"
+        minio_endpoint: "http://minio.minio.svc.cluster.local:9000"
+        startup_script: |
+          #!/bin/bash
+          echo "🚀 MLOps Environment Setup"
+          echo "📊 MLflow Tracking URI: $MLFLOW_TRACKING_URI"
+          echo "📦 MinIO Endpoint: $MINIO_ENDPOINT_URL"
+          echo "✅ Ready for ML experiments!"
+  tags: [platform, jupyter, config]
+
+- name: Display JupyterHub deployment status
+  debug:
+    msg:
+      - "🎉 JupyterHub deployment completed successfully!"
+      - "🌐 JupyterHub URL: http://{{ ansible_host | default('192.168.1.85') }}:{{ jupyterhub_nodeport }}"
+      - "🔑 Login: Use any username with password '{{ jupyterhub_password }}'"
+      - "📁 Namespace: {{ jupyterhub_namespace }}"
+      - "🐳 User Image: {{ jupyterhub_image_name }}:{{ jupyterhub_image_tag }}"
+      - ""
+      - "🧪 MLOps Integration:"
+      - "- MLflow Tracking: $MLFLOW_TRACKING_URI"
+      - "- MinIO Storage: $MINIO_ENDPOINT_URL"
+      - "- Pre-installed: mlflow, boto3, scikit-learn, pandas"
+      - ""
+      - "💡 Quick Start:"
+      - "1. Navigate to {{ ansible_host | default('192.168.1.85') }}:{{ jupyterhub_nodeport }}"
+      - "2. Login with any username and password '{{ jupyterhub_password }}'"
+      - "3. Start your ML experiments!"
+  tags: [platform, summary]

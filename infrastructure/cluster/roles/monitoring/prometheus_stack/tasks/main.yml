@@ -1,0 +1,135 @@
+---
+- name: Add Prometheus Community Helm repository
+  kubernetes.core.helm_repository:
+    name: prometheus-community
+    repo_url: https://prometheus-community.github.io/helm-charts
+    kubeconfig: "{{ kubeconfig_path }}"
+  retries: "{{ helm_retries }}"
+  delay: 10
+  tags: [monitoring, helm-repos]
+
+- name: Create monitoring namespace
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    name: "{{ prometheus_stack_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+  tags: [monitoring, namespace]
+
+- name: Deploy Prometheus Stack (kube-prometheus-stack)
+  kubernetes.core.helm:
+    name: "{{ prometheus_stack_name }}"
+    chart_ref: "{{ prometheus_stack_chart_ref }}"
+    release_namespace: "{{ prometheus_stack_namespace }}"
+    create_namespace: true
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_timeout: "{{ helm_wait_timeout }}"
+    values:
+      # Grafana Configuration
+      grafana:
+        service:
+          type: NodePort
+          nodePort: "{{ grafana_nodeport }}"
+        adminPassword: "{{ grafana_admin_password }}"
+        resources:
+          requests:
+            memory: "{{ grafana_memory_request }}"
+            cpu: "{{ grafana_cpu_request }}"
+          limits:
+            memory: "{{ grafana_memory_limit }}"
+            cpu: "{{ grafana_cpu_limit }}"
+        persistence:
+          enabled: true
+          storageClassName: "{{ prometheus_storage_class }}"
+          size: 1Gi
+        
+      # Prometheus Configuration
+      prometheus:
+        service:
+          type: NodePort
+          nodePort: "{{ prometheus_nodeport }}"
+        prometheusSpec:
+          resources:
+            requests:
+              memory: "{{ prometheus_memory_request }}"
+              cpu: "{{ prometheus_cpu_request }}"
+            limits:
+              memory: "{{ prometheus_memory_limit }}"
+              cpu: "{{ prometheus_cpu_limit }}"
+          storageSpec:
+            volumeClaimTemplate:
+              spec:
+                storageClassName: "{{ prometheus_storage_class }}"
+                accessModes: ["ReadWriteOnce"]
+                resources:
+                  requests:
+                    storage: "{{ prometheus_storage_size }}"
+          retention: 30d
+          retentionSize: "{{ prometheus_storage_size }}"
+      
+      # AlertManager Configuration
+      alertmanager:
+        alertmanagerSpec:
+          storage:
+            volumeClaimTemplate:
+              spec:
+                storageClassName: "{{ prometheus_storage_class }}"
+                accessModes: ["ReadWriteOnce"]
+                resources:
+                  requests:
+                    storage: 2Gi
+  
+  register: prometheus_deployment
+  retries: "{{ helm_retries }}"
+  delay: "{{ helm_retry_delay }}"
+  tags: [monitoring, prometheus, helm-deploy]
+
+- name: Verify Prometheus Stack deployment
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ prometheus_stack_namespace }}"
+    label_selectors:
+      - "app.kubernetes.io/name=grafana"
+  register: grafana_deployment
+  until: 
+    - grafana_deployment.resources | length > 0
+    - grafana_deployment.resources[0].status.readyReplicas | default(0) > 0
+  retries: 30
+  delay: 10
+  tags: [monitoring, verify]
+
+- name: Display Prometheus Stack deployment status
+  debug:
+    msg:
+      - "🎉 Prometheus Stack deployment completed successfully!"
+      - "📊 Grafana Dashboard: http://{{ ansible_host | default('192.168.1.85') }}:{{ grafana_nodeport }}"
+      - "🔍 Prometheus UI: http://{{ ansible_host | default('192.168.1.85') }}:{{ prometheus_nodeport }}"
+      - "🔑 Grafana Credentials: admin / {{ grafana_admin_password }}"
+      - "📈 Namespace: {{ prometheus_stack_namespace }}"
+  tags: [monitoring, summary]
+
+- name: Create Prometheus ServiceMonitor for MLflow (if MLflow is deployed)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: monitoring.coreos.com/v1
+      kind: ServiceMonitor
+      metadata:
+        name: mlflow-metrics
+        namespace: "{{ prometheus_stack_namespace }}"
+        labels:
+          app: mlflow
+      spec:
+        selector:
+          matchLabels:
+            app: mlflow
+        endpoints:
+        - port: http
+          path: /metrics
+          interval: 30s
+  failed_when: false  # Don't fail if MLflow isn't deployed yet
+  tags: [monitoring, servicemonitor, mlflow]

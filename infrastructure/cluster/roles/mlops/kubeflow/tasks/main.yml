@@ -1,0 +1,109 @@
+---
+- name: Create Kubeflow namespace
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    name: "{{ kubeflow_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+  tags: [kubeflow, namespace]
+
+- name: Ensure Kubeflow MinIO credentials exist
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    src: "{{ playbook_dir }}/../manifests/sealed-secrets/minio-secret-kubeflow.yaml"
+    state: present
+  register: kubeflow_secret_result
+  retries: 3
+  delay: 10
+  failed_when: false  # Don't fail if secret doesn't exist
+  tags: [mlops, kubeflow, credentials]
+
+- name: Deploy Kubeflow Pipelines manifests
+  shell: |
+    kubectl apply -k https://github.com/kubeflow/pipelines/manifests/kustomize/env/platform-agnostic
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+  register: kubeflow_deploy_result
+  failed_when: false
+  tags: [kubeflow, manifests]
+
+- name: Create missing ServiceAccounts
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: kubeflow-pipelines-cache-deployer-sa
+        namespace: "{{ kubeflow_namespace }}"
+  failed_when: false
+  tags: [kubeflow, serviceaccounts]
+
+- name: Generate and create webhook TLS secret
+  shell: |
+    openssl req -x509 -newkey rsa:2048 -keyout /tmp/webhook.key -out /tmp/webhook.crt \
+      -days 365 -nodes -subj "/CN=webhook-server.{{ kubeflow_namespace }}.svc.cluster.local" 2>/dev/null
+    kubectl create secret tls webhook-server-tls \
+      --cert=/tmp/webhook.crt --key=/tmp/webhook.key \
+      -n {{ kubeflow_namespace }} --dry-run=client -o yaml | kubectl apply -f -
+    rm -f /tmp/webhook.key /tmp/webhook.crt
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+  failed_when: false
+  tags: [kubeflow, tls-secrets]
+
+- name: Wait for Kubeflow components to stabilize
+  pause:
+    seconds: "{{ kubeflow_wait_timeout }}"
+  tags: [kubeflow, wait]
+
+- name: Restart failed pods to pick up new secrets
+  shell: |
+    kubectl delete pods -n {{ kubeflow_namespace }} --field-selector=status.phase=Failed --ignore-not-found=true
+    kubectl delete pods -n {{ kubeflow_namespace }} -l app=cache-server --ignore-not-found=true
+    kubectl delete pods -n {{ kubeflow_namespace }} -l app=metadata-grpc-deployment --ignore-not-found=true
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+  failed_when: false
+  tags: [kubeflow, restart-pods]
+
+- name: Create Kubeflow UI NodePort service
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: ml-pipeline-ui-nodeport
+        namespace: "{{ kubeflow_namespace }}"
+      spec:
+        type: NodePort
+        ports:
+        - port: 3000
+          targetPort: 3000
+          nodePort: "{{ kubeflow_ui_nodeport }}"
+          protocol: TCP
+        selector:
+          app: ml-pipeline-ui
+  failed_when: false
+  tags: [kubeflow, nodeport]
+
+- name: Verify Kubeflow deployment status
+  shell: |
+    kubectl get pods -n {{ kubeflow_namespace }} --no-headers | grep -E "(Running|Completed)" | wc -l
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+  register: kubeflow_running_pods
+  failed_when: false
+  tags: [kubeflow, verify]
+
+- name: Display Kubeflow deployment summary
+  debug:
+    msg:
+      - "Kubeflow Pipelines deployment status:"
+      - "Namespace: {{ kubeflow_namespace }}"
+      - "Running/Completed pods: {{ kubeflow_running_pods.stdout | default('Unknown') }}"
+      - "UI Access: http://192.168.1.85:{{ kubeflow_ui_nodeport }}"
+      - "Note: Some components may take additional time to stabilize"
+  tags: [kubeflow, summary]

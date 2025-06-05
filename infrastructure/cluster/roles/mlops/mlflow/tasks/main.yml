@@ -22,6 +22,29 @@
     definition: "{{ lookup('template', 'pvc.yaml.j2') | from_yaml }}"
   tags: [mlflow, mlops, storage]
 
+- name: Ensure MLflow MinIO credentials exist
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    src: "{{ playbook_dir }}/../manifests/sealed-secrets/minio-secret-mlflow.yaml"
+    state: present
+  register: mlflow_secret_result
+  retries: 3
+  delay: 10
+  tags: [mlops, mlflow, credentials]
+
+- name: Verify MLflow secret is available
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: v1
+    kind: Secret
+    name: minio-secret-mlflow
+    namespace: mlflow
+  register: mlflow_secret_check
+  until: mlflow_secret_check.resources | length > 0
+  retries: 5
+  delay: 10
+  tags: [mlops, mlflow, verify-credentials]
+
 - name: Deploy MLflow
   kubernetes.core.k8s:
     kubeconfig: "{{ kubeconfig_path }}"

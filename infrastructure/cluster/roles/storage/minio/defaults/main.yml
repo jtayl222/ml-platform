@@ -1,0 +1,29 @@
+---
+# MinIO Configuration
+minio_namespace: minio
+minio_name: minio
+minio_chart_ref: bitnami/minio
+
+# MinIO Storage Configuration
+minio_mode: standalone
+minio_replicas: 1
+minio_storage_size: 20Gi
+minio_storage_class: nfs-shared
+
+# MinIO Network Configuration
+minio_nodeport: 30900
+minio_console_nodeport: 30901
+
+# MinIO Authentication (should be overridden in vars)
+minio_access_key: minioadmin
+minio_secret_key: minioadmin123
+
+# MinIO Resource Configuration
+minio_memory_request: 256Mi
+minio_memory_limit: 1Gi
+minio_cpu_request: 100m
+minio_cpu_limit: 500m
+
+# Helm Configuration
+helm_wait_timeout: 600s
+helm_retries: 3

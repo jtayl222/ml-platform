@@ -1,0 +1,14 @@
+---
+# Internal role variables
+prometheus_stack_components:
+  - grafana
+  - prometheus
+  - alertmanager
+  - node-exporter
+  - kube-state-metrics
+
+# Default monitoring ports
+monitoring_ports:
+  grafana: "{{ grafana_nodeport | default(30300) }}"
+  prometheus: "{{ prometheus_nodeport | default(30090) }}"
+  alertmanager: 30093

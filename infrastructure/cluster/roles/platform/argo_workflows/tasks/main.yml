@@ -1,0 +1,238 @@
+---
+- name: Add Argo Helm repository
+  kubernetes.core.helm_repository:
+    name: argo
+    repo_url: https://argoproj.github.io/argo-helm
+    kubeconfig: "{{ kubeconfig_path }}"
+  retries: 3
+  delay: 10
+  tags: [platform, helm-repos]
+
+- name: Create Argo Workflows namespace
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    name: "{{ argowf_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+  tags: [platform, namespace]
+
+- name: Ensure Argo Workflows MinIO credentials exist
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    src: "{{ playbook_dir }}/../manifests/sealed-secrets/minio-secret-wf.yaml"
+    state: present
+  register: argowf_secret_result
+  retries: 3
+  delay: 10
+  tags: [platform, workflows, credentials]
+
+- name: Verify Argo Workflows secret is available
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: v1
+    kind: Secret
+    name: minio-secret-wf
+    namespace: "{{ argowf_namespace }}"
+  register: argowf_secret_check
+  until: argowf_secret_check.resources | length > 0
+  retries: 5
+  delay: 10
+  tags: [platform, workflows, verify-credentials]
+
+- name: Deploy Argo Workflows
+  kubernetes.core.helm:
+    name: "{{ argowf_name }}"
+    chart_ref: "{{ argowf_chart_ref }}"
+    release_namespace: "{{ argowf_namespace }}"
+    create_namespace: true
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_timeout: "{{ helm_wait_timeout }}"
+    values:
+      server:
+        authModes: "{{ argowf_auth_modes }}"
+        serviceType: "{{ argowf_service_type }}"
+        serviceNodePort: "{{ argowf_service_nodeport }}"
+        extraArgs:
+          - --auth-mode=server
+        # Security settings for demo environment
+        secure: false
+        # RBAC settings
+        rbac:
+          create: true
+      controller:
+        workflowNamespaces: "{{ argowf_workflow_namespaces }}"
+        resources:
+          requests:
+            memory: "{{ argowf_memory_request }}"
+            cpu: "{{ argowf_cpu_request }}"
+          limits:
+            memory: "{{ argowf_memory_limit }}"
+            cpu: "{{ argowf_cpu_limit }}"
+        # Workflow defaults
+        workflowDefaults:
+          spec:
+            ttlStrategy:
+              secondsAfterCompletion: 3600  # Clean up after 1 hour
+              secondsAfterSuccess: 3600
+              secondsAfterFailure: 3600
+      # Workflow executor
+      executor:
+        image:
+          tag: v3.4.4  # Use stable version
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+  register: argowf_deployment
+  retries: "{{ helm_retries }}"
+  delay: "{{ helm_retry_delay }}"
+  tags: [platform, workflows, helm-deploy]
+
+- name: Apply Argo Workflows Admin Secret
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    src: "{{ playbook_dir }}/../manifests/sealed-secrets/argo-workflows-admin.yaml"
+    state: present
+  register: argowf_secret_result
+  retries: 3
+  delay: 10
+  tags: [platform, workflows, sealed-secrets]
+
+- name: Wait for Argo Workflows server to be ready
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: apps/v1
+    kind: Deployment
+    name: "{{ argowf_name }}-server"
+    namespace: "{{ argowf_namespace }}"
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 300
+  tags: [platform, workflows, verify]
+
+- name: Create Argo Workflows RBAC for demo workflows
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: argo-workflows-demo-admin
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: admin
+      subjects:
+      - kind: ServiceAccount
+        name: default
+        namespace: "{{ argowf_namespace }}"
+  tags: [platform, workflows, rbac]
+
+- name: Create sample workflow template
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: argoproj.io/v1alpha1
+      kind: WorkflowTemplate
+      metadata:
+        name: mlops-workflow-template
+        namespace: "{{ argowf_namespace }}"
+      spec:
+        entrypoint: mlops-pipeline
+        templates:
+        - name: mlops-pipeline
+          dag:
+            tasks:
+            - name: preprocess
+              template: preprocess-data
+            - name: train
+              template: train-model
+              dependencies: [preprocess]
+            - name: evaluate
+              template: evaluate-model
+              dependencies: [train]
+        
+        - name: preprocess-data
+          container:
+            image: python:3.8
+            env:
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow.mlflow.svc.cluster.local:5000"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret-wf
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret-wf
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: MLFLOW_S3_ENDPOINT_URL
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret-wf
+                  key: AWS_ENDPOINT_URL
+            command: [python]
+            source: |
+              print("🔄 Preprocessing data...")
+              print("✅ Data preprocessing completed")
+        
+        - name: train-model
+          container:
+            image: python:3.8
+            env:
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow.mlflow.svc.cluster.local:5000"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret-wf
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret-wf
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: MLFLOW_S3_ENDPOINT_URL
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret-wf
+                  key: AWS_ENDPOINT_URL
+            command: [python]
+            source: |
+              import os
+              print("🤖 Training model...")
+              print(f"MLflow URI: {os.getenv('MLFLOW_TRACKING_URI')}")
+              print(f"S3 Endpoint: {os.getenv('MLFLOW_S3_ENDPOINT_URL')}")
+              print("✅ Model training completed")
+        
+        - name: evaluate-model
+          container:
+            image: python:3.8
+            command: [python]
+            source: |
+              print("📊 Evaluating model...")
+              print("✅ Model evaluation completed")
+  tags: [platform, workflows, templates]
+
+- name: Display Argo Workflows deployment status
+  debug:
+    msg:
+      - "🎉 Argo Workflows deployment completed successfully!"
+      - "🌐 Workflows UI: http://{{ ansible_host | default('192.168.1.85') }}:{{ argowf_service_nodeport }}"
+      - "📁 Namespace: {{ argowf_namespace }}"
+      - "🔑 Auth Mode: {{ argowf_auth_modes | join(', ') }}"
+      - "🛠️ Sample template: mlops-workflow-template"
+      - ""
+      - "💡 Quick Start Commands:"
+      - "   argo submit -n {{ argowf_namespace }} --from workflowtemplate/mlops-workflow-template"
+      - "   argo list -n {{ argowf_namespace }}"
+      - "   argo get -n {{ argowf_namespace }} <workflow-name>"
+  tags: [platform, summary]

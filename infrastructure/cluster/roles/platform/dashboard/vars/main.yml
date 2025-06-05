@@ -1,0 +1,18 @@
+---
+# Internal role variables
+dashboard_components:
+  - kong-proxy
+  - dashboard
+  - metrics-server
+
+# Default ports
+dashboard_ports:
+  https: 8443
+  http: 9090
+  nodeport: "{{ dashboard_nodeport | default(30444) }}"
+
+# Security settings
+dashboard_security_config:
+  skip_login: "{{ dashboard_skip_login | default(true) }}"
+  disable_settings_authorizer: "{{ dashboard_disable_settings_authorizer | default(true) }}"
+  enable_insecure_login: "{{ dashboard_enable_insecure_login | default(true) }}"

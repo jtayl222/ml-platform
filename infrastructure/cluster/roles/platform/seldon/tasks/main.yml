@@ -1,0 +1,162 @@
+---
+- name: Add Seldon Helm repository
+  kubernetes.core.helm_repository:
+    name: seldon
+    repo_url: https://storage.googleapis.com/seldon-charts
+    kubeconfig: "{{ kubeconfig_path }}"
+  retries: 3
+  delay: 10
+  tags: [platform, helm-repos]
+
+- name: Create Seldon namespace
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    name: "{{ seldon_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+  tags: [platform, namespace]
+
+- name: Deploy Seldon Core Operator
+  kubernetes.core.helm:
+    name: "{{ seldon_name }}"
+    chart_ref: "{{ seldon_chart_ref }}"
+    release_namespace: "{{ seldon_namespace }}"
+    create_namespace: true
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_timeout: "{{ helm_wait_timeout }}"
+    values:
+      usageMetrics:
+        enabled: "{{ seldon_usage_metrics }}"
+      istio:
+        enabled: "{{ seldon_istio_enabled }}"
+      ambassador:
+        enabled: "{{ seldon_ambassador_enabled }}"
+      certManager:
+        enabled: "{{ seldon_cert_manager_enabled }}"
+      keda:
+        enabled: "{{ seldon_keda_enabled }}"
+      
+      # Controller configuration
+      controllerManager:
+        image:
+          tag: "{{ seldon_operator_image_tag }}"
+        resources:
+          requests:
+            cpu: "{{ seldon_manager_cpu_request }}"
+            memory: "{{ seldon_manager_memory_request }}"
+          limits:
+            cpu: "{{ seldon_manager_cpu_limit }}"
+            memory: "{{ seldon_manager_memory_limit }}"
+
+  register: seldon_deployment
+  retries: "{{ helm_retries }}"
+  delay: "{{ helm_retry_delay }}"
+  tags: [platform, seldon, helm-deploy]
+
+- name: Wait for Seldon Core to be ready
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: apps/v1
+    kind: Deployment
+    name: seldon-controller-manager
+    namespace: "{{ seldon_namespace }}"
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 300
+  tags: [platform, seldon, verify]
+
+# FIXED: Remove the conflicting NodePort service creation
+# The Seldon operator will create its own services
+
+- name: Create Sample Seldon Deployment Template
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: seldon-examples
+        namespace: "{{ seldon_namespace }}"
+      data:
+        iris-model.yaml: |
+          apiVersion: machinelearning.seldon.io/v1
+          kind: SeldonDeployment
+          metadata:
+            name: iris-model
+            namespace: seldon-system
+          spec:
+            name: iris
+            predictors:
+            - graph:
+                children: []
+                implementation: SKLEARN_SERVER
+                modelUri: gs://seldon-models/sklearn/iris
+                name: classifier
+              name: default
+              replicas: 1
+              componentSpecs:
+              - spec:
+                  containers:
+                  - name: classifier
+                    resources:
+                      requests:
+                        memory: 1Mi
+                        cpu: 50m
+                      limits:
+                        memory: 1000Mi
+                        cpu: 1000m
+        
+        mlflow-model.yaml: |
+          apiVersion: machinelearning.seldon.io/v1
+          kind: SeldonDeployment
+          metadata:
+            name: mlflow-model
+            namespace: seldon-system
+          spec:
+            name: mlflow-model
+            predictors:
+            - graph:
+                children: []
+                implementation: MLFLOW_SERVER
+                modelUri: http://mlflow.mlflow.svc.cluster.local:5000/get-artifact?path=model&run_uuid=YOUR_RUN_ID
+                name: mlflow-model
+                envSecretRefName: mlflow-secret
+              name: default
+              replicas: 1
+              componentSpecs:
+              - spec:
+                  containers:
+                  - name: mlflow-model
+                    resources:
+                      requests:
+                        memory: 100Mi
+                        cpu: 100m
+                      limits:
+                        memory: 1Gi
+                        cpu: 1000m
+  tags: [platform, seldon, examples]
+
+- name: Display Seldon Core deployment status
+  debug:
+    msg:
+      - "🎉 Seldon Core deployment completed successfully!"
+      - "🤖 Model Serving Platform Ready!"
+      - "📁 Namespace: {{ seldon_namespace }}"
+      - "🔧 Operator: seldon-controller-manager"
+      - ""
+      - "🚀 Supported Model Types:"
+      - "- Scikit-Learn (SKLEARN_SERVER)"
+      - "- MLflow (MLFLOW_SERVER)"
+      - "- Custom Docker Images"
+      - "- TensorFlow, PyTorch, XGBoost"
+      - ""
+      - "📖 Sample Deployments Available:"
+      - "- kubectl get configmap seldon-examples -n {{ seldon_namespace }} -o yaml"
+      - ""
+      - "💡 Quick Commands:"
+      - "- kubectl get seldondeployments -n {{ seldon_namespace }}"
+      - "- kubectl apply -f <your-model.yaml>"
+  tags: [platform, summary]

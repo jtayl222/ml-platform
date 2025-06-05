@@ -1,0 +1,12 @@
+---
+# Internal role variables
+argowf_components:
+  - server
+  - controller
+  - executor
+
+# Default workflow configuration
+default_workflow_settings:
+  ttl_seconds: 3600
+  parallelism: 10
+  active_deadline_seconds: 7200

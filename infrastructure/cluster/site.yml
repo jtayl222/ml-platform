@@ -14,7 +14,7 @@
 
     - name: Deploy or Remove K3s Control Plane
       include_role:
-        name: k3s_control_plane
+        name: foundation/k3s_control_plane  # ✅ Fixed path
       tags: [k3s, control_plane]
 
 # Play 1b: K3s Workers
@@ -25,7 +25,7 @@
   tasks:
     - name: Deploy or Remove K3s Workers
       include_role:
-        name: k3s_workers
+        name: foundation/k3s_workers  # ✅ Fixed path
       tags: [k3s, workers]
 
 # Play 2: NFS Infrastructure Setup
@@ -37,7 +37,7 @@
     # NFS Server
     - name: Deploy NFS Server
       include_role:
-        name: nfs_server
+        name: foundation/nfs_server  # ✅ Fixed path
       when: 
         - inventory_hostname in groups['nfs_server']
         - k3s_state is not defined or k3s_state != "absent"
@@ -46,7 +46,7 @@
     # NFS Clients
     - name: Deploy NFS Clients
       include_role:
-        name: nfs_clients
+        name: foundation/nfs_clients  # ✅ Fixed path
       when: 
         - inventory_hostname in groups['k3s_control_plane'] or inventory_hostname in groups['k3s_workers']
         - k3s_state is not defined or k3s_state != "absent"
@@ -63,24 +63,24 @@
         # Kubeconfig
         - name: Fetch kubeconfig
           include_role:
-            name: fetch_kubeconfig
+            name: foundation/fetch_kubeconfig  # ✅ Fixed path
           tags: [k3s, kubeconfig]
 
         # NFS Provisioner
         - name: Deploy NFS Provisioner
           include_role:
-            name: nfs_provisioner
+            name: foundation/nfs_provisioner  # ✅ Fixed path
           tags: [storage, nfs, nfs-provisioner]
 
         # Sealed Secrets
         - name: Deploy Sealed Secrets
           include_role:
-            name: sealed_secrets
+            name: foundation/sealed_secrets  # ✅ Fixed path
           tags: [security, sealed-secrets]
 
       when: k3s_state is not defined or k3s_state != "absent"
 
-# Play 4: Core Platform Deployment (All Helm charts)
+# Play 4: Core Platform Deployment
 - name: Deploy Core Platform
   hosts: localhost
   connection: local
@@ -88,360 +88,69 @@
   tasks:
     - name: Deploy All Core Components
       block:
-        # Helm repositories
-        - name: Add Helm repositories
-          kubernetes.core.helm_repository:
-            name: "{{ item.name }}"
-            repo_url: "{{ item.url }}"
-            kubeconfig: "{{ kubeconfig_path }}"
-          loop:
-            - { name: "prometheus-community", url: "https://prometheus-community.github.io/helm-charts" }
-            - { name: "grafana", url: "https://grafana.github.io/helm-charts" }
-            - { name: "bitnami", url: "https://charts.bitnami.com/bitnami" }
-            - { name: "argo", url: "https://argoproj.github.io/argo-helm" }
-            - { name: "seldon", url: "https://storage.googleapis.com/seldon-charts" }
-            - { name: "kubernetes-dashboard", url: "https://kubernetes.github.io/dashboard/" }
-            - { name: "jupyterhub", url: "https://hub.jupyter.org/helm-chart/" }
-          retries: 3  # Keep retry logic
-          delay: 10   # Keep delay between retries
-          tags: [core, helm-repos]
+        # === FOUNDATION LAYER ===
+        - name: Deploy Secrets for Active Components
+          include_role:
+            name: foundation/secrets
+          tags: [foundation, secrets, credentials, mlflow, workflows, kubeflow]
 
-        # MinIO
-        - name: Deploy MinIO (S3-compatible storage)
-          kubernetes.core.helm:
-            name: minio
-            chart_ref: bitnami/minio
-            release_namespace: minio
-            create_namespace: true
-            kubeconfig: "{{ kubeconfig_path }}"
-            wait: true
-            wait_timeout: 600s
-            values:
-              mode: "{{ minio_mode | default('standalone') }}"
-              replicas: "{{ minio_replicas | default(1) }}"
-              persistence:
-                enabled: true
-                size: "{{ minio_storage_size }}"
-                storageClass: "{{ global_storage_class | default('nfs-shared') }}"
-              auth:
-                rootUser: "{{ minio_access_key }}"
-                rootPassword: "{{ minio_secret_key }}"
-              service:
-                type: NodePort
-                nodePorts:
-                  api: "{{ minio_nodeport | int }}"
-              consoleService:
-                type: NodePort
-                nodePorts:
-                  console: "{{ minio_console_nodeport | int }}"
-              resources:
-                requests:
-                  memory: "{{ minio_memory_request }}"
-                  cpu: "{{ minio_cpu_request }}"
-                limits:
-                  memory: "{{ minio_memory_limit }}"
-                  cpu: "{{ minio_cpu_limit }}"
+        # === STORAGE LAYER ===
+        - name: Deploy MinIO Storage
+          include_role:
+            name: storage/minio
           tags: [core, storage, minio]
 
-        # Prometheus Stack (Corrected)
-        - name: Deploy Prometheus Stack
-          kubernetes.core.helm:
-            name: prometheus-stack
-            chart_ref: prometheus-community/kube-prometheus-stack
-            release_namespace: monitoring
-            create_namespace: true
-            kubeconfig: "{{ kubeconfig_path }}"
-            wait: true
-            wait_timeout: 600s
-            values:
-              grafana:
-                service:
-                  type: NodePort
-                  nodePort: "{{ grafana_nodeport }}"
-                adminPassword: "{{ grafana_admin_password }}"
-              prometheus:
-                service:
-                  type: NodePort
-                  nodePort: "{{ prometheus_nodeport }}"
-                prometheusSpec:
-                  storageSpec:
-                    volumeClaimTemplate:
-                      spec:
-                        storageClassName: "{{ global_storage_class }}"
-                        accessModes: ["ReadWriteOnce"]
-                        resources:
-                          requests:
-                            storage: "{{ prometheus_storage_size }}"
-          retries: 3
-          delay: 30
+        - name: Deploy Storage Credentials
+          include_role:
+            name: storage/credentials
+          tags: [core, storage, credentials]
+
+        # === MONITORING LAYER ===
+        - name: Deploy Prometheus Monitoring Stack
+          include_role:
+            name: monitoring/prometheus_stack
           tags: [core, monitoring, prometheus]
 
-        # Argo CD
+        # === PLATFORM LAYER ===
         - name: Deploy Argo CD
-          kubernetes.core.helm:
-            name: argocd
-            chart_ref: argo/argo-cd
-            release_namespace: argocd
-            create_namespace: true
-            kubeconfig: "{{ kubeconfig_path }}"
-            wait: true
-            wait_timeout: 600s
-            values:
-              server:
-                service:
-                  type: NodePort
-                  nodePort: "{{ argocd_nodeport | default(30080) }}"
-          tags: [mlops, argocd]
+          include_role:
+            name: platform/argo_cd
+          tags: [platform, argocd]
 
-        # Argo Workflows
         - name: Deploy Argo Workflows
-          kubernetes.core.helm:
-            name: argo-workflows
-            chart_ref: argo/argo-workflows
-            release_namespace: argowf
-            create_namespace: true
-            kubeconfig: "{{ kubeconfig_path }}"
-            wait: true
-            wait_timeout: 600s
-            values:
-              server:
-                authModes: ["server"]
-                serviceType: NodePort
-                serviceNodePort: 32746
-                extraArgs:
-                  - --auth-mode=server
-              controller:
-                workflowNamespaces:
-                  - argowf
-                  - default
-                resources:
-                  requests:
-                    memory: "{{ argowf_memory_request | default('256Mi') }}"
-                    cpu: "{{ argowf_cpu_request | default('100m') }}"
-                  limits:
-                    memory: "{{ argowf_memory_limit | default('512Mi') }}"
-                    cpu: "{{ argowf_cpu_limit | default('500m') }}"
-          tags: [mlops, workflows]
+          include_role:
+            name: platform/argo_workflows
+          tags: [platform, workflows]
 
-        # Apply Argo Workflows sealed secret
-        - name: Apply Argo Workflows Sealed Secret
-          kubernetes.core.k8s:
-            kubeconfig: "{{ kubeconfig_path }}"
-            src: "{{ playbook_dir }}/../manifests/sealed-secrets/argo-workflows-admin.yaml"
-            state: present
-          tags: [mlops, workflows, sealed-secrets]
+        - name: Deploy Kubernetes Dashboard
+          include_role:
+            name: platform/dashboard
+          tags: [platform, dashboard]
 
-        # MLflow
+        - name: Deploy JupyterHub
+          include_role:
+            name: platform/jupyterhub
+          tags: [platform, jupyter]
+
+        - name: Deploy Seldon Core
+          include_role:
+            name: platform/seldon
+          tags: [platform, model-serving]
+
+        # === MLOPS LAYER ===
         - name: Deploy MLflow
           include_role:
-            name: mlflow
+            name: mlops/mlflow
           tags: [mlops, mlflow]
 
-        # Kubernetes Dashboard (Complete deployment)
-        - name: Deploy Kubernetes Dashboard with Admin Access
-          block:
-            - name: Deploy Dashboard Helm Chart
-              kubernetes.core.helm:
-                name: kubernetes-dashboard
-                chart_ref: kubernetes-dashboard/kubernetes-dashboard
-                release_namespace: kubernetes-dashboard
-                create_namespace: true
-                kubeconfig: "{{ kubeconfig_path }}"
-                wait: true
-                wait_timeout: 600s
-                values:
-                  kong:
-                    service:
-                      type: NodePort
-                      nodePort: 30444
-                  app:
-                    settings:
-                      global:
-                        skipLogin: true
-                  extraArgs:
-                    - --enable-skip-login
-                    - --disable-settings-authorizer
-
-            - name: Create Dashboard Admin ServiceAccount and ClusterRoleBinding
-              kubernetes.core.k8s:
-                kubeconfig: "{{ kubeconfig_path }}"
-                definition: "{{ item }}"
-              loop:
-                - apiVersion: v1
-                  kind: ServiceAccount
-                  metadata:
-                    name: dashboard-admin
-                    namespace: kubernetes-dashboard
-                - apiVersion: rbac.authorization.k8s.io/v1
-                  kind: ClusterRoleBinding
-                  metadata:
-                    name: dashboard-admin
-                  roleRef:
-                    apiGroup: rbac.authorization.k8s.io
-                    kind: ClusterRole
-                    name: cluster-admin
-                  subjects:
-                  - kind: ServiceAccount
-                    name: dashboard-admin
-                    namespace: kubernetes-dashboard
-
-            - name: Create NodePort Service for Dashboard Access
-              kubernetes.core.k8s:
-                kubeconfig: "{{ kubeconfig_path }}"
-                definition:
-                  apiVersion: v1
-                  kind: Service
-                  metadata:
-                    name: dashboard-nodeport
-                    namespace: kubernetes-dashboard
-                  spec:
-                    type: NodePort
-                    ports:
-                    - port: 443
-                      targetPort: 8443
-                      nodePort: 30444
-                      protocol: TCP
-                    selector:
-                      app.kubernetes.io/name: kong
-
-          tags: [core, dashboard]
-
-        # Jupyter Hub (Corrected)
-        - name: Deploy JupyterHub
-          kubernetes.core.helm:
-            name: jupyterhub
-            chart_ref: jupyterhub/jupyterhub
-            release_namespace: jupyterhub
-            create_namespace: true
-            kubeconfig: "{{ kubeconfig_path }}"
-            wait: true
-            wait_timeout: 600s
-            values:
-              proxy:
-                service:
-                  type: NodePort
-                  nodePorts:
-                    http: 30888  # Correct syntax for JupyterHub
-              hub:
-                config:
-                  DummyAuthenticator:
-                    password: "{{ jupyter_password | default('mlops123') }}"
-                  JupyterHub:
-                    authenticator_class: "dummy"
-              singleuser:
-                image:
-                  name: jupyter/datascience-notebook
-                  tag: "latest"
-                defaultUrl: "/lab"
-                storage:
-                  type: none  # No persistent storage for demo
-          tags: [mlops, jupyter]
-
-        # Seldon Core (Model Serving Platform)
-        - name: Deploy Seldon Core
-          kubernetes.core.helm:
-            name: seldon-core
-            chart_ref: seldon/seldon-core-operator
-            release_namespace: seldon-system
-            create_namespace: true
-            kubeconfig: "{{ kubeconfig_path }}"
-            wait: true
-            wait_timeout: 600s
-            values:
-              usageMetrics:
-                enabled: true
-              istio:
-                enabled: false  # Use without Istio for simplicity
-              ambassador:
-                enabled: false  # Use without Ambassador
-              certManager:
-                enabled: false  # Use without cert-manager
-              keda:
-                enabled: false  # Disable auto-scaling for now
-          tags: [mlops, seldon, model-serving]
-
-        # Kubeflow Pipelines (Fixed TLS secret)
         - name: Deploy Kubeflow Pipelines
-          block:
-            - name: Create Kubeflow namespace
-              kubernetes.core.k8s:
-                kubeconfig: "{{ kubeconfig_path }}"
-                name: kubeflow
-                api_version: v1
-                kind: Namespace
-                state: present
+          include_role:
+            name: mlops/kubeflow
+          tags: [mlops, kubeflow, pipelines]
 
-            - name: Deploy Kubeflow Pipelines manifests
-              shell: |
-                kubectl apply -k https://github.com/kubeflow/pipelines/manifests/kustomize/env/platform-agnostic
-              environment:
-                KUBECONFIG: "{{ kubeconfig_path }}"
-              ignore_errors: true
+      when: k3s_state is not defined or k3s_state != "absent"
 
-            - name: Create missing ServiceAccounts
-              kubernetes.core.k8s:
-                kubeconfig: "{{ kubeconfig_path }}"
-                definition:
-                  apiVersion: v1
-                  kind: ServiceAccount
-                  metadata:
-                    name: kubeflow-pipelines-cache-deployer-sa
-                    namespace: kubeflow
-              ignore_errors: true
-
-            - name: Generate and create webhook TLS secret
-              shell: |
-                openssl req -x509 -newkey rsa:2048 -keyout /tmp/webhook.key -out /tmp/webhook.crt \
-                  -days 365 -nodes -subj "/CN=webhook-server.kubeflow.svc.cluster.local" 2>/dev/null
-                kubectl create secret tls webhook-server-tls \
-                  --cert=/tmp/webhook.crt --key=/tmp/webhook.key \
-                  -n kubeflow --dry-run=client -o yaml | kubectl apply -f -
-                rm -f /tmp/webhook.key /tmp/webhook.crt
-              environment:
-                KUBECONFIG: "{{ kubeconfig_path }}"
-              ignore_errors: true
-
-            - name: Wait for Kubeflow components to stabilize
-              pause:
-                seconds: 90
-
-            - name: Restart failed pods to pick up new secrets
-              shell: |
-                kubectl delete pods -n kubeflow --field-selector=status.phase=Failed --ignore-not-found=true
-                kubectl delete pods -n kubeflow -l app=cache-server --ignore-not-found=true
-                kubectl delete pods -n kubeflow -l app=metadata-grpc-deployment --ignore-not-found=true
-              environment:
-                KUBECONFIG: "{{ kubeconfig_path }}"
-              ignore_errors: true
-
-            - name: Create Kubeflow UI NodePort service
-              kubernetes.core.k8s:
-                kubeconfig: "{{ kubeconfig_path }}"
-                definition:
-                  apiVersion: v1
-                  kind: Service
-                  metadata:
-                    name: ml-pipeline-ui-nodeport
-                    namespace: kubeflow
-                  spec:
-                    type: NodePort
-                    ports:
-                    - port: 3000
-                      targetPort: 3000
-                      nodePort: 31234
-                      protocol: TCP
-                    selector:
-                      app: ml-pipeline-ui
-              ignore_errors: true
-
-          rescue:
-            - name: Kubeflow deployment issues - continuing
-              debug:
-                msg: "Kubeflow had startup issues but may still work. Check manually with: kubectl get pods -n kubeflow"
-
-          tags: [kubeflow, pipelines]
-
-# Play 4: Demo Application
+# Play 5: Demo Application
 - name: Deploy Demo Application
   hosts: localhost
   connection: local
@@ -450,11 +159,11 @@
     - name: Deploy ML Demo Pipeline
       block:
         - include_role:
-            name: mlops_demo_app
+            name: demo/mlops_demo_app  # ✅ Fixed path
       when: k3s_state is not defined or k3s_state != "absent"
       tags: [demo, mlops-demo]
 
-# Play 5: Summary and Cleanup
+# Play 6: Summary and Cleanup
 - name: Deployment Summary and Cleanup
   hosts: localhost:nfs_server
   gather_facts: false
@@ -479,7 +188,7 @@
           - ""
           - "🔧 Cluster Management:"
           - "- Kubeflow Pipelines: http://192.168.1.85:31234 (if deployed)"
-          - "- Argo Workflows: http://192.168.1.85:31001 (if deployed)"
+          - "- Argo Workflows: http://192.168.1.85:32746 (if deployed)"
           - ""
           - "🔑 Access Instructions:"
           - "- kubectl: export KUBECONFIG=/tmp/k3s-kubeconfig.yaml"

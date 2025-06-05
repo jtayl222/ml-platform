@@ -1,0 +1,6 @@
+---
+# Kubeflow Pipelines Configuration
+kubeflow_namespace: kubeflow
+kubeflow_ui_nodeport: 31234
+kubeflow_wait_timeout: 90
+kubeflow_retry_attempts: 3

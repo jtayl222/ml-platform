@@ -1,0 +1,26 @@
+---
+# Kubernetes Dashboard Configuration
+dashboard_namespace: kubernetes-dashboard
+dashboard_name: kubernetes-dashboard
+dashboard_chart_ref: kubernetes-dashboard/kubernetes-dashboard
+
+# Service Configuration
+dashboard_nodeport: 30444
+dashboard_service_type: NodePort
+
+# Authentication Configuration
+dashboard_skip_login: true
+dashboard_disable_settings_authorizer: true
+
+# Admin Configuration
+dashboard_admin_account: dashboard-admin
+dashboard_admin_cluster_role: cluster-admin
+
+# Helm Configuration
+helm_wait_timeout: 600s
+helm_retries: 3
+helm_retry_delay: 30
+
+# Security Configuration (for demo environment)
+dashboard_enable_insecure_login: true
+dashboard_enable_skip_login: true

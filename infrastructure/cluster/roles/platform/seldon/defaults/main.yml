@@ -1,0 +1,29 @@
+---
+# Seldon Core Configuration
+seldon_namespace: seldon-system
+seldon_name: seldon-core
+seldon_chart_ref: seldon/seldon-core-operator
+
+# Operator Configuration
+seldon_operator_image_tag: 1.17.1
+seldon_manager_cpu_request: 100m
+seldon_manager_cpu_limit: 500m
+seldon_manager_memory_request: 128Mi
+seldon_manager_memory_limit: 512Mi
+
+# Feature Configuration
+seldon_usage_metrics: true
+seldon_istio_enabled: false
+seldon_ambassador_enabled: false
+seldon_cert_manager_enabled: false
+seldon_keda_enabled: false
+
+# Service Configuration - FIXED PORT CONFLICT
+seldon_service_type: NodePort
+seldon_nodeport: 32000  # Changed from 30900 to avoid conflict
+seldon_grpc_nodeport: 32001  # For gRPC traffic
+
+# Helm Configuration
+helm_wait_timeout: 600s
+helm_retries: 3
+helm_retry_delay: 30

@@ -1,0 +1,186 @@
+---
+- name: Add Kubernetes Dashboard Helm repository
+  kubernetes.core.helm_repository:
+    name: kubernetes-dashboard
+    repo_url: https://kubernetes.github.io/dashboard/
+    kubeconfig: "{{ kubeconfig_path }}"
+  retries: 3
+  delay: 10
+  tags: [platform, helm-repos]
+
+- name: Create Kubernetes Dashboard namespace
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    name: "{{ dashboard_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+  tags: [platform, namespace]
+
+- name: Deploy Kubernetes Dashboard
+  kubernetes.core.helm:
+    name: "{{ dashboard_name }}"
+    chart_ref: "{{ dashboard_chart_ref }}"
+    release_namespace: "{{ dashboard_namespace }}"
+    create_namespace: true
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_timeout: "{{ helm_wait_timeout }}"
+    values:
+      kong:
+        service:
+          type: "{{ dashboard_service_type }}"
+          nodePort: "{{ dashboard_nodeport }}"
+      app:
+        settings:
+          global:
+            skipLogin: "{{ dashboard_skip_login }}"
+        extraArgs:
+          - --enable-skip-login
+          - --disable-settings-authorizer
+          - --insecure-bind-address=0.0.0.0
+          - --enable-insecure-login
+      # Security settings for demo environment
+      extraArgs:
+        - --enable-skip-login
+        - --disable-settings-authorizer
+  register: dashboard_deployment
+  retries: "{{ helm_retries }}"
+  delay: "{{ helm_retry_delay }}"
+  tags: [platform, dashboard, helm-deploy]
+
+- name: Create Dashboard Admin ServiceAccount
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: "{{ dashboard_admin_account }}"
+        namespace: "{{ dashboard_namespace }}"
+  tags: [platform, dashboard, rbac]
+
+- name: Create Dashboard Admin ClusterRoleBinding
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: "{{ dashboard_admin_account }}"
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: "{{ dashboard_admin_cluster_role }}"
+      subjects:
+      - kind: ServiceAccount
+        name: "{{ dashboard_admin_account }}"
+        namespace: "{{ dashboard_namespace }}"
+  tags: [platform, dashboard, rbac]
+
+- name: Create NodePort Service for Dashboard Access
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: dashboard-nodeport
+        namespace: "{{ dashboard_namespace }}"
+        labels:
+          app: kubernetes-dashboard-nodeport
+      spec:
+        type: NodePort
+        ports:
+        - port: 443
+          targetPort: 8443
+          nodePort: "{{ dashboard_nodeport }}"
+          protocol: TCP
+          name: https
+        selector:
+          app.kubernetes.io/name: kong
+  tags: [platform, dashboard, service]
+
+- name: Wait for Dashboard to be ready
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ dashboard_namespace }}"
+    label_selectors:
+      - "app.kubernetes.io/name=kong"
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 300
+  tags: [platform, dashboard, verify]
+
+- name: Get Dashboard Admin Token (for non-skip-login access)
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: v1
+    kind: Secret
+    namespace: "{{ dashboard_namespace }}"
+    label_selectors:
+      - "kubernetes.io/service-account.name={{ dashboard_admin_account }}"
+  register: dashboard_token_secret
+  tags: [platform, dashboard, token]
+
+- name: Create Dashboard Admin Token Secret (if not exists)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: "{{ dashboard_admin_account }}-token"
+        namespace: "{{ dashboard_namespace }}"
+        annotations:
+          kubernetes.io/service-account.name: "{{ dashboard_admin_account }}"
+      type: kubernetes.io/service-account-token
+  when: dashboard_token_secret.resources | length == 0
+  tags: [platform, dashboard, token]
+
+- name: Create Dashboard ingress (optional)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata:
+        name: dashboard-ingress
+        namespace: "{{ dashboard_namespace }}"
+        annotations:
+          nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+          nginx.ingress.kubernetes.io/ssl-redirect: "false"
+      spec:
+        rules:
+        - host: dashboard.local
+          http:
+            paths:
+            - path: /
+              pathType: Prefix
+              backend:
+                service:
+                  name: kubernetes-dashboard-kong-proxy
+                  port:
+                    number: 443
+  failed_when: false  # Don't fail if ingress controller not available
+  tags: [platform, dashboard, ingress]
+
+- name: Display Kubernetes Dashboard deployment status
+  debug:
+    msg:
+      - "🎉 Kubernetes Dashboard deployment completed successfully!"
+      - "🌐 Dashboard URL: https://{{ ansible_host | default('192.168.1.85') }}:{{ dashboard_nodeport }}"
+      - "🔑 Access Mode: Skip Login Enabled (Demo Mode)"
+      - "👤 Admin ServiceAccount: {{ dashboard_admin_account }}"
+      - "📁 Namespace: {{ dashboard_namespace }}"
+      - ""
+      - "🔐 Security Note: Skip login is enabled for demo purposes"
+      - "🏠 Local Access: https://dashboard.local (if ingress configured)"
+      - ""
+      - "💡 Quick Access Commands:"
+      - "   kubectl proxy --port=8001"
+      - "   Then visit: http://localhost:8001/api/v1/namespaces/{{ dashboard_namespace }}/services/https:kubernetes-dashboard:/proxy/"
+  tags: [platform, summary]

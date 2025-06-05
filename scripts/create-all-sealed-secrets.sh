@@ -32,7 +32,7 @@ cd "$(dirname "$0")/.."
   AWS_DEFAULT_REGION=us-east-1
 
 # Create MLflow S3 secret for mlflow namespace
-./scripts/create-sealed-secret.sh mlflow-s3-secret mlflow \
+./scripts/create-sealed-secret.sh minio-secret-mlflow mlflow \
   AWS_ACCESS_KEY_ID=minioadmin \
   AWS_SECRET_ACCESS_KEY=minioadmin123 \
   MLFLOW_S3_ENDPOINT_URL=http://minio.minio.svc.cluster.local:9000

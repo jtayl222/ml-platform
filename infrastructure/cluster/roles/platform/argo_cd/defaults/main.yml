@@ -1,0 +1,6 @@
+---
+argocd_namespace: argocd
+argocd_name: argocd
+argocd_chart_ref: argo/argo-cd
+argocd_nodeport: 30080
+helm_wait_timeout: 600s

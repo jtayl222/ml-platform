@@ -1,0 +1,33 @@
+---
+- name: Add Argo Helm repository
+  kubernetes.core.helm_repository:
+    name: argo
+    repo_url: https://argoproj.github.io/argo-helm
+    kubeconfig: "{{ kubeconfig_path }}"
+  retries: 3
+  delay: 10
+  tags: [platform, helm-repos]
+
+- name: Deploy Argo CD
+  kubernetes.core.helm:
+    name: "{{ argocd_name }}"
+    chart_ref: "{{ argocd_chart_ref }}"
+    release_namespace: "{{ argocd_namespace }}"
+    create_namespace: true
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_timeout: "{{ helm_wait_timeout }}"
+    values:
+      server:
+        service:
+          type: NodePort
+          nodePort: "{{ argocd_nodeport }}"
+  tags: [platform, argocd]
+
+- name: Display Argo CD access information
+  debug:
+    msg:
+      - "🎉 Argo CD deployed successfully!"
+      - "🌐 Access URL: http://{{ ansible_host | default('192.168.1.85') }}:{{ argocd_nodeport }}"
+      - "📁 Namespace: {{ argocd_namespace }}"
+  tags: [platform, summary]

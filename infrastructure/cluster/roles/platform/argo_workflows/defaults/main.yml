@@ -1,0 +1,29 @@
+---
+# Argo Workflows Configuration
+argowf_namespace: argowf
+argowf_name: argo-workflows
+argowf_chart_ref: argo/argo-workflows
+
+# Service Configuration
+argowf_service_type: NodePort
+argowf_service_nodeport: 32746
+
+# Controller Configuration
+argowf_workflow_namespaces:
+  - argowf
+  - default
+
+# Resource Configuration
+argowf_memory_request: 256Mi
+argowf_memory_limit: 512Mi
+argowf_cpu_request: 100m
+argowf_cpu_limit: 500m
+
+# Auth Configuration
+argowf_auth_modes:
+  - server
+
+# Helm Configuration
+helm_wait_timeout: 600s
+helm_retries: 3
+helm_retry_delay: 30
