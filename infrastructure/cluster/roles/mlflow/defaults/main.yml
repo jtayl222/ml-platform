@@ -1,0 +1,27 @@
+---
+# MLflow Default Configuration
+# These are fallback values if not defined in group_vars
+
+# Basic configuration
+mlflow_namespace: "mlflow"
+mlflow_release_name: "mlflow"
+mlflow_pvc_name: "mlflow-pvc"
+mlflow_image: "ghcr.io/mlflow/mlflow:v2.13.0"
+mlflow_nodeport: 30800
+
+# Storage configuration
+mlflow_storage_size: "10Gi"
+storage_class_name: "nfs-csi"
+
+# Resource configuration (Conservative defaults)
+mlflow_memory_request: "256Mi"
+mlflow_memory_limit: "512Mi"
+mlflow_cpu_request: "100m"
+mlflow_cpu_limit: "250m"
+
+# S3 configuration
+mlflow_s3_bucket: "mlflow-artifacts"
+mlflow_s3_endpoint: "http://minio.minio.svc.cluster.local:9000"
+
+# Database configuration
+mlflow_db_path: "/mlflow/mlflow.db"

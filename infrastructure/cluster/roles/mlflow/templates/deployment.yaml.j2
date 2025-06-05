@@ -17,37 +17,42 @@ spec:
       containers:
       - name: mlflow
         image: {{ mlflow_image }}
-        command:
-          - /bin/bash
-          - -c
-          - |
-            pip install mlflow boto3 && \
-            mlflow server \
-              --host 0.0.0.0 \
-              --port 5000 \
-              --backend-store-uri file:///mlflow/data \
-              --default-artifact-root s3://{{ mlflow_s3_bucket }}/ \
-              --serve-artifacts
         ports:
         - containerPort: 5000
+        command: ["mlflow", "server"]
+        args:
+          - "--host=0.0.0.0"
+          - "--port=5000"
+          - "--backend-store-uri=sqlite:///mlflow/mlflow.db"
+          - "--default-artifact-root=s3://mlflow-artifacts/"
+          - "--serve-artifacts"
         env:
         - name: MLFLOW_S3_ENDPOINT_URL
-          value: "{{ minio_internal_endpoint }}"
+          valueFrom:
+            secretKeyRef:
+              name: mlflow-s3-secret
+              key: MLFLOW_S3_ENDPOINT_URL
         - name: AWS_ACCESS_KEY_ID
-          value: "{{ minio_access_key }}"
+          valueFrom:
+            secretKeyRef:
+              name: mlflow-s3-secret
+              key: AWS_ACCESS_KEY_ID
         - name: AWS_SECRET_ACCESS_KEY
-          value: "{{ minio_secret_key }}"
+          valueFrom:
+            secretKeyRef:
+              name: mlflow-s3-secret
+              key: AWS_SECRET_ACCESS_KEY
+        volumeMounts:
+        - name: mlflow-storage
+          mountPath: /mlflow
         resources:
           requests:
             memory: "{{ mlflow_memory_request }}"
-            cpu: "{{ mlflow_cpu_request }}"
+            cpu: "{{ mlflow_cpu_request }}"      
           limits:
-            memory: "{{ mlflow_memory_limit }}"
-            cpu: "{{ mlflow_cpu_limit }}"
-        volumeMounts:
-        - name: mlflow-data
-          mountPath: /mlflow/data
+            memory: "{{ mlflow_memory_limit }}"  
+            cpu: "{{ mlflow_cpu_limit }}"        
       volumes:
-      - name: mlflow-data
+      - name: mlflow-storage
         persistentVolumeClaim:
-          claimName: mlflow-data
+          claimName: {{ mlflow_pvc_name }}

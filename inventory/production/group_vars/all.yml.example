@@ -107,10 +107,10 @@ kibana_host: "{{ kibana_subdomain }}.{{ kibana_domain }}"
 kibana_nodeport: 30500
 kibana_url: "https://{{ kibana_host }}"
 
-# MLflow configuration
+# MLflow configuration (Consistent naming)
 mlflow_namespace: "mlflow"
 mlflow_release_name: "mlflow"
-mlflow_chart_version: "0.7.19"
+mlflow_pvc_name: "mlflow-pvc"
 mlflow_subdomain: "mlflow"
 mlflow_domain: "local"
 mlflow_host: "{{ mlflow_subdomain }}.{{ mlflow_domain }}"
@@ -118,16 +118,17 @@ mlflow_nodeport: 30800
 mlflow_image: "ghcr.io/mlflow/mlflow:v2.13.0"
 mlflow_version: "2.13.0"
 
-# MLflow resources - More generous
+# MLflow storage configuration
+mlflow_storage_size: "100Gi"
+storage_class_name: "nfs-shared"
+
+# MLflow resources
 mlflow_memory_request: "4Gi"
 mlflow_memory_limit: "8Gi"
 mlflow_cpu_request: "2"
 mlflow_cpu_limit: "4"
-mlflow_pvc_size: "100Gi"
-mlflow_db_pvc_name: "mlflow-db-pvc"
-mlflow_db_pvc_size: "50Gi"
 
-# MLflow storage configuration - Fix the endpoint
+# MLflow S3 configuration
 mlflow_artifact_store: "s3"
 mlflow_s3_bucket: "mlflow-artifacts"
 mlflow_s3_endpoint: "http://minio.minio.svc.cluster.local:9000"
@@ -136,8 +137,8 @@ mlflow_s3_secret_key: "{{ minio_secret_key }}"
 
 # MLflow database configuration
 mlflow_db_type: "sqlite"
-mlflow_db_path: "/mnt/database/mlflow.db"
-mlflow_artifacts_path: "/mnt/mlflow"
+mlflow_db_path: "/mlflow/mlflow.db"
+mlflow_artifacts_path: "/mlflow"
 
 # MLflow TLS/SSL configuration
 enable_tls: false
@@ -214,3 +215,28 @@ argo_workflows_namespace: "argowf"
 # Sealed Secrets configuration
 sealed_secrets_namespace: "kube-system"
 sealed_secrets_controller_name: "sealed-secrets"
+
+# Argo Workflows Configuration
+argowf_username: "admin"
+argowf_password: "mlopsadmin123"  # Change this to your preferred password
+argowf_nodeport: 32746
+argowf_memory_request: "256Mi"
+argowf_cpu_request: "100m"
+argowf_memory_limit: "512Mi"
+argowf_cpu_limit: "500m"
+
+# UFW Configuration
+configure_ufw: true
+ufw_default_policy_incoming: deny
+ufw_default_policy_outgoing: allow
+
+# K3s Network Configuration  
+k3s_pod_cidr: "10.42.0.0/16"
+k3s_service_cidr: "10.43.0.0/16"
+k3s_nodeport_range: "30000-32767"
+
+# K3s Cluster Communication Ports
+k3s_api_port: 6443
+k3s_kubelet_port: 10250
+k3s_flannel_port: 8472
+k3s_node_exporter_port: 9100

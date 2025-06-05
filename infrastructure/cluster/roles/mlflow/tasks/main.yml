@@ -7,18 +7,29 @@
       kind: Namespace
       metadata:
         name: "{{ mlflow_namespace }}"
+  tags: [mlflow, mlops, namespace]
+
+- name: Apply MLflow S3 Sealed Secret
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    src: "{{ playbook_dir }}/../manifests/sealed-secrets/mlflow-s3-secret.yaml"
+    state: present
+  tags: [mlflow, mlops, sealed-secrets]
 
 - name: Create MLflow PVC
   kubernetes.core.k8s:
     kubeconfig: "{{ kubeconfig_path }}"
     definition: "{{ lookup('template', 'pvc.yaml.j2') | from_yaml }}"
+  tags: [mlflow, mlops, storage]
 
 - name: Deploy MLflow
   kubernetes.core.k8s:
     kubeconfig: "{{ kubeconfig_path }}"
     definition: "{{ lookup('template', 'deployment.yaml.j2') | from_yaml }}"
+  tags: [mlflow, mlops, deployment]
 
 - name: Create MLflow Service
   kubernetes.core.k8s:
     kubeconfig: "{{ kubeconfig_path }}"
     definition: "{{ lookup('template', 'service.yaml.j2') | from_yaml }}"
+  tags: [mlflow, mlops, service]

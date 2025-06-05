@@ -227,7 +227,7 @@
         - name: Apply Argo Workflows Sealed Secret
           kubernetes.core.k8s:
             kubeconfig: "{{ kubeconfig_path }}"
-            src: "{{ playbook_dir }}/manifests/argo-workflows-admin-sealed-secret.yaml"
+            src: "{{ playbook_dir }}/../manifests/sealed-secrets/argo-workflows-admin.yaml"
             state: present
           tags: [mlops, workflows, sealed-secrets]
 
@@ -360,14 +360,86 @@
                 enabled: false  # Disable auto-scaling for now
           tags: [mlops, seldon, model-serving]
 
-        # Kubeflow Pipelines (via kubectl manifests - Fixed URL)
-        - name: Deploy Kubeflow Pipelines via manifests
-          kubernetes.core.k8s:
-            kubeconfig: "{{ kubeconfig_path }}"
-            state: present
-            src: "https://raw.githubusercontent.com/kubeflow/pipelines/2.5.0/manifests/kustomize/env/platform-agnostic-multi-user/kustomization.yaml"
-          ignore_errors: true  # Continue if this fails
-          tags: [mlops, kubeflow]
+        # Kubeflow Pipelines (Fixed TLS secret)
+        - name: Deploy Kubeflow Pipelines
+          block:
+            - name: Create Kubeflow namespace
+              kubernetes.core.k8s:
+                kubeconfig: "{{ kubeconfig_path }}"
+                name: kubeflow
+                api_version: v1
+                kind: Namespace
+                state: present
+
+            - name: Deploy Kubeflow Pipelines manifests
+              shell: |
+                kubectl apply -k https://github.com/kubeflow/pipelines/manifests/kustomize/env/platform-agnostic
+              environment:
+                KUBECONFIG: "{{ kubeconfig_path }}"
+              ignore_errors: true
+
+            - name: Create missing ServiceAccounts
+              kubernetes.core.k8s:
+                kubeconfig: "{{ kubeconfig_path }}"
+                definition:
+                  apiVersion: v1
+                  kind: ServiceAccount
+                  metadata:
+                    name: kubeflow-pipelines-cache-deployer-sa
+                    namespace: kubeflow
+              ignore_errors: true
+
+            - name: Generate and create webhook TLS secret
+              shell: |
+                openssl req -x509 -newkey rsa:2048 -keyout /tmp/webhook.key -out /tmp/webhook.crt \
+                  -days 365 -nodes -subj "/CN=webhook-server.kubeflow.svc.cluster.local" 2>/dev/null
+                kubectl create secret tls webhook-server-tls \
+                  --cert=/tmp/webhook.crt --key=/tmp/webhook.key \
+                  -n kubeflow --dry-run=client -o yaml | kubectl apply -f -
+                rm -f /tmp/webhook.key /tmp/webhook.crt
+              environment:
+                KUBECONFIG: "{{ kubeconfig_path }}"
+              ignore_errors: true
+
+            - name: Wait for Kubeflow components to stabilize
+              pause:
+                seconds: 90
+
+            - name: Restart failed pods to pick up new secrets
+              shell: |
+                kubectl delete pods -n kubeflow --field-selector=status.phase=Failed --ignore-not-found=true
+                kubectl delete pods -n kubeflow -l app=cache-server --ignore-not-found=true
+                kubectl delete pods -n kubeflow -l app=metadata-grpc-deployment --ignore-not-found=true
+              environment:
+                KUBECONFIG: "{{ kubeconfig_path }}"
+              ignore_errors: true
+
+            - name: Create Kubeflow UI NodePort service
+              kubernetes.core.k8s:
+                kubeconfig: "{{ kubeconfig_path }}"
+                definition:
+                  apiVersion: v1
+                  kind: Service
+                  metadata:
+                    name: ml-pipeline-ui-nodeport
+                    namespace: kubeflow
+                  spec:
+                    type: NodePort
+                    ports:
+                    - port: 3000
+                      targetPort: 3000
+                      nodePort: 31234
+                      protocol: TCP
+                    selector:
+                      app: ml-pipeline-ui
+              ignore_errors: true
+
+          rescue:
+            - name: Kubeflow deployment issues - continuing
+              debug:
+                msg: "Kubeflow had startup issues but may still work. Check manually with: kubectl get pods -n kubeflow"
+
+          tags: [kubeflow, pipelines]
 
 # Play 4: Demo Application
 - name: Deploy Demo Application

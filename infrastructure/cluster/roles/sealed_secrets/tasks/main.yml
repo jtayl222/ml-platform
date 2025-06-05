@@ -87,6 +87,7 @@
             - argowf
             - argocd
             - mlflow
+            - jupyterhub
           register: namespace_creation
 
         - name: Display created namespaces
@@ -98,13 +99,13 @@
       block:
         - name: Check if sealed secrets script exists
           ansible.builtin.stat:
-            path: "{{ playbook_dir }}/scripts/create-all-sealed-secrets.sh"
+            path: "{{ playbook_dir }}/../../scripts/create-all-sealed-secrets.sh"
           register: sealed_secrets_script
           delegate_to: localhost
 
         - name: Make script executable
           ansible.builtin.file:
-            path: "{{ playbook_dir }}/scripts/create-all-sealed-secrets.sh"
+            path: "{{ playbook_dir }}/../../scripts/create-all-sealed-secrets.sh"
             mode: '0755'
           delegate_to: localhost
           when: sealed_secrets_script.stat.exists
@@ -117,7 +118,7 @@
         - name: Run sealed secrets creation script
           ansible.builtin.shell: |
             cd "{{ playbook_dir }}"
-            ./scripts/create-all-sealed-secrets.sh
+            ../../scripts/create-all-sealed-secrets.sh
           environment:
             KUBECONFIG: "{{ kubeconfig_path }}"
           delegate_to: localhost
@@ -136,7 +137,7 @@
 
         - name: Script not found message
           ansible.builtin.debug:
-            msg: "Sealed secrets script not found at {{ playbook_dir }}/scripts/create-all-sealed-secrets.sh"
+            msg: "Sealed secrets script not found at {{ playbook_dir }}/../../scripts/create-all-sealed-secrets.sh"
           when: not sealed_secrets_script.stat.exists
       tags: [scripts, generation]
 
