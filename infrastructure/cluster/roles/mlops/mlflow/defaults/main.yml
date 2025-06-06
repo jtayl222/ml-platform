@@ -11,7 +11,7 @@ mlflow_nodeport: 30800
 
 # Storage configuration
 mlflow_storage_size: "10Gi"
-storage_class_name: "nfs-csi"
+storage_class_name: "nfs-shared"
 
 # Resource configuration (Conservative defaults)
 mlflow_memory_request: "256Mi"

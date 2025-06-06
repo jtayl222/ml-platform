@@ -25,7 +25,7 @@
 - name: Ensure MLflow MinIO credentials exist
   kubernetes.core.k8s:
     kubeconfig: "{{ kubeconfig_path }}"
-    src: "{{ playbook_dir }}/../manifests/sealed-secrets/minio-secret-mlflow.yaml"
+    src: "{{ playbook_dir }}/../manifests/sealed-secrets/mlflow-s3-secret.yaml"
     state: present
   register: mlflow_secret_result
   retries: 3
@@ -37,7 +37,7 @@
     kubeconfig: "{{ kubeconfig_path }}"
     api_version: v1
     kind: Secret
-    name: minio-secret-mlflow
+    name: mlflow-s3-secret
     namespace: mlflow
   register: mlflow_secret_check
   until: mlflow_secret_check.resources | length > 0
