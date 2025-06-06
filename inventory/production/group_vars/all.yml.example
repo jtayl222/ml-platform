@@ -1,242 +1,165 @@
+---
+# =============================================================================
+# HOMELAB K3S CLUSTER CONFIGURATION
+# High-Resource Cluster: 5 nodes, 36 CPU cores, ~250GB RAM
+# =============================================================================
+
 ansible_python_interpreter: /usr/bin/python3
 
 # K3s and Kubeconfig settings
 k3s_server_path: /etc/rancher/k3s/k3s.yaml
+
+# =============================================================================
+# CORE INFRASTRUCTURE
+# =============================================================================
+
+# K3s Configuration
+k3s_version: v1.33.1+k3s1
+k3s_state: present
+
+# Kubeconfig Management
 kubeconfig_dir: "{{ playbook_dir }}/../fetched_tokens"
 kubeconfig_path: "{{ kubeconfig_dir }}/k3s-kubeconfig"
 control_plane_host: "{{ groups['k3s_control_plane'][0] }}"
 control_plane_ip: "{{ hostvars[groups['k3s_control_plane'][0]]['ansible_host'] }}"
-k3s_state: present
 
-k3s_version: v1.33.1+k3s1
-k3s_channel: stable
-k3s_install_script: /usr/local/bin/k3s-install.sh
+# Network Configuration
+k3s_pod_cidr: "10.42.0.0/16"
+k3s_service_cidr: "10.43.0.0/16"
+k3s_api_port: 6443
 
-# Global settings
+# Storage
 global_storage_class: "nfs-shared"
-
-# NFS variables
-nfs_server: "{{ groups['nfs_server'][0] if groups['nfs_server'] is defined and groups['nfs_server'] | length > 0 else 'localhost' }}"
 nfs_server_ip: "{{ hostvars[groups['nfs_server'][0]]['ansible_host'] }}"
 nfs_path: "/srv/nfs/kubernetes"
 nfs_allowed_networks: "192.168.1.0/24"
 
-# Prometheus
-elastic_namespace: "elastic"
-prometheus_namespace: "monitoring"
-prometheus_release_name: "prometheus"
-prometheus_nodeport: 30090
-prometheus_storage_size: "50Gi"
+# =============================================================================
+# OPTIMIZED RESOURCE ALLOCATION FOR HIGH-RESOURCE HOMELAB
+# =============================================================================
 
-# ECK (Elastic Cloud on Kubernetes) variables
-eck_version: "3.0.0"  # Use a stable ECK version
-eck_namespace: "elastic-system"
-operator_namespace: "{{ eck_namespace }}"
-elasticsearch_version: "9.0.1"  # Compatible Elasticsearch version
-kibana_version: "9.0.1"  # Should match Elasticsearch version
-
-# Elasticsearch cluster configuration
-elasticsearch_node_count: 3
-elasticsearch_cluster_name: "homelab-cluster"
-elasticsearch_storage_size: "200Gi"
-elasticsearch_memory_request: "16Gi"
-elasticsearch_memory_limit: "24Gi"
-elasticsearch_cpu_request: "4"
-elasticsearch_cpu_limit: "8"
-
-# Traefik configuration
-traefik_namespace: "kube-system"
-traefik_enable_dashboard: true
-traefik_dashboard_domain: "traefik.local"
-traefik_insecure_dashboard: true
-traefik_log_level: "INFO"
-dashboard_subdomain: "traefik"
-
-# Traefik resources
-traefik_memory_request: "2Gi"
-traefik_memory_limit: "4Gi"
-traefik_cpu_request: "1"
-traefik_cpu_limit: "2"
-
-# Traefik ports
-traefik_web_port: 8000
-traefik_websecure_port: 8443
-traefik_api_port: 8080
-
-# MinIO configuration
-minio_chart_name: "minio"
+# MinIO - High-Performance Storage
 minio_namespace: "minio"
-minio_release_name: "minio"
-minio_chart_version: "16.0.10"
 minio_access_key: "minioadmin"
 minio_secret_key: "minioadmin123"
-minio_app_version: "2025.5.24"
 minio_nodeport: 30900
 minio_console_nodeport: 30901
-minio_mode: "standalone"
-minio_replicas: 1
-
-# MinIO Traefik routing variables (keep for future use)
-minio_subdomain: "minio"
-minio_console_subdomain: "minio-console"
-minio_domain: "local"
-minio_host: "{{ minio_subdomain }}.{{ minio_domain }}"
-minio_console_host: "{{ minio_console_subdomain }}.{{ minio_domain }}"
-
-# MinIO resources
-minio_memory_request: "4Gi"
-minio_memory_limit: "8Gi"
-minio_cpu_request: "2"
-minio_cpu_limit: "4"
-minio_storage_size: "500Gi"
-
-# MinIO endpoint for other services (using NodePort)
-minio_endpoint: "http://{{ control_plane_ip }}:{{ minio_nodeport }}"
-minio_console_endpoint: "http://{{ control_plane_ip }}:{{ minio_console_nodeport }}"
+minio_memory_request: "8Gi"      # ⬆️ Increased for better performance
+minio_memory_limit: "16Gi"       # ⬆️ Generous limit for caching
+minio_cpu_request: "4"           # ⬆️ More CPU for I/O operations  
+minio_cpu_limit: "8"             # ⬆️ Can burst for heavy workloads
+minio_storage_size: "1Ti"        # ⬆️ Increased storage for ML artifacts
 minio_internal_endpoint: "http://minio.minio.svc.cluster.local:9000"
 
-# Kibana resources
-kibana_memory_request: "4Gi"
-kibana_memory_limit: "8Gi"
-kibana_cpu_request: "2"
-kibana_cpu_limit: "4"
-kibana_password: "kibana123"
-kibana_subdomain: "kibana"
-kibana_domain: "local"
-kibana_host: "{{ kibana_subdomain }}.{{ kibana_domain }}"
-kibana_nodeport: 30500
-kibana_url: "https://{{ kibana_host }}"
+# Prometheus Stack - Enhanced Monitoring
+prometheus_namespace: "monitoring"
+prometheus_nodeport: 30090
+prometheus_storage_size: "200Gi"  # ⬆️ More metrics storage
+# Prometheus resource optimization handled by role defaults
 
-# MLflow configuration (Consistent naming)
+# Grafana - High-Performance Dashboards  
+grafana_nodeport: 30300
+grafana_admin_user: "admin"
+grafana_admin_password: "admin123"
+grafana_memory_request: "4Gi"    # ⬆️ Better dashboard performance
+grafana_memory_limit: "8Gi"      # ⬆️ Handle complex queries
+grafana_cpu_request: "2"         # ⬆️ Responsive UI
+grafana_cpu_limit: "4"           # ⬆️ Can handle heavy dashboard loads
+grafana_storage_size: "100Gi"    # ⬆️ More dashboard/plugin storage
+
+# MLflow - Enhanced ML Experiment Tracking
 mlflow_namespace: "mlflow"
-mlflow_release_name: "mlflow"
-mlflow_pvc_name: "mlflow-pvc"
-mlflow_subdomain: "mlflow"
-mlflow_domain: "local"
-mlflow_host: "{{ mlflow_subdomain }}.{{ mlflow_domain }}"
 mlflow_nodeport: 30800
 mlflow_image: "ghcr.io/mlflow/mlflow:v2.13.0"
-mlflow_version: "2.13.0"
-
-# MLflow storage configuration
-mlflow_storage_size: "100Gi"
-storage_class_name: "nfs-shared"
-
-# MLflow resources
-mlflow_memory_request: "4Gi"
-mlflow_memory_limit: "8Gi"
-mlflow_cpu_request: "2"
-mlflow_cpu_limit: "4"
-
-# MLflow S3 configuration
-mlflow_artifact_store: "s3"
+mlflow_storage_size: "500Gi"     # ⬆️ Massive experiment storage
+mlflow_memory_request: "8Gi"     # ⬆️ Better for large experiment loads
+mlflow_memory_limit: "16Gi"      # ⬆️ Handle big model artifacts
+mlflow_cpu_request: "4"          # ⬆️ Faster artifact processing
+mlflow_cpu_limit: "8"            # ⬆️ Can handle concurrent experiments
 mlflow_s3_bucket: "mlflow-artifacts"
 mlflow_s3_endpoint: "http://minio.minio.svc.cluster.local:9000"
 mlflow_s3_access_key: "{{ minio_access_key }}"
 mlflow_s3_secret_key: "{{ minio_secret_key }}"
 
-# MLflow database configuration
-mlflow_db_type: "sqlite"
-mlflow_db_path: "/mlflow/mlflow.db"
-mlflow_artifacts_path: "/mlflow"
-
-# MLflow TLS/SSL configuration
-enable_tls: false
-mlflow_tls_secret_name: "mlflow-tls" 
-
-# Seldon configuration - ALTERNATIVE REPO
+# Seldon Core - High-Performance Model Serving
 seldon_namespace: "seldon-system"
-seldon_release_name: "seldon-core"
-seldon_chart_version: "1.17.1"
 seldon_chart_repo: "https://storage.googleapis.com/seldon-charts"
 seldon_chart_repo_name: "seldon"
 seldon_chart_name: "seldon-core-operator"
-seldon_subdomain: "seldon"
-seldon_domain: "local"
-seldon_host: "{{ seldon_subdomain }}.{{ seldon_domain }}"
-seldon_nodeport: 30900
-
-# Seldon resources
-seldon_memory_request: "4Gi"
-seldon_memory_limit: "8Gi"
-seldon_cpu_request: "2"
-seldon_cpu_limit: "4"
-
-# Seldon Core Operator configuration
-seldon_operator_memory_request: "2Gi"
-seldon_operator_memory_limit: "4Gi"
-seldon_operator_cpu_request: "1"
-seldon_operator_cpu_limit: "2"
-
-# Seldon Ambassador/Istio configuration
-seldon_gateway: "istio"  # or "ambassador" or "none"
-seldon_enable_istio: false
-seldon_enable_ambassador: false
-
-# Seldon MinIO configuration
-seldon_minio_secret_name: "seldon-minio-secret"
-seldon_minio_endpoint: "{{ minio_endpoint }}"
-seldon_minio_access_key: "{{ minio_access_key }}"
-seldon_minio_secret_key: "{{ minio_secret_key }}"
+seldon_memory_request: "4Gi"     # ⬆️ Better model loading performance
+seldon_memory_limit: "12Gi"      # ⬆️ Handle large models
+seldon_cpu_request: "2"          # ⬆️ Responsive model serving
+seldon_cpu_limit: "8"            # ⬆️ High-throughput inference
 seldon_minio_bucket: "seldon-models"
-seldon_enable_minio: true
-
-# Seldon Core additional settings
 seldon_enable_analytics: true
-seldon_analytics_memory_request: "512Mi"
-seldon_analytics_memory_limit: "1Gi"
 
-# Grafana configuration
-grafana_namespace: "monitoring"
-grafana_release_name: "grafana"
-grafana_chart_version: "9.2.2"
-grafana_admin_user: "admin"
-grafana_admin_password: "admin123"
-grafana_subdomain: "grafana"
-grafana_domain: "local"
-grafana_host: "{{ grafana_subdomain }}.{{ grafana_domain }}"
-grafana_nodeport: 30300
+# JupyterHub - High-Performance Data Science Environment
+jupyterhub_namespace: "jupyterhub"
+jupyterhub_nodeport: 30888
+jupyterhub_password: "mlops123"
+# Enhanced user resources for heavy ML workloads
+jupyterhub_user_memory_request: "4Gi"    # ⬆️ Better for ML libraries
+jupyterhub_user_memory_limit: "16Gi"     # ⬆️ Handle large datasets
+jupyterhub_user_cpu_request: "1.0"       # ⬆️ Responsive notebooks
+jupyterhub_user_cpu_limit: "8.0"         # ⬆️ Can use full node for training
+jupyterhub_storage_type: "dynamic"       # Persistent user storage
+jupyterhub_storage_size: "50Gi"          # ⬆️ Generous user storage
 
-# Grafana resources
-grafana_memory_request: "4Gi"
-grafana_memory_limit: "8Gi"
-grafana_cpu_request: "2"
-grafana_cpu_limit: "4"
-grafana_storage_size: "50Gi"
-
-# VARIABLES FOR ARGO CD
+# Argo CD - GitOps Platform
+argocd_namespace: "argocd"
 argocd_nodeport: 30080
-argo_workflows_memory_request: "2Gi"
-argo_workflows_memory_limit: "4Gi"
-argo_workflows_cpu_request: "1"
-argo_workflows_cpu_limit: "2"
-argo_workflows_namespace: "argowf"
 
-# Sealed Secrets configuration
-sealed_secrets_namespace: "kube-system"
-sealed_secrets_controller_name: "sealed-secrets"
-
-# Argo Workflows Configuration
-argowf_username: "admin"
-argowf_password: "mlopsadmin123"  # Change this to your preferred password
+# Argo Workflows - High-Performance Pipeline Execution
+argowf_namespace: "argowf"
 argowf_nodeport: 32746
-argowf_memory_request: "256Mi"
-argowf_cpu_request: "100m"
-argowf_memory_limit: "512Mi"
-argowf_cpu_limit: "500m"
+argowf_username: "admin"
+argowf_password: "mlopsadmin123"
+# Enhanced resources for ML pipeline execution
+argowf_memory_request: "2Gi"     # ⬆️ Better workflow orchestration
+argowf_memory_limit: "8Gi"       # ⬆️ Handle complex pipelines
+argowf_cpu_request: "1"          # ⬆️ Responsive workflow execution
+argowf_cpu_limit: "4"            # ⬆️ Parallel workflow processing
 
-# UFW Configuration
+# Kubernetes Dashboard
+dashboard_nodeport: 30444
+
+# =============================================================================
+# ELASTICSEARCH STACK (OPTIONAL - HIGH RESOURCE USAGE)
+# =============================================================================
+
+# Elasticsearch - Disabled by default for homelab (uncomment if needed)
+# elasticsearch_namespace: "elastic"
+# elasticsearch_node_count: 2           # ⬇️ Reduced for homelab
+# elasticsearch_memory_request: "8Gi"   # ⬇️ More reasonable for homelab
+# elasticsearch_memory_limit: "16Gi"    # ⬇️ Still generous
+# elasticsearch_cpu_request: "2"        # ⬇️ Adequate performance
+# elasticsearch_cpu_limit: "4"          # ⬇️ Reasonable limit
+# elasticsearch_storage_size: "200Gi"   # ⬇️ Sufficient for homelab
+
+# =============================================================================
+# SECURITY & NETWORKING
+# =============================================================================
+
+# Sealed Secrets
+sealed_secrets_namespace: "kube-system"
+
+# UFW Firewall
 configure_ufw: true
 ufw_default_policy_incoming: deny
 ufw_default_policy_outgoing: allow
 
-# K3s Network Configuration  
-k3s_pod_cidr: "10.42.0.0/16"
-k3s_service_cidr: "10.43.0.0/16"
-k3s_nodeport_range: "30000-32767"
+# =============================================================================
+# FEATURE FLAGS FOR HOMELAB OPTIMIZATION
+# =============================================================================
 
-# K3s Cluster Communication Ports
-k3s_api_port: 6443
-k3s_kubelet_port: 10250
-k3s_flannel_port: 8472
-k3s_node_exporter_port: 9100
+# Enable/Disable heavy components based on needs
+enable_elasticsearch: false       # Disable by default (resource heavy)
+enable_kubeflow: false           # Disable by default (very resource heavy)
+enable_istio: false              # Disable by default (adds complexity)
+enable_advanced_monitoring: true # Keep enhanced Prometheus/Grafana
+enable_gpu_support: false       # Enable if you add GPU nodes
+
+# Development vs Production modes
+homelab_mode: true               # Enables homelab-specific optimizations
+development_mode: true          # Relaxed resource constraints for experimentation
+high_availability: false        # Single-instance deployments for homelab
