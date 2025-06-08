@@ -14,7 +14,6 @@ The following files are created by the automation scripts:
 - `minio-credentials-secret.yaml` - MinIO S3-compatible storage access credentials  
 - `minio-credentials-wf.yaml` - MinIO credentials for Argo Workflows
 - `minio-secret-cd.yaml` - MinIO credentials for Argo CD deployments
-- `minio-secret-wf.yaml` - MinIO workflow-specific credentials
 - `mlflow-s3-secret.yaml` - MLflow S3 backend configuration credentials
 - `prometheus-admin-secret.yaml` - Prometheus admin credentials
 - Additional secrets as needed by the MLOps platform

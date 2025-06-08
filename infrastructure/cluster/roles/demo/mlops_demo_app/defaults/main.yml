@@ -6,10 +6,11 @@ mlops_demo_app_repo_path: /tmp/homelab-mlops-demo
 mlops_demo_app_repo_branch: main
 mlops_demo_app_force_clone: yes
 
-# List of manifests to apply
+# List of RBAC manifests to apply (not ArgoCD applications)
 mlops_demo_app_rbac_files:
   - argocd-workflow-rbac.yaml
   - argowf-seldon-rbac.yaml
 
-mlops_demo_app_application_files:
-  - demo-iris-pipeline-app.yaml
+# Sealed secrets configuration
+sealed_secrets_namespace: "kube-system"
+sealed_secrets_controller_name: "sealed-secrets"

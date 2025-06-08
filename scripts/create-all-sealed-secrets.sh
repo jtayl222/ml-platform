@@ -10,21 +10,19 @@ echo "Creating all sealed secrets for K3s homelab..."
   access-key=minioadmin \
   secret-key=minioadmin123
 
-# Create MinIO secret for argowf namespace (workflows need access)
+#vMinIO secret for argowf namespace (workflows need access)
 ./scripts/create-sealed-secret.sh minio-credentials-wf argowf \
   access-key=minioadmin \
-  secret-key=minioadmin123
+  secret-key=minioadmin123 \
+  AWS_ACCESS_KEY_ID=minioadmin \
+  AWS_SECRET_ACCESS_KEY=minioadmin123 \
+  AWS_ENDPOINT_URL=http://minio.minio.svc.cluster.local:9000 \
+  AWS_DEFAULT_REGION=us-east-1 \
+  MLFLOW_S3_ENDPOINT_URL=http://minio.minio.svc.cluster.local:9000
 
 # Create Grafana secret for monitoring namespace
 ./scripts/create-sealed-secret.sh grafana-admin-secret monitoring \
   admin-password=admin123
-
-# Create MinIO secret for Argo Workflows (AWS S3 compatible format)
-./scripts/create-sealed-secret.sh minio-secret-wf argowf \
-  AWS_ACCESS_KEY_ID=minioadmin \
-  AWS_SECRET_ACCESS_KEY=minioadmin123 \
-  AWS_ENDPOINT_URL=http://minio.minio.svc.cluster.local:9000 \
-  AWS_DEFAULT_REGION=us-east-1 
 
 # Create MinIO secret for Argo CD (AWS S3 compatible format)
 ./scripts/create-sealed-secret.sh minio-secret-cd argocd \
@@ -40,21 +38,6 @@ echo "Creating all sealed secrets for K3s homelab..."
   MLFLOW_S3_ENDPOINT_URL=http://minio.minio.svc.cluster.local:9000 \
   AWS_DEFAULT_REGION=us-east-1
 
-# Create Argo Workflows admin credentials secret
-./scripts/create-sealed-secret.sh argo-workflows-admin argowf \
-  username=admin \
-  password=mlopsadmin123
-
 # Create JupyterHub admin password secret  
 ./scripts/create-sealed-secret.sh jupyterhub-admin jupyterhub \
   password=mlops123
-
-echo ""
-echo "✅ All sealed secrets created successfully!"
-echo ""
-echo "Generated sealed secrets:"
-echo "- MinIO credentials (minio, argowf namespaces)"
-echo "- Grafana admin password (monitoring namespace)"
-echo "- MLflow S3 credentials (mlflow namespace)"
-echo "- Argo Workflows admin credentials (argowf namespace)"
-echo "- JupyterHub admin password (jupyterhub namespace)"

@@ -1,8 +1,12 @@
 ---
-# Argo Workflows Configuration
+# Argo Workflows Platform Configuration
+
+# Basic Configuration
 argowf_namespace: argowf
 argowf_name: argo-workflows
 argowf_chart_ref: argo/argo-workflows
+argowf_chart_version: 0.45.17 # Updated Chart Version
+argowf_app_version: v3.6.10   # Corresponding App Version
 
 # Service Configuration
 argowf_service_type: NodePort
@@ -13,17 +17,34 @@ argowf_workflow_namespaces:
   - argowf
   - default
 
-# Resource Configuration
-argowf_memory_request: 256Mi
-argowf_memory_limit: 512Mi
-argowf_cpu_request: 100m
-argowf_cpu_limit: 500m
+# Platform Resource Configuration
+argowf_memory_request: 512Mi
+argowf_memory_limit: 2Gi
+argowf_cpu_request: 200m
+argowf_cpu_limit: 1000m
 
-# Auth Configuration
+# Default Workflow Resource Limits (applied at platform level)
+argowf_default_workflow_resources:
+  requests:
+    memory: 1Gi
+    cpu: 500m
+  limits:
+    memory: 4Gi
+    cpu: 2000m
+
+# Platform Integration Settings
+mlflow_tracking_uri: "http://mlflow.mlflow.svc.cluster.local:5000"
+mlflow_timeout: 60
+
+# Authentication Configuration (platform security)
 argowf_auth_modes:
   - server
 
-# Helm Configuration
+# Helm Deployment Configuration (infrastructure deployment)
 helm_wait_timeout: 600s
 helm_retries: 3
 helm_retry_delay: 30
+
+# Additional platform settings
+argowf_enable_prometheus_metrics: true
+argowf_enable_workflow_archive: true

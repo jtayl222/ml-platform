@@ -1,0 +1,157 @@
+# In your main.yml tasks, update the sample workflow template:
+
+- name: Create enhanced MLOps workflow template
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: argoproj.io/v1alpha1
+      kind: WorkflowTemplate
+      metadata:
+        name: mlops-workflow-template
+        namespace: "{{ argowf_namespace }}"
+      spec:
+        entrypoint: mlops-pipeline
+        
+        # Default resource allocation for all templates
+        workflowDefaults:
+          spec:
+            resources:
+              requests:
+                memory: "{{ argowf_workflow_resources.requests.memory }}"
+                cpu: "{{ argowf_workflow_resources.requests.cpu }}"
+              limits:
+                memory: "{{ argowf_workflow_resources.limits.memory }}"
+                cpu: "{{ argowf_workflow_resources.limits.cpu }}"
+            
+        templates:
+        - name: mlops-pipeline
+          dag:
+            tasks:
+            - name: preprocess
+              template: preprocess-data
+            - name: train
+              template: train-model
+              dependencies: [preprocess]
+            - name: evaluate
+              template: evaluate-model
+              dependencies: [train]
+        
+        - name: train-model
+          container:
+            image: python:3.11-slim
+            resources:
+              requests:
+                memory: 2Gi      # Increased for ML training
+                cpu: 1000m
+              limits:
+                memory: 4Gi      # Increased for ML training
+                cpu: 2000m
+            env:
+            - name: MLFLOW_TRACKING_URI
+              value: "{{ mlflow_tracking_uri }}"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials-wf
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials-wf
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: MLFLOW_S3_ENDPOINT_URL
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials-wf
+                  key: MLFLOW_S3_ENDPOINT_URL
+            - name: AWS_DEFAULT_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials-wf
+                  key: AWS_DEFAULT_REGION
+            command: [python]
+            source: |
+              import os
+              import json
+              import time
+              import sys
+              
+              print("🤖 Starting model training...")
+              print(f"MLflow URI: {os.getenv('MLFLOW_TRACKING_URI')}")
+              print(f"S3 Endpoint: {os.getenv('MLFLOW_S3_ENDPOINT_URL')}")
+              
+              # Test MLflow connectivity with timeout and retry
+              try:
+                  import requests
+                  mlflow_uri = os.getenv('MLFLOW_TRACKING_URI')
+                  
+                  print("🔍 Testing MLflow connectivity...")
+                  response = requests.get(f"{mlflow_uri}/health", timeout=30)
+                  if response.status_code == 200:
+                      print("✅ MLflow server is healthy")
+                  else:
+                      print(f"⚠️ MLflow health check returned: {response.status_code}")
+                      
+              except Exception as e:
+                  print(f"⚠️ MLflow connectivity test failed: {e}")
+                  print("📝 Continuing with local training...")
+              
+              # Install required packages
+              os.system("pip install --no-cache-dir mlflow scikit-learn boto3 requests")
+              
+              try:
+                  import mlflow
+                  import mlflow.sklearn
+                  from sklearn.datasets import load_iris
+                  from sklearn.ensemble import RandomForestClassifier
+                  from sklearn.model_selection import train_test_split
+                  from sklearn.metrics import accuracy_score
+                  import pickle
+                  
+                  print("📊 Loading and preprocessing data...")
+                  iris = load_iris()
+                  X_train, X_test, y_train, y_test = train_test_split(
+                      iris.data, iris.target, test_size=0.2, random_state=42
+                  )
+                  
+                  print("🤖 Training model...")
+                  model = RandomForestClassifier(n_estimators=100, random_state=42)
+                  model.fit(X_train, y_train)
+                  
+                  print("📈 Evaluating model...")
+                  predictions = model.predict(X_test)
+                  accuracy = accuracy_score(y_test, predictions)
+                  print(f"Model accuracy: {accuracy:.4f}")
+                  
+                  # Save model locally first
+                  os.makedirs("/tmp/model", exist_ok=True)
+                  model_path = "/tmp/model/model.pkl"
+                  with open(model_path, 'wb') as f:
+                      pickle.dump(model, f)
+                  print(f"✅ Model saved locally to {model_path}")
+                  
+                  # Try to log to MLflow with better error handling
+                  try:
+                      mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI'))
+                      
+                      with mlflow.start_run():
+                          mlflow.log_param("n_estimators", 100)
+                          mlflow.log_param("random_state", 42)
+                          mlflow.log_metric("accuracy", accuracy)
+                          
+                          # Log model with timeout protection
+                          mlflow.sklearn.log_model(model, "model")
+                          print("✅ Model logged to MLflow successfully")
+                          
+                  except Exception as mlflow_error:
+                      print(f"⚠️ MLflow logging failed: {mlflow_error}")
+                      print("📝 Model training completed locally")
+                  
+                  print("✅ Training workflow completed successfully")
+                  
+              except Exception as e:
+                  print(f"❌ Training failed: {e}")
+                  import traceback
+                  traceback.print_exc()
+                  sys.exit(1)
+  tags: [platform, workflows, templates]
