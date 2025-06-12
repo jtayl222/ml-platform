@@ -41,3 +41,11 @@ echo "Creating all sealed secrets for K3s homelab..."
 # Create JupyterHub admin password secret  
 ./scripts/create-sealed-secret.sh jupyterhub-admin jupyterhub \
   password=mlops123
+
+# GitHub Container Registry credentials
+# Replace 'jtayl222' with your GitHub username and 'ghp_xxxx' with your GitHub PAT
+kubectl create secret generic ghcr-credentials \
+  --from-literal=username=jtayl222 \
+  --from-literal=password=ghp_xxxx \
+  --dry-run=client -o yaml | \
+kubeseal -o yaml > infrastructure/manifests/sealed-secrets/ghcr-credentials.yaml
