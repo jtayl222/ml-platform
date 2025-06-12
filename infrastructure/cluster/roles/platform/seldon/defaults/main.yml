@@ -27,3 +27,15 @@ seldon_grpc_nodeport: 32001  # For gRPC traffic
 helm_wait_timeout: 600s
 helm_retries: 3
 helm_retry_delay: 30
+
+# Container Registry Configuration
+ghcr_docker_config: |
+  {
+    "auths": {
+      "ghcr.io": {
+        "username": "{{ ghcr_username }}",
+        "password": "{{ ghcr_password }}",
+        "auth": "{{ (ghcr_username + ':' + ghcr_password) | b64encode }}"
+      }
+    }
+  }

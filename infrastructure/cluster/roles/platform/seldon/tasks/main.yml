@@ -160,3 +160,57 @@
       - "- kubectl get seldondeployments -n {{ seldon_namespace }}"
       - "- kubectl apply -f <your-model.yaml>"
   tags: [platform, summary]
+
+# Add infrastructure-level registry access
+- name: Create container registry pull secret for Seldon platform
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: ghcr-pull-secret
+        namespace: "{{ seldon_namespace }}"
+      type: kubernetes.io/dockerconfigjson
+      data:
+        .dockerconfigjson: "{{ ghcr_docker_config | b64encode }}"
+  when: ghcr_docker_config is defined
+  tags: [platform, seldon, secrets]
+
+- name: Create base ClusterRole for Seldon deployments
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata:
+        name: seldon-deployment-manager
+      rules:
+      - apiGroups: ["machinelearning.seldon.io"]
+        resources: ["seldondeployments", "seldondeployments/finalizers"]
+        verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+      - apiGroups: [""]
+        resources: ["services", "endpoints"]
+        verbs: ["get", "list", "watch"]
+      - apiGroups: ["apps"]
+        resources: ["deployments"]
+        verbs: ["get", "list", "watch"]
+  tags: [platform, seldon, rbac]
+
+- name: Create ClusterRoleBinding for default service account
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: seldon-deployment-manager-binding
+      subjects:
+      - kind: ServiceAccount
+        name: default
+        namespace: "{{ seldon_namespace }}"
+      roleRef:
+        kind: ClusterRole
+        name: seldon-deployment-manager
+        apiGroup: rbac.authorization.k8s.io
+  tags: [platform, seldon, rbac]
