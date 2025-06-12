@@ -42,7 +42,7 @@
   tags: [platform, workflows, verify-credentials]
 
 - name: Deploy Argo Workflows {{ argowf_app_version }}
-  community.kubernetes.helm:
+  kubernetes.core.helm:
     name: "{{ argowf_name }}"
     chart_ref: "{{ argowf_chart_ref }}"
     chart_version: "{{ argowf_chart_version }}"

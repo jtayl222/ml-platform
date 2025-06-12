@@ -50,12 +50,20 @@
 
 # Apply the ArgoCD Application
 - name: Apply ArgoCD Application for demo-iris-pipeline
-  ansible.builtin.command: kubectl --kubeconfig="{{ kubeconfig_path }}" apply -f "{{ mlops_demo_app_repo_path }}/argocd-apps/demo-iris-pipeline.yaml"
+  ansible.builtin.command: kubectl --kubeconfig="{{ kubeconfig_path }}" apply -f "{{ mlops_demo_app_repo_path }}/applications/demo-iris-pipeline-app.yaml"
   become: false
   changed_when: "'configured' in result.stdout or 'created' in result.stdout"
   register: result
 
-# Wait for the application to be synchronized - FIXED NAME
+# Generate ConfigMap using GitOps approach
+- name: Generate and apply ConfigMap
+  ansible.builtin.shell: |
+    cd "{{ mlops_demo_app_repo_path }}"
+    ./scripts/update-configmap.sh {{ argowf_namespace }}
+  become: false
+  register: configmap_result
+
+# Wait for the application to be synchronized
 - name: Wait for Argo CD Application to be synchronized
   ansible.builtin.shell: |
     kubectl --kubeconfig={{ kubeconfig_path }} get applications.argoproj.io demo-iris-pipeline -n argocd -o jsonpath='{.status.sync.status}'
@@ -74,9 +82,9 @@
       - "Repository: {{ mlops_demo_app_repo_url }}"
       - "Branch: {{ mlops_demo_app_repo_branch }}"
       - "Clone Status: {{ 'Success' if git_clone_result.rc == 0 else 'Failed' }}"
-      - "Sync Status: {{ sync_status.stdout if sync_status.rc == 0 else 'Application created, may need manual sync' }}"
+      - "Sync Status: {{ sync_status.stdout if sync_status is defined and sync_status.rc == 0 else 'Application not found or sync failed' }}"
       - ""
       - "Access ArgoCD UI to manage the demo application:"
       - "URL: https://192.168.1.85:30080"
-      - "Application: demo-iris-pipeline"  # ← FIXED NAME
+      - "Application: demo-iris-pipeline"
       - "=================================================="

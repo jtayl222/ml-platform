@@ -69,6 +69,27 @@
           retention: 30d
           retentionSize: "{{ prometheus_storage_size }}"
       
+      # Prometheus Pushgateway Configuration
+      prometheus-pushgateway:
+        enabled: true
+        service:
+          type: NodePort
+          nodePort: "{{ pushgateway_nodeport | default(32091) }}"
+        resources:
+          requests:
+            memory: "{{ pushgateway_memory_request | default('64Mi') }}"
+            cpu: "{{ pushgateway_cpu_request | default('100m') }}"
+          limits:
+            memory: "{{ pushgateway_memory_limit | default('256Mi') }}"
+            cpu: "{{ pushgateway_cpu_limit | default('500m') }}"
+        persistence:
+          enabled: true
+          storageClassName: "{{ prometheus_storage_class }}"
+          size: "{{ pushgateway_storage_size | default('1Gi') }}"
+        serviceMonitor:
+          enabled: true
+          namespace: "{{ prometheus_stack_namespace }}"
+      
       # AlertManager Configuration
       alertmanager:
         alertmanagerSpec:
@@ -108,6 +129,7 @@
       - "🎉 Prometheus Stack deployment completed successfully!"
       - "📊 Grafana Dashboard: http://{{ ansible_host | default('192.168.1.85') }}:{{ grafana_nodeport }}"
       - "🔍 Prometheus UI: http://{{ ansible_host | default('192.168.1.85') }}:{{ prometheus_nodeport }}"
+      - "📤 Pushgateway: http://{{ ansible_host | default('192.168.1.85') }}:{{ pushgateway_nodeport | default(32091) }}"
       - "🔑 Grafana Credentials: admin / {{ grafana_admin_password }}"
       - "📈 Namespace: {{ prometheus_stack_namespace }}"
   tags: [monitoring, summary]
