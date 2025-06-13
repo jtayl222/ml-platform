@@ -59,9 +59,12 @@
 - name: Generate and apply ConfigMap
   ansible.builtin.shell: |
     cd "{{ mlops_demo_app_repo_path }}"
+    export KUBECONFIG="{{ kubeconfig_path }}"
     ./scripts/update-configmap.sh {{ argowf_namespace }}
   become: false
   register: configmap_result
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
 
 # Wait for the application to be synchronized
 - name: Wait for Argo CD Application to be synchronized

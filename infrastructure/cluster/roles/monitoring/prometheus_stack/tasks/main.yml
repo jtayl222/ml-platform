@@ -51,6 +51,8 @@
           type: NodePort
           nodePort: "{{ prometheus_nodeport }}"
         prometheusSpec:
+          serviceMonitorSelectorNilUsesHelmValues: false
+          replicas: 1
           resources:
             requests:
               memory: "{{ prometheus_memory_request }}"
@@ -67,8 +69,7 @@
                   requests:
                     storage: "{{ prometheus_storage_size }}"
           retention: 30d
-          retentionSize: "{{ prometheus_storage_size }}"
-      
+
       # Prometheus Pushgateway Configuration
       prometheus-pushgateway:
         enabled: true
@@ -77,10 +78,10 @@
           nodePort: "{{ pushgateway_nodeport | default(32091) }}"
         resources:
           requests:
-            memory: "{{ pushgateway_memory_request | default('64Mi') }}"
+            memory: "{{ pushgateway_memory_request | default('128Mi') }}"
             cpu: "{{ pushgateway_cpu_request | default('100m') }}"
           limits:
-            memory: "{{ pushgateway_memory_limit | default('256Mi') }}"
+            memory: "{{ pushgateway_memory_limit | default('512Mi') }}"
             cpu: "{{ pushgateway_cpu_limit | default('500m') }}"
         persistence:
           enabled: true
@@ -101,7 +102,17 @@
                 resources:
                   requests:
                     storage: 2Gi
-  
+        
+      # Disable K3s incompatible components
+      kubeControllerManager:
+        enabled: false
+      kubeEtcd:
+        enabled: false  
+      kubeScheduler:
+        enabled: false
+      kubeProxy:
+        enabled: false
+
   register: prometheus_deployment
   retries: "{{ helm_retries }}"
   delay: "{{ helm_retry_delay }}"
