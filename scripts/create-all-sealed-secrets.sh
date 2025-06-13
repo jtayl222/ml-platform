@@ -46,8 +46,10 @@ echo "Creating all sealed secrets for K3s homelab..."
 ./scripts/create-sealed-secret.sh argocd-admin-secret argocd \
   admin-password=admin123  
 
-# GitHub Container Registry credentials
+# GitHub Container Registry credentials - FIXED
 # Replace 'jtayl222' with your GitHub username and 'ghp_xxxx' with your GitHub PAT
-./scripts/create-sealed-secret.sh ghcr-credentials argowf \
-  username=jtayl222 \
-  password=ghp_... 
+./scripts/create-sealed-docker-secret.sh ghcr-credentials argowf \
+  ghcr.io \
+  jtayl222 \
+  ghp_... \
+  your-email@example.com  
