@@ -6,10 +6,12 @@
 ├── Infrastructure Layer
 │   ├── K3s Cluster (1 control + 4 worker nodes)
 │   ├── NFS Storage (1Ti+ persistent volumes) 
-│   └── Sealed Secrets (GitOps-ready credential management)
+│   |── Sealed Secrets (GitOps-ready credential management)
+│   └── Istio Service Mesh (advanced networking) 
 ├── MLOps Layer  
 │   ├── MLflow (experiment tracking + model registry)
 │   ├── Seldon Core (production model serving)
+│   ├── KServe (Kubernetes-native model serving) 
 │   ├── Kubeflow Pipelines (ML workflow orchestration)
 │   └── JupyterHub (collaborative data science)
 ├── DevOps Layer
@@ -31,6 +33,11 @@
 [![MLflow](https://img.shields.io/badge/MLflow-2.13.0-orange)](https://mlflow.org/)
 [![Seldon](https://img.shields.io/badge/Seldon%20Core-Model%20Serving-green)](https://seldon.io/)
 [![Ansible](https://img.shields.io/badge/Ansible-Infrastructure%20as%20Code-red)](https://ansible.com/)
+[![Istio](https://img.shields.io/badge/Istio-Service%20Mesh-purple)](https://istio.io/) [NEW]
+[![Argo CD](https://img.shields.io/badge/Argo%20CD-GitOps-blue)](https://argoproj.github.io/argo-cd/)
+[![Prometheus](https://img.shields.io/badge/Prometheus-Monitoring-yellow)](https://prometheus.io/)
+[![Grafana](https://img.shields.io/badge/Grafana-Dashboards-blue)](https://grafana.com/)
+[![MinIO](https://img.shields.io/badge/MinIO-Object%20Storage-blue)](https://min.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A complete, production-ready MLOps platform built on Kubernetes (K3s), featuring experiment tracking, model serving, pipeline orchestration, GitOps, and comprehensive monitoring - all optimized for high-performance homelab deployment.
@@ -127,6 +134,12 @@ echo "See docs/services.md for all endpoints"
 | **Prometheus** | `:30090` | Metrics collection | ✅ | [📖](docs/services/prometheus.md) |
 | **MinIO Console** | `:31578` | S3-compatible storage management | ✅ | [📖](docs/services/minio.md) |
 | **K8s Dashboard** | `:30444` | Cluster management interface | ✅ | [📖](docs/services/dashboard.md) |
+| **Seldon Core** | API/CLI | Production model serving platform | ✅ | [📖](docs/services/seldon.md) |
+| **KServe** | Via Istio | Kubernetes-native model serving | 🔧 | [📖](docs/services/kserve.md) | [NEW]
+| **Kubeflow** | `:31234` | ML pipeline orchestration | ✅ | [📖](docs/services/kubeflow.md) |
+| **Argo CD** | `:30080` | GitOps continuous deployment | ✅ | [📖](docs/services/argocd.md) |
+| **Argo Workflows** | `:32746` | Pipeline execution engine | ✅ | [📖](docs/services/argo-workflows.md) |
+| **Istio Gateway** | `:31080` | Service mesh gateway | 🔧 | [📖](docs/services/istio.md) | [NEW]
 
 [📊 **Complete Service Access Guide**](docs/services.md)
 
@@ -136,6 +149,7 @@ echo "See docs/services.md for all endpoints"
 | Component | Technology | Version | Purpose |
 |-----------|------------|---------|---------|
 | **Orchestration** | K3s (Lightweight Kubernetes) | v1.33.1 | Container platform |
+| **Service Mesh** | Istio | v1.26.1 | Advanced networking & traffic management |
 | **Automation** | Ansible | 2.10+ | Infrastructure as Code |
 | **Storage** | NFS + MinIO | Latest | Persistent & object storage |
 | **Security** | Sealed Secrets | Latest | GitOps-safe credential management |
@@ -145,6 +159,7 @@ echo "See docs/services.md for all endpoints"
 |-----------|------------|---------|---------|
 | **ML Platform** | MLflow | v2.13.0 | Experiment tracking & model registry |
 | **Model Serving** | Seldon Core | Latest | Production inference endpoints |
+| **Advanced Serving** | KServe | v0.15.0 | Kubernetes-native model serving |
 | **ML Pipelines** | Kubeflow Pipelines | Latest | Workflow orchestration |
 | **Notebooks** | JupyterHub | Latest | Collaborative development |
 

@@ -1,0 +1,195 @@
+---
+- name: Create KServe namespace
+  kubernetes.core.k8s:
+    name: "{{ kserve_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      metadata:
+        labels:
+          istio-injection: enabled
+  tags: [kserve, namespace]
+
+- name: Add Jetstack Helm repository (for Cert Manager)
+  kubernetes.core.helm_repository:
+    name: jetstack
+    repo_url: https://charts.jetstack.io
+  tags: [kserve, helm-repo]
+
+- name: Install Cert Manager (Required for KServe)
+  kubernetes.core.helm:
+    name: cert-manager
+    chart_ref: jetstack/cert-manager
+    release_namespace: cert-manager
+    create_namespace: true
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_timeout: "{{ helm_wait_timeout }}"
+    values:
+      installCRDs: true
+      resources:
+        requests:
+          memory: "{{ certmanager_memory_request }}"
+          cpu: "{{ certmanager_cpu_request }}"
+        limits:
+          memory: "{{ certmanager_memory_limit }}"
+          cpu: "{{ certmanager_cpu_limit }}"
+  register: cert_manager_result
+  retries: 3
+  delay: 30
+  tags: [kserve, cert-manager]
+
+- name: Wait for Cert Manager to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: cert-manager
+    namespace: cert-manager
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 300
+  tags: [kserve, cert-manager-wait]
+
+- name: Apply Knative Serving CRDs
+  kubernetes.core.k8s:
+    state: present
+    src: "https://github.com/knative/serving/releases/download/knative-v{{ knative_version }}/serving-crds.yaml"
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: knative_crds_result
+  retries: 3
+  delay: 10
+  tags: [kserve, knative-crds]
+
+- name: Apply Knative Serving Core
+  kubernetes.core.k8s:
+    state: present
+    src: "https://github.com/knative/serving/releases/download/knative-v{{ knative_version }}/serving-core.yaml"
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: knative_core_result
+  retries: 3
+  delay: 10
+  tags: [kserve, knative-core]
+
+- name: Configure Knative Serving with Istio
+  kubernetes.core.k8s:
+    state: present
+    src: "https://github.com/knative/net-istio/releases/download/knative-v{{ knative_version }}/net-istio.yaml"
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: knative_istio_result
+  retries: 3
+  delay: 10
+  tags: [kserve, knative-istio]
+
+- name: Wait for Knative Serving to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: controller
+    namespace: knative-serving
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 300
+  tags: [kserve, knative-wait]
+
+- name: Apply KServe installation
+  kubernetes.core.k8s:
+    state: present
+    src: "https://github.com/kserve/kserve/releases/download/v{{ kserve_version }}/kserve.yaml"
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: kserve_install_result
+  retries: 3
+  delay: 10
+  tags: [kserve, kserve-install]
+
+- name: Wait for KServe controller to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: kserve-controller-manager
+    namespace: "{{ kserve_namespace }}"
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 300
+  tags: [kserve, wait]
+
+- name: Create KServe ConfigMap template
+  copy:
+    content: |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: inferenceservice-config
+        namespace: {{ kserve_namespace }}
+      data:
+        credentials: |
+          {
+            "s3": {
+              "s3AccessKeyIDName": "AWS_ACCESS_KEY_ID",
+              "s3SecretAccessKeyName": "AWS_SECRET_ACCESS_KEY"
+            }
+          }
+        storageInitializer: |
+          {
+            "image": "kserve/storage-initializer:v{{ kserve_version }}",
+            "memoryRequest": "100Mi",
+            "memoryLimit": "1Gi",
+            "cpuRequest": "100m",
+            "cpuLimit": "1"
+          }
+    dest: /tmp/kserve-configmap.yaml
+  tags: [kserve, kserve-config]
+
+- name: Apply KServe ConfigMap
+  kubernetes.core.k8s:
+    state: present
+    src: /tmp/kserve-configmap.yaml
+    kubeconfig: "{{ kubeconfig_path }}"
+  tags: [kserve, kserve-config]
+
+- name: Clean up ConfigMap template
+  file:
+    path: /tmp/kserve-configmap.yaml
+    state: absent
+  tags: [kserve, kserve-config]
+
+- name: Verify KServe installation
+  kubernetes.core.k8s_info:
+    api_version: serving.kserve.io/v1beta1
+    kind: InferenceService
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: kserve_verification
+  tags: [kserve, verify]
+
+- name: Display KServe deployment status
+  debug:
+    msg:
+      - "🎉 KServe deployment completed!"
+      - ""
+      - "📊 Components deployed:"
+      - "- Cert Manager: cert-manager namespace"
+      - "- Knative Serving: knative-serving namespace"  
+      - "- KServe: {{ kserve_namespace }} namespace"
+      - ""
+      - "🔍 Verify deployment:"
+      - "kubectl get pods -n cert-manager"
+      - "kubectl get pods -n knative-serving"
+      - "kubectl get pods -n {{ kserve_namespace }}"
+      - "kubectl get crd | grep -E '(kserve|knative|serving)'"
+      - ""
+      - "🚀 Test with a simple model:"
+      - "kubectl apply -f https://raw.githubusercontent.com/kserve/kserve/v{{ kserve_version }}/docs/samples/v1beta1/sklearn/v1/sklearn.yaml"
+      - ""
+      - "🌐 Access via Istio Gateway:"
+      - "http://192.168.1.85:31080"
+  tags: [kserve, summary]

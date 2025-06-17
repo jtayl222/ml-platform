@@ -1,6 +1,10 @@
 ---
 # Professional MLOps Platform Deployment
 
+# =============================
+# PHASE 1: INFRASTRUCTURE SETUP
+# =============================
+
 # Play 1a: K3s Control Plane
 - name: Setup K3s Control Plane
   hosts: k3s_control_plane
@@ -14,7 +18,7 @@
 
     - name: Deploy or Remove K3s Control Plane
       include_role:
-        name: foundation/k3s_control_plane  # ✅ Fixed path
+        name: foundation/k3s_control_plane
       tags: [k3s, control_plane]
 
 # Play 1b: K3s Workers
@@ -25,7 +29,7 @@
   tasks:
     - name: Deploy or Remove K3s Workers
       include_role:
-        name: foundation/k3s_workers  # ✅ Fixed path
+        name: foundation/k3s_workers
       tags: [k3s, workers]
 
 # Play 2: NFS Infrastructure Setup
@@ -37,7 +41,7 @@
     # NFS Server
     - name: Deploy NFS Server
       include_role:
-        name: foundation/nfs_server  # ✅ Fixed path
+        name: foundation/nfs_server
       when: 
         - inventory_hostname in groups['nfs_server']
         - k3s_state is not defined or k3s_state != "absent"
@@ -46,11 +50,15 @@
     # NFS Clients
     - name: Deploy NFS Clients
       include_role:
-        name: foundation/nfs_clients  # ✅ Fixed path
+        name: foundation/nfs_clients
       when: 
         - inventory_hostname in groups['k3s_control_plane'] or inventory_hostname in groups['k3s_workers']
         - k3s_state is not defined or k3s_state != "absent"
       tags: [storage, nfs, nfs-clients]
+
+# =============================
+# PHASE 2: KUBERNETES FOUNDATION
+# =============================
 
 # Play 3: Kubernetes Infrastructure Setup
 - name: Setup Kubernetes Infrastructure
@@ -63,38 +71,42 @@
         # Kubeconfig
         - name: Fetch kubeconfig
           include_role:
-            name: foundation/fetch_kubeconfig  # ✅ Fixed path
+            name: foundation/fetch_kubeconfig
           tags: [k3s, kubeconfig]
 
         # NFS Provisioner
         - name: Deploy NFS Provisioner
           include_role:
-            name: foundation/nfs_provisioner  # ✅ Fixed path
+            name: foundation/nfs_provisioner
           tags: [storage, nfs, nfs-provisioner]
 
-        # Sealed Secrets
+        # Sealed Secrets (MUST be before secrets)
         - name: Deploy Sealed Secrets
           include_role:
-            name: foundation/sealed_secrets  # ✅ Fixed path
+            name: foundation/sealed_secrets
           tags: [security, sealed-secrets]
+
+        # Create Secrets (AFTER sealed secrets controller)
+        - name: Deploy Secrets for Active Components
+          include_role:
+            name: foundation/secrets
+          tags: [foundation, secrets, credentials]
 
       when: k3s_state is not defined or k3s_state != "absent"
 
-# Play 4: Core Platform Deployment
-- name: Deploy Core Platform
+# =============================
+# PHASE 3: CORE PLATFORM SERVICES
+# =============================
+
+# Play 4: Core Storage and Monitoring
+- name: Deploy Core Infrastructure
   hosts: localhost
   connection: local
   gather_facts: false
   tasks:
-    - name: Deploy All Core Components
+    - name: Deploy Core Infrastructure Components
       block:
-        # === FOUNDATION LAYER ===
-        - name: Deploy Secrets for Active Components
-          include_role:
-            name: foundation/secrets
-          tags: [foundation, secrets, credentials, mlflow, workflows, kubeflow]
-
-        # === STORAGE LAYER ===
+        # === STORAGE LAYER (First - other services depend on it) ===
         - name: Deploy MinIO Storage
           include_role:
             name: storage/minio
@@ -111,7 +123,39 @@
             name: monitoring/prometheus_stack
           tags: [core, monitoring, prometheus]
 
-        # === PLATFORM LAYER ===
+      when: k3s_state is not defined or k3s_state != "absent"
+
+# =============================
+# PHASE 4: SERVICE MESH (OPTIONAL)
+# =============================
+
+# Play 5: Deploy Service Mesh
+- name: Deploy Service Mesh
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Deploy Istio Service Mesh
+      include_role:
+        name: platform/istio
+      when: 
+        - k3s_state is not defined or k3s_state != "absent"
+        - enable_istio | default(false) or 'istio' in ansible_run_tags
+      tags: [istio, service-mesh]
+
+# =============================
+# PHASE 5: PLATFORM LAYER
+# =============================
+
+# Play 6: Deploy Platform Services
+- name: Deploy Platform Services
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Deploy Platform Components
+      block:
+        # === GITOPS & CI/CD ===
         - name: Deploy Argo CD
           include_role:
             name: platform/argo_cd
@@ -122,48 +166,80 @@
             name: platform/argo_workflows
           tags: [platform, workflows]
 
-        - name: Deploy Kubernetes Dashboard
-          include_role:
-            name: platform/dashboard
-          tags: [platform, dashboard]
-
+        # === DEVELOPMENT ENVIRONMENT ===
         - name: Deploy JupyterHub
           include_role:
             name: platform/jupyterhub
           tags: [platform, jupyter]
 
+        - name: Deploy Kubernetes Dashboard
+          include_role:
+            name: platform/dashboard
+          tags: [platform, dashboard]
+
+        # === MODEL SERVING ===
         - name: Deploy Seldon Core
           include_role:
             name: platform/seldon
           tags: [platform, model-serving]
 
-        # === MLOPS LAYER ===
+      when: k3s_state is not defined or k3s_state != "absent"
+
+# =============================
+# PHASE 6: MLOPS LAYER
+# =============================
+
+# Play 7: Deploy MLOps Services
+- name: Deploy MLOps Services
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Deploy MLOps Components
+      block:
+        # === ML EXPERIMENT TRACKING ===
         - name: Deploy MLflow
           include_role:
             name: mlops/mlflow
           tags: [mlops, mlflow]
 
+        # === ML PIPELINES ===
         - name: Deploy Kubeflow Pipelines
           include_role:
             name: mlops/kubeflow
+          when: enable_kubeflow | default(false)
           tags: [mlops, kubeflow, pipelines]
+
+        # === ML SERVING (ADVANCED) ===
+        - name: Deploy KServe ML Serving Platform
+          include_role:
+            name: mlops/kserve
+          when: enable_istio | default(false)
+          tags: [mlops, kserve]
 
       when: k3s_state is not defined or k3s_state != "absent"
 
-# Play 5: Demo Application
+# =============================
+# PHASE 7: DEMO & VALIDATION
+# =============================
+
+# Play 8: Deploy Demo Application
 - name: Deploy Demo Application
   hosts: localhost
   connection: local
   gather_facts: false
   tasks:
     - name: Deploy ML Demo Pipeline
-      block:
-        - include_role:
-            name: demo/mlops_demo_app  # ✅ Fixed path
+      include_role:
+        name: demo/mlops_demo_app
       when: k3s_state is not defined or k3s_state != "absent"
       tags: [demo, mlops-demo]
 
-# Play 6: Summary and Cleanup
+# =============================
+# PHASE 8: SUMMARY & CLEANUP
+# =============================
+
+# Play 9: Final Summary and Cleanup
 - name: Deployment Summary and Cleanup
   hosts: localhost:nfs_server
   gather_facts: false
@@ -184,11 +260,14 @@
           - "📊 Monitoring & Storage:"
           - "- Grafana: http://192.168.1.85:30300"
           - "- Prometheus: http://192.168.1.85:30090"
+          - "- Pushgateway: http://192.168.1.85:32091"
           - "- MinIO Console: http://192.168.1.85:30901"
           - ""
-          - "🔧 Cluster Management:"
+          - "🔧 Advanced Services (if enabled):"
+          - "- Istio Gateway: http://192.168.1.85:31080"
+          - "- KServe Models: Available via Istio Gateway"
           - "- Kubeflow Pipelines: http://192.168.1.85:31234 (if deployed)"
-          - "- Argo Workflows: http://192.168.1.85:32746 (if deployed)"
+          - "- Argo Workflows: http://192.168.1.85:32746"
           - ""
           - "🔑 Access Instructions:"
           - "- kubectl: export KUBECONFIG=/tmp/k3s-kubeconfig.yaml"
@@ -198,7 +277,7 @@
         - k3s_state is not defined or k3s_state != "absent"
       tags: [summary]
 
-    # NFS Cleanup (nfs_server only)
+    # NFS Cleanup (nfs_server only) - FINAL STEP
     - name: Clean up NFS storage
       shell: |
         find /srv/nfs/kubernetes/ -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} \;
