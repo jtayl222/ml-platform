@@ -98,6 +98,14 @@
         seconds: 10
       when: k3s_state == 'present'
 
+    - name: Label worker nodes for proper workload distribution
+      ansible.builtin.command: kubectl label node {{ inventory_hostname }} node-role.kubernetes.io/worker=worker --overwrite
+      delegate_to: "{{ k3s_control_plane_endpoint }}"
+      become: true
+      when: k3s_state == 'present'
+      ignore_errors: true
+      tags: [k3s, workers, labels]
+
     - name: Verify k3s worker node status (from control plane)
       ansible.builtin.command: kubectl get nodes
       register: nodes_status

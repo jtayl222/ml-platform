@@ -88,6 +88,7 @@
             - argocd
             - mlflow
             - jupyterhub
+            - kserve
           register: namespace_creation
 
         - name: Display created namespaces

@@ -40,8 +40,6 @@ nfs_allowed_networks: "192.168.1.0/24"
 
 # MinIO - High-Performance Storage
 minio_namespace: "minio"
-minio_access_key: "minioadmin"
-minio_secret_key: "minioadmin123"
 minio_nodeport: 30900
 minio_console_nodeport: 30901
 minio_memory_request: "8Gi"
@@ -72,8 +70,6 @@ mlflow_cpu_request: 4
 mlflow_cpu_limit: 8
 mlflow_s3_bucket: "mlflow-artifacts"
 mlflow_s3_endpoint: "http://minio.minio.svc.cluster.local:9000"
-mlflow_s3_access_key: "{{ minio_access_key }}"
-mlflow_s3_secret_key: "{{ minio_secret_key }}"
 mlflow_storage_class: "{{ global_storage_class }}"
 
 # Seldon Core - High-Performance Model Serving
@@ -146,7 +142,7 @@ ufw_default_policy_outgoing: allow
 # Enable/Disable heavy components based on needs
 enable_elasticsearch: false
 enable_kubeflow: false
-enable_istio: false
+enable_istio: true
 enable_advanced_monitoring: true
 enable_gpu_support: false
 
@@ -154,3 +150,62 @@ enable_gpu_support: false
 homelab_mode: true
 development_mode: true
 high_availability: false
+
+# Add these Prometheus Pushgateway variables to your existing monitoring section
+
+# Prometheus Stack Configuration
+prometheus_stack_namespace: "monitoring"
+prometheus_stack_name: "prometheus-stack"
+prometheus_stack_chart_ref: "prometheus-community/kube-prometheus-stack"
+prometheus_nodeport: 30090
+prometheus_storage_class: "{{ global_storage_class }}"
+prometheus_storage_size: "50Gi"
+prometheus_memory_request: "4Gi"
+prometheus_memory_limit: "8Gi"
+prometheus_cpu_request: 2
+prometheus_cpu_limit: 4
+
+# Prometheus Pushgateway Configuration
+pushgateway_nodeport: 32091
+pushgateway_memory_request: "128Mi"
+pushgateway_memory_limit: "512Mi"
+pushgateway_cpu_request: "100m"
+pushgateway_cpu_limit: "500m"
+
+# Helm Configuration
+helm_wait_timeout: 600s
+helm_retries: 3
+helm_retry_delay: 10
+
+# Istio Configuration
+istio_gateway_http_nodeport: 31080
+istio_gateway_https_nodeport: 31443
+istio_pilot_memory_request: "128Mi"
+istio_pilot_memory_limit: "512Mi" 
+istio_pilot_cpu_request: "100m"
+istio_pilot_cpu_limit: "500m"
+istio_gateway_memory_request: "128Mi"
+istio_gateway_memory_limit: "512Mi"
+istio_gateway_cpu_request: "100m"
+istio_gateway_cpu_limit: "500m"
+
+# KServe Configuration - Fix namespace to match actual installation
+kserve_namespace: "kserve"  # Changed from "kserve-system" to "kserve"
+kserve_version: "0.15.0"
+knative_version: "1.15.0"
+kserve_controller_memory_request: "256Mi"
+kserve_controller_memory_limit: "1Gi"
+kserve_controller_cpu_request: "100m"
+kserve_controller_cpu_limit: "1000m"
+
+# Cert Manager Configuration
+certmanager_memory_request: "128Mi"
+certmanager_memory_limit: "512Mi"
+certmanager_cpu_request: "100m"
+certmanager_cpu_limit: "500m"
+
+# Node affinity and scheduling configuration
+enable_worker_node_scheduling: true
+prefer_worker_nodes_for_jobs: true
+control_plane_scheduling_weight: 50  # Lower weight = less preferred
+worker_node_scheduling_weight: 100   # Higher weight = more preferred

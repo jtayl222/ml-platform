@@ -74,6 +74,22 @@
             cpu: "{{ argowf_cpu_limit }}"
         image:
           tag: "{{ argowf_app_version }}"
+        # ADD THIS CONFIGURATION FOR WORKFLOW DEFAULT NODE DISTRIBUTION
+        config: |
+          workflowDefaults: |
+            spec:
+              affinity:
+                nodeAffinity:
+                  preferredDuringSchedulingIgnoredDuringExecution:
+                  - weight: 100
+                    preference:
+                      matchExpressions:
+                      - key: node-role.kubernetes.io/worker
+                        operator: Exists
+              tolerations:
+              - key: node-role.kubernetes.io/control-plane
+                operator: Exists
+                effect: NoSchedule
       executor:
         image:
           tag: "{{ argowf_app_version }}"
@@ -81,6 +97,60 @@
   retries: "{{ helm_retries }}"
   delay: "{{ helm_retry_delay }}"
   tags: [platform, workflows, helm-deploy]
+
+# ADD NEW TASK TO CONFIGURE WORKFLOW CONTROLLER AFTER DEPLOYMENT
+- name: Configure Argo Workflows for distributed job scheduling
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: workflow-controller-configmap
+        namespace: "{{ argowf_namespace }}"
+      data:
+        config: |
+          workflowDefaults: |
+            spec:
+              affinity:
+                nodeAffinity:
+                  preferredDuringSchedulingIgnoredDuringExecution:
+                  - weight: 100
+                    preference:
+                      matchExpressions:
+                      - key: node-role.kubernetes.io/worker
+                        operator: Exists
+                  - weight: 50
+                    preference:
+                      matchExpressions:
+                      - key: node-role.kubernetes.io/control-plane
+                        operator: DoesNotExist
+              tolerations:
+              - key: node-role.kubernetes.io/control-plane
+                operator: Exists
+                effect: NoSchedule
+    merge_type: strategic-merge
+  tags: [platform, workflows, config]
+
+- name: Restart Argo Workflows controller to apply new configuration
+  ansible.builtin.command: >
+    kubectl rollout restart deployment/{{ argowf_name }}-workflow-controller
+    --namespace={{ argowf_namespace }}
+    --kubeconfig={{ kubeconfig_path }}
+  register: restart_result
+  changed_when: "'restarted' in restart_result.stdout"
+  tags: [platform, workflows, restart]
+
+- name: Wait for controller restart to complete
+  ansible.builtin.command: >
+    kubectl rollout status deployment/{{ argowf_name }}-workflow-controller
+    --namespace={{ argowf_namespace }}
+    --kubeconfig={{ kubeconfig_path }}
+    --timeout=300s
+  register: rollout_status
+  changed_when: false
+  tags: [platform, workflows, restart]
 
 - name: Wait for Argo Workflows server to be ready
   kubernetes.core.k8s_info:
