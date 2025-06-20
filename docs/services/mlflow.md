@@ -6,14 +6,15 @@ Complete guide to using MLflow for experiment tracking and model management.
 - **URL**: [http://192.168.1.85:30800](http://192.168.1.85:30800)
 - **Authentication**: None (internal network)
 - **Storage Backend**: MinIO S3-compatible storage
-- **Database**: SQLite (upgradeable to PostgreSQL)
+- **Database**: **PostgreSQL**
+- **Custom Image**: `jtayl22/mlflow-postgresql:2.17.2`
 
 ## 🔧 **Configuration**
 
 ### **MLflow Server Setup**
 ```yaml
 # Current configuration
-backend_store_uri: sqlite:///mlflow/mlflow.db
+backend_store_uri: postgresql://mlflow:<password>@192.168.1.100:5432/mlflow
 default_artifact_root: s3://mlflow-artifacts/
 serve_artifacts: true
 host: 0.0.0.0
@@ -65,6 +66,9 @@ with mlflow.start_run():
 ```
 
 ### **Model Registry Usage**
+
+The Model Registry is fully enabled by the PostgreSQL backend, allowing for robust model versioning and lifecycle management.
+
 ```python
 # Register model
 model_uri = "runs:/<run_id>/random_forest_model"
@@ -162,14 +166,14 @@ curl http://192.168.1.85:30800/health
 curl http://192.168.1.85:30900/minio/health/live
 ```
 
-### **Database Maintenance**
+### **PostgreSQL Database Maintenance**
 ```bash
-# Backup MLflow database
-kubectl exec deployment/mlflow -n mlflow -- \
-  sqlite3 /mlflow/mlflow.db .backup /tmp/mlflow_backup.db
+# Backup the MLflow database from your local machine
+# Ensure you have postgresql-client installed
+pg_dump --host 192.168.1.100 --username postgres --dbname mlflow > mlflow_backup_$(date +%F).sql
 
-# Copy backup locally
-kubectl cp mlflow/mlflow-pod:/tmp/mlflow_backup.db ./mlflow_backup.db
+# To restore a backup (use with caution)
+# psql --host 192.168.1.100 --username postgres --dbname mlflow < mlflow_backup.sql
 ```
 
 ### **Storage Management**
@@ -183,12 +187,6 @@ kubectl exec deployment/minio -n minio -- \
 ```
 
 ## 🚀 **Advanced Configuration**
-
-### **Upgrade to PostgreSQL Backend**
-```yaml
-# For production workloads
-backend_store_uri: postgresql://user:pass@postgres:5432/mlflow
-```
 
 ### **Enable Authentication**
 ```yaml
@@ -228,6 +226,16 @@ kubectl exec deployment/mlflow -n mlflow -- \
 
 # Check environment variables
 kubectl exec deployment/mlflow -n mlflow -- env | grep AWS
+```
+
+#### **PostgreSQL Connection Failed**
+```bash
+# Test connection from your local machine
+psql --host 192.168.1.100 --username mlflow --dbname mlflow -c "\q"
+
+# Test from within the MLflow pod
+kubectl exec deployment/mlflow -n mlflow -- \
+  python -c "import psycopg2; conn = psycopg2.connect(host='192.168.1.100', dbname='mlflow', user='mlflow', password='<your-password>'); print('Success')"
 ```
 
 #### **Artifact Upload Failed**

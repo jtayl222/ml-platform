@@ -45,14 +45,89 @@
   delay: 10
   tags: [mlops, mlflow, verify-credentials]
 
-- name: Deploy MLflow
+- name: Deploy MLflow with PostgreSQL backend
   kubernetes.core.k8s:
     kubeconfig: "{{ kubeconfig_path }}"
-    definition: "{{ lookup('template', 'deployment.yaml.j2') | from_yaml }}"
-  tags: [mlflow, mlops, deployment]
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: mlflow
+        namespace: "{{ mlflow_namespace }}"
+        labels:
+          app: mlflow
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: mlflow
+        template:
+          metadata:
+            labels:
+              app: mlflow
+          spec:
+            containers:
+            - name: mlflow
+              image: "{{ mlflow_image }}"
+              command: ["mlflow", "server"]
+              args:
+              - --backend-store-uri
+              - postgresql://{{ mlflow_db_username }}:{{ mlflow_db_password }}@{{ mlflow_db_host }}:{{ mlflow_db_port }}/{{ mlflow_db_name }}
+              - --default-artifact-root
+              - s3://{{ mlflow_s3_bucket }}/
+              - --serve-artifacts
+              - --host
+              - 0.0.0.0
+              - --port
+              - "5000"
+              - --app-name=basic-auth
+              ports:
+              - containerPort: 5000
+                name: http
+              env:
+              - name: MLFLOW_S3_ENDPOINT_URL
+                value: "{{ mlflow_s3_endpoint }}"
+              - name: AWS_ACCESS_KEY_ID
+                valueFrom:
+                  secretKeyRef:
+                    name: mlflow-s3-secret
+                    key: AWS_ACCESS_KEY_ID
+              - name: AWS_SECRET_ACCESS_KEY
+                valueFrom:
+                  secretKeyRef:
+                    name: mlflow-s3-secret
+                    key: AWS_SECRET_ACCESS_KEY
+              resources:
+                requests:
+                  memory: "{{ mlflow_memory_request }}"
+                  cpu: "{{ mlflow_cpu_request }}"
+                limits:
+                  memory: "{{ mlflow_memory_limit }}"
+                  cpu: "{{ mlflow_cpu_limit }}"
+  when: mlflow_db_enabled | default(true)
+  tags: [mlops, mlflow, postgresql]
 
-- name: Create MLflow Service
+- name: Create MLflow NodePort service
   kubernetes.core.k8s:
     kubeconfig: "{{ kubeconfig_path }}"
-    definition: "{{ lookup('template', 'service.yaml.j2') | from_yaml }}"
-  tags: [mlflow, mlops, service]
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: mlflow
+        namespace: "{{ mlflow_namespace }}"
+        labels:
+          app: mlflow
+      spec:
+        type: NodePort
+        ports:
+        - port: 5000
+          targetPort: 5000
+          nodePort: "{{ mlflow_nodeport }}"
+          protocol: TCP
+          name: http
+        selector:
+          app: mlflow
+  tags: [mlops, mlflow, service]

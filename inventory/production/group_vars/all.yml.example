@@ -62,7 +62,7 @@ grafana_storage_size: "100Gi"
 # MLflow - Enhanced ML Experiment Tracking
 mlflow_namespace: "mlflow"
 mlflow_nodeport: 30800
-mlflow_image: "ghcr.io/mlflow/mlflow:v2.13.0"
+mlflow_image: "jtayl22/mlflow-postgresql:2.17.2"
 mlflow_storage_size: "500Gi"
 mlflow_memory_request: "8Gi"
 mlflow_memory_limit: "16Gi"
@@ -71,6 +71,18 @@ mlflow_cpu_limit: 8
 mlflow_s3_bucket: "mlflow-artifacts"
 mlflow_s3_endpoint: "http://minio.minio.svc.cluster.local:9000"
 mlflow_storage_class: "{{ global_storage_class }}"
+
+# External PostgreSQL Configuration for MLflow
+mlflow_db_enabled: true
+mlflow_db_host: "192.168.1.100"
+mlflow_db_port: "5432"  
+mlflow_db_name: "mlflow"
+mlflow_db_username: "mlflow"
+mlflow_db_password: "{{ vault_mlflow_db_password | default('mlflow-secure-password-123') }}"
+
+# MLflow Configuration (updated)
+mlflow_backend_store_type: "postgresql"  # Changed from file-based
+mlflow_enable_model_registry: true       # Enable Model Registry features
 
 # Seldon Core - High-Performance Model Serving
 seldon_namespace: "seldon-system"
@@ -209,3 +221,25 @@ enable_worker_node_scheduling: true
 prefer_worker_nodes_for_jobs: true
 control_plane_scheduling_weight: 50  # Lower weight = less preferred
 worker_node_scheduling_weight: 100   # Higher weight = more preferred
+
+# PostgreSQL Configuration
+postgresql_enabled: true
+postgresql_name: postgresql
+postgresql_namespace: postgresql
+postgresql_chart_ref: bitnami/postgresql
+postgresql_chart_version: "15.5.20"
+postgresql_version: "15.8.0"
+
+# PostgreSQL Authentication
+postgresql_postgres_password: "{{ vault_postgresql_postgres_password | default('postgres-admin-password-123') }}"
+postgresql_mlflow_username: mlflow
+postgresql_mlflow_password: "{{ vault_postgresql_mlflow_password | default('mlflow-password-123') }}"
+postgresql_mlflow_database: mlflow
+
+# PostgreSQL Resources
+postgresql_storage_size: 20Gi
+postgresql_storage_class: "{{ global_storage_class }}"
+postgresql_memory_request: 512Mi
+postgresql_memory_limit: 1Gi
+postgresql_cpu_request: 250m
+postgresql_cpu_limit: 500m

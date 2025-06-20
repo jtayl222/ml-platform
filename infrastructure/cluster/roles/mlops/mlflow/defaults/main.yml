@@ -6,7 +6,7 @@
 mlflow_namespace: "mlflow"
 mlflow_release_name: "mlflow"
 mlflow_pvc_name: "mlflow-pvc"
-mlflow_image: "ghcr.io/mlflow/mlflow:v2.13.0"
+mlflow_image: "jtayl22/mlflow-postgresql:2.17.2"
 mlflow_nodeport: 30800
 
 # Storage configuration
@@ -25,3 +25,13 @@ mlflow_s3_endpoint: "http://minio.minio.svc.cluster.local:9000"
 
 # Database configuration
 mlflow_db_path: "/mlflow/mlflow.db"
+
+# ADD THESE LINES FOR POSTGRESQL SUPPORT
+# External PostgreSQL configuration (optional)
+mlflow_db_enabled: true  # CHANGED: Enable PostgreSQL by default
+mlflow_db_host: "192.168.1.100"
+mlflow_db_port: "5432"
+mlflow_db_name: "mlflow"
+mlflow_db_username: "mlflow"
+mlflow_db_password: "changeme"
+mlflow_enable_model_registry: true  # CHANGED: Enable Model Registry

@@ -26,6 +26,7 @@ spec:
           - "--backend-store-uri=sqlite:///mlflow/mlflow.db"
           - "--default-artifact-root=s3://mlflow-artifacts/"
           - "--serve-artifacts"
+          - "--app-name=basic-auth"
         env:
         - name: MLFLOW_S3_ENDPOINT_URL
           valueFrom:

@@ -30,7 +30,7 @@
 > **Enterprise-grade MLOps infrastructure demonstrating production machine learning operations at scale**
 
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-K3s%20v1.33.1-blue)](https://k3s.io/)
-[![MLflow](https://img.shields.io/badge/MLflow-2.13.0-orange)](https://mlflow.org/)
+[![MLflow](https://img.shields.io/badge/MLflow-2.17.2-orange)](https://mlflow.org/)
 [![Seldon](https://img.shields.io/badge/Seldon%20Core-Model%20Serving-green)](https://seldon.io/)
 [![Ansible](https://img.shields.io/badge/Ansible-Infrastructure%20as%20Code-red)](https://ansible.com/)
 [![Istio](https://img.shields.io/badge/Istio-Service%20Mesh-purple)](https://istio.io/) [NEW]
@@ -98,9 +98,16 @@ A complete, production-ready MLOps platform built on Kubernetes (K3s), featuring
 - Ansible 2.10+ on deployment machine  
 - SSH key access to cluster nodes
 - 5 nodes with 36+ CPU cores total
+- External PostgreSQL server accessible from the cluster
 
 ### **Deploy Complete Platform**
 ```bash
+# 0. (One-time setup) Create the MLflow database in PostgreSQL
+# psql --host <your-postgres-ip> --username postgres
+# CREATE DATABASE mlflow;
+# CREATE USER mlflow WITH PASSWORD '<your-secure-password>';
+# GRANT ALL PRIVILEGES ON DATABASE mlflow TO mlflow;
+
 # 1. Clone and configure
 git clone https://github.com/yourusername/k3s-homelab.git
 cd k3s-homelab
@@ -124,7 +131,7 @@ echo "See docs/services.md for all endpoints"
 
 | **Service** | **URL** | **Purpose** | **Status** | **Docs** |
 |-------------|---------|-------------|------------|----------|
-| **MLflow** | `:30800` | Experiment tracking & model registry | ✅ | [📖](docs/services/mlflow.md) |
+| **MLflow** | `:30800` | Experiment tracking & **PostgreSQL-backed model registry** | ✅ | [📖](docs/services/mlflow.md) |
 | **JupyterHub** | `:30888` | Collaborative data science environment | ✅ | [📖](docs/services/jupyterhub.md) |
 | **Seldon Core** | API/CLI | Production model serving platform | ✅ | [📖](docs/services/seldon.md) |
 | **Kubeflow** | `:31234` | ML pipeline orchestration | ✅ | [📖](docs/services/kubeflow.md) |
@@ -152,12 +159,13 @@ echo "See docs/services.md for all endpoints"
 | **Service Mesh** | Istio | v1.26.1 | Advanced networking & traffic management |
 | **Automation** | Ansible | 2.10+ | Infrastructure as Code |
 | **Storage** | NFS + MinIO | Latest | Persistent & object storage |
+| **Database** | PostgreSQL | 15+ | MLflow metadata backend |
 | **Security** | Sealed Secrets | Latest | GitOps-safe credential management |
 
 ### **MLOps Stack**
 | Component | Technology | Version | Purpose |
 |-----------|------------|---------|---------|
-| **ML Platform** | MLflow | v2.13.0 | Experiment tracking & model registry |
+| **ML Platform** | MLflow | v2.17.2 | Experiment tracking & model registry |
 | **Model Serving** | Seldon Core | Latest | Production inference endpoints |
 | **Advanced Serving** | KServe | v0.15.0 | Kubernetes-native model serving |
 | **ML Pipelines** | Kubeflow Pipelines | Latest | Workflow orchestration |
