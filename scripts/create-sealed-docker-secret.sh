@@ -24,19 +24,16 @@ kubectl create secret docker-registry "$SECRET_NAME" \
   --docker-username="$DOCKER_USERNAME" \
   --docker-password="$DOCKER_PASSWORD" \
   --docker-email="$DOCKER_EMAIL" \
+  -n $NAMESPACE \
   --dry-run=client -o yaml > "temp-${SECRET_NAME}.yaml"
 
 # Seal it with namespace specification
 kubeseal -f "temp-${SECRET_NAME}.yaml" \
-  --controller-name=sealed-secrets-controller \
-  --controller-namespace=sealed-secrets \
+  --controller-name=sealed-secrets \
+  --controller-namespace=kube-system \
   --scope cluster-wide \
-  -w "sealed-${SECRET_NAME}.yaml"
-
-# Apply the sealed secret to the specified namespace
-kubectl apply -f "sealed-${SECRET_NAME}.yaml" -n "$NAMESPACE"
+  -w "infrastructure/manifests/sealed-secrets/${SECRET_NAME}.yaml"
 
 # Clean up temporary file
 rm "temp-${SECRET_NAME}.yaml"
 
-echo "✅ Sealed Docker registry secret '$SECRET_NAME' created and applied to namespace '$NAMESPACE'"

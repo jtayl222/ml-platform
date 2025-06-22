@@ -16,6 +16,42 @@
     state: present
   tags: [mlflow, mlops, sealed-secrets]
 
+- name: Apply MLflow basic-auth Sealed Secret
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    src: "{{ playbook_dir }}/../manifests/sealed-secrets/mlflow-basic-auth.yaml"
+    state: present
+  tags: [mlflow, mlops, sealed-secrets]
+
+- name: Apply MLflow DB credentials Sealed Secret
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    src: "{{ playbook_dir }}/../manifests/sealed-secrets/mlflow-db-credentials.yaml"
+    state: present
+  tags: [mlflow, mlops, sealed-secrets]
+
+- name: Create MLflow auth configuration ConfigMap
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: mlflow-auth-config
+        namespace: "{{ mlflow_namespace }}"
+        labels:
+          app: mlflow
+      data:
+        auth_config.ini: |
+          [mlflow]
+          database_uri = postgresql+psycopg2://${MLFLOW_DB_USERNAME}:${MLFLOW_DB_PASSWORD}@{{ mlflow_db_host }}:{{ mlflow_db_port }}/{{ mlflow_authdb_name }}
+          default_permission = READ
+          admin_username = ${MLFLOW_TRACKING_USERNAME}
+          admin_password = ${MLFLOW_TRACKING_PASSWORD}
+          authorization_function = mlflow.server.auth:authenticate_request_basic_auth
+  tags: [mlflow, mlops, config]
+
 - name: Create MLflow PVC
   kubernetes.core.k8s:
     kubeconfig: "{{ kubeconfig_path }}"
@@ -70,21 +106,29 @@
             containers:
             - name: mlflow
               image: "{{ mlflow_image }}"
-              command: ["mlflow", "server"]
+              command: ["/bin/sh", "-c"]
               args:
-              - --backend-store-uri
-              - postgresql://{{ mlflow_db_username }}:{{ mlflow_db_password }}@{{ mlflow_db_host }}:{{ mlflow_db_port }}/{{ mlflow_db_name }}
-              - --default-artifact-root
-              - s3://{{ mlflow_s3_bucket }}/
-              - --serve-artifacts
-              - --host
-              - 0.0.0.0
-              - --port
-              - "5000"
-              - --app-name=basic-auth
+              - |
+                # Resolve the auth config file
+                envsubst < /tmp/auth_config.ini > /tmp/auth_config_resolved.ini
+                
+                # Set auth config path
+                export MLFLOW_AUTH_CONFIG_PATH=/tmp/auth_config_resolved.ini
+                
+                # Start MLflow with environment variable expansion
+                mlflow server \
+                  --backend-store-uri "postgresql+psycopg2://$MLFLOW_DB_USERNAME:$MLFLOW_DB_PASSWORD@{{ mlflow_db_host }}:{{ mlflow_db_port }}/{{ mlflow_db_name }}" \
+                  --default-artifact-root "s3://{{ mlflow_s3_bucket }}/" \
+                  --host "0.0.0.0" \
+                  --port "5000" \
+                  --app-name basic-auth 
               ports:
               - containerPort: 5000
                 name: http
+              volumeMounts:
+              - name: auth-config
+                mountPath: /tmp/auth_config.ini
+                subPath: auth_config.ini
               env:
               - name: MLFLOW_S3_ENDPOINT_URL
                 value: "{{ mlflow_s3_endpoint }}"
@@ -98,6 +142,34 @@
                   secretKeyRef:
                     name: mlflow-s3-secret
                     key: AWS_SECRET_ACCESS_KEY
+              - name: MLFLOW_TRACKING_USERNAME
+                valueFrom:
+                  secretKeyRef:
+                    name: mlflow-basic-auth
+                    key: MLFLOW_TRACKING_USERNAME
+              - name: MLFLOW_TRACKING_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: mlflow-basic-auth
+                    key: MLFLOW_TRACKING_PASSWORD
+              - name: MLFLOW_FLASK_SERVER_SECRET_KEY
+                valueFrom:
+                  secretKeyRef:
+                    name: mlflow-basic-auth
+                    key: MLFLOW_FLASK_SERVER_SECRET_KEY
+              - name: MLFLOW_DB_USERNAME
+                valueFrom:
+                  secretKeyRef:
+                    name: mlflow-db-credentials
+                    key: username
+              - name: MLFLOW_DB_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: mlflow-db-credentials
+                    key: password
+              - name: MLFLOW_SERVER_LOG_LEVEL
+                value: INFO
+              # --- ADD AUTH CONFIG PATH ---
               resources:
                 requests:
                   memory: "{{ mlflow_memory_request }}"
@@ -105,6 +177,12 @@
                 limits:
                   memory: "{{ mlflow_memory_limit }}"
                   cpu: "{{ mlflow_cpu_limit }}"
+            # --- UPDATE VOLUME DEFINITION ---
+            volumes:
+            - name: auth-config
+              configMap:
+                name: mlflow-auth-config
+            # --- END OF VOLUME DEFINITION ---
   when: mlflow_db_enabled | default(true)
   tags: [mlops, mlflow, postgresql]
 

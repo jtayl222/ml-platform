@@ -208,6 +208,8 @@ This platform supports the entire machine learning lifecycle:
 - [🏗️ Platform Architecture](docs/architecture.md) - System design deep dive
 - [🔄 MLOps Workflow](docs/mlops-workflow.md) - End-to-end processes
 - [📊 Monitoring Strategy](docs/monitoring.md) - Observability approach
+- [🧩 Platform Components](docs/components.md)
+- [🧪 MLflow Deployment](docs/mlflow-deployment.md)
 
 ### **🛠️ Operations & Management**
 - [🎯 Service Access](docs/services.md) - All platform services
