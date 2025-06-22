@@ -30,7 +30,7 @@
 > **Enterprise-grade MLOps infrastructure demonstrating production machine learning operations at scale**
 
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-K3s%20v1.33.1-blue)](https://k3s.io/)
-[![MLflow](https://img.shields.io/badge/MLflow-2.17.2-orange)](https://mlflow.org/)
+[![MLflow](https://img.shields.io/badge/MLflow-3.1.0-4-orange)](https://mlflow.org/)
 [![Seldon](https://img.shields.io/badge/Seldon%20Core-Model%20Serving-green)](https://seldon.io/)
 [![Ansible](https://img.shields.io/badge/Ansible-Infrastructure%20as%20Code-red)](https://ansible.com/)
 [![Istio](https://img.shields.io/badge/Istio-Service%20Mesh-purple)](https://istio.io/) [NEW]
@@ -165,7 +165,7 @@ echo "See docs/services.md for all endpoints"
 ### **MLOps Stack**
 | Component | Technology | Version | Purpose |
 |-----------|------------|---------|---------|
-| **ML Platform** | MLflow | v2.17.2 | Experiment tracking & model registry |
+| **ML Platform** | MLflow | v3.1.0-4 | Experiment tracking & model registry |
 | **Model Serving** | Seldon Core | Latest | Production inference endpoints |
 | **Advanced Serving** | KServe | v0.15.0 | Kubernetes-native model serving |
 | **ML Pipelines** | Kubeflow Pipelines | Latest | Workflow orchestration |

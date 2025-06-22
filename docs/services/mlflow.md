@@ -7,7 +7,7 @@ Complete guide to using MLflow for experiment tracking and model management.
 - **Authentication**: None (internal network)
 - **Storage Backend**: MinIO S3-compatible storage
 - **Database**: **PostgreSQL**
-- **Custom Image**: `jtayl22/mlflow-postgresql:2.17.2`
+- **Custom Image**: `jtayl22/mlflow-postgresql:3.1.0-4`
 
 ## 🔧 **Configuration**
 

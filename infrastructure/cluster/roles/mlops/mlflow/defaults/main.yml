@@ -6,7 +6,7 @@
 mlflow_namespace: "mlflow"
 mlflow_release_name: "mlflow"
 mlflow_pvc_name: "mlflow-pvc"
-mlflow_image: "jtayl22/mlflow-postgresql:2.17.2"
+mlflow_image: "jtayl22/mlflow-postgresql:3.1.0-4"
 mlflow_nodeport: 30800
 
 # Storage configuration

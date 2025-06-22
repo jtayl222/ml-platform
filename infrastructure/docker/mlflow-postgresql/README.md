@@ -3,21 +3,21 @@
 Custom MLflow Docker image with PostgreSQL driver pre-installed.
 
 ## 🏗️ **Build Information**
-- **Base Image**: `ghcr.io/mlflow/mlflow:v2.17.2`
+- **Base Image**: `ghcr.io/mlflow/mlflow:v3.1.0-4`
 - **Added Dependencies**: `psycopg2-binary`
-- **Registry**: `jtayl22/mlflow-postgresql:2.17.2`
+- **Registry**: `jtayl22/mlflow-postgresql:3.1.0-4`
 
 ## 🔧 **Build Instructions**
 
 ```bash
 # Build the image
-docker build -t jtayl22/mlflow-postgresql:2.17.2 .
+docker build -t jtayl22/mlflow-postgresql:3.1.0-4 .
 
 # Push to registry
-docker push jtayl22/mlflow-postgresql:2.17.2
+docker push jtayl22/mlflow-postgresql:3.1.0-4
 
 # Test locally
-docker run --rm jtayl22/mlflow-postgresql:2.17.2 mlflow server --help
+docker run --rm jtayl22/mlflow-postgresql:3.1.0-4 mlflow server --help
 ```
 
 ## 🚀 **Usage in Kubernetes**
@@ -25,7 +25,7 @@ docker run --rm jtayl22/mlflow-postgresql:2.17.2 mlflow server --help
 ```yaml
 containers:
 - name: mlflow
-  image: jtayl22/mlflow-postgresql:2.17.2
+  image: jtayl22/mlflow-postgresql:3.1.0-4
   command: ["mlflow", "server"]
   args:
   - --backend-store-uri
@@ -40,7 +40,7 @@ containers:
 4. Redeploy MLflow
 
 ## 📦 **Dependencies**
-- MLflow 2.17.2
+- MLflow 3.1.0-4
 - psycopg2-binary (PostgreSQL adapter)
 - Python 3.10 (from base image)
 
@@ -49,7 +49,7 @@ containers:
 This project includes custom Docker images for enhanced functionality:
 
 ### **MLflow with PostgreSQL Support**
-- **Image**: `jtayl22/mlflow-postgresql:2.17.2`
+- **Image**: `jtayl22/mlflow-postgresql:3.1.0-4`
 - **Purpose**: MLflow with Model Registry using PostgreSQL backend
 - **Source**: [`infrastructure/docker/mlflow-postgresql/`](infrastructure/docker/mlflow-postgresql/)
 

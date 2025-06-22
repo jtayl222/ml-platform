@@ -5,7 +5,7 @@ set -e
 
 # Configuration
 IMAGE_NAME="jtayl22/mlflow-postgresql"
-MLFLOW_VERSION="2.17.2"
+MLFLOW_VERSION="3.1.0-4"
 TAG="${IMAGE_NAME}:${MLFLOW_VERSION}"
 
 echo "🏗️  Building MLflow PostgreSQL image..."
