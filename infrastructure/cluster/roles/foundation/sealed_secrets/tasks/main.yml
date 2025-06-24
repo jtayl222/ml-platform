@@ -82,13 +82,14 @@
                 name: "{{ item }}"
             state: present
           loop:
-            - minio
-            - monitoring
-            - argowf
             - argocd
-            - mlflow
+            - argowf
+            - iris-demo
             - jupyterhub
             - kserve
+            - minio
+            - mlflow
+            - monitoring
           register: namespace_creation
 
         - name: Display created namespaces
