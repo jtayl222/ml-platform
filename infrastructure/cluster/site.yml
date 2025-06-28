@@ -155,6 +155,26 @@
   tasks:
     - name: Deploy Platform Components
       block:
+        # === NEW: Create MLOps shared storage PVCs for JupyterHub ===
+        # These PVCs must exist before JupyterHub (or other platform services) try to claim them.
+        - name: Ensure jupyterhub namespace exists
+          kubernetes.core.k8s:
+            api_version: v1
+            kind: Namespace
+            name: jupyterhub
+            state: present
+          tags: [jupyter, jupyterhub_pvc_setup]
+
+        - name: Create MLOps shared storage PVCs for JupyterHub
+          kubernetes.core.k8s:
+            state: present
+            # Path relative to the site.yml playbook location (infrastructure/cluster/)
+            src: "{{ item }}"
+          loop:
+            - "manifests/shared-storage/shared-data-pvc-jupyterhub.yaml"
+            - "manifests/shared-storage/shared-artifacts-pvc-jupyterhub.yaml"
+          tags: [ jupyter, jupyterhub_pvc_setup ] # Optional: Add a tag if you want to run this specifically later
+
         # === GITOPS & CI/CD ===
         - name: Deploy Argo CD
           include_role:

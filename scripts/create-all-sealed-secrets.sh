@@ -15,7 +15,8 @@ MLFLOW_TRACKING_USERNAME=${MLFLOW_TRACKING_USERNAME:-"mlflow"}
 MLFLOW_TRACKING_PASSWORD=${MLFLOW_TRACKING_PASSWORD:-"my-secure-mlflow-tracking-password"}
 MLFLOW_DB_USERNAME=${MLFLOW_DB_USERNAME:-"mlflow"}
 MLFLOW_DB_PASSWORD=${MLFLOW_DB_PASSWORD:-"mlflow-secure-password-123"}
-MLFLOW_FLASK_SECRET_KEY=${MLFLOW_FLASK_SECRET_KEY:-"$(openssl rand -base64 32)"}
+#MLFLOW_FLASK_SECRET_KEY=${MLFLOW_FLASK_SECRET_KEY:-"$(openssl rand -base64 32)"}
+MLFLOW_FLASK_SECRET_KEY=${MLFLOW_FLASK_SECRET_KEY:-"6EF6B30F9E557F948C402C89002C7C8A"}
 
 ##########################
 # For the minio namespace
@@ -81,8 +82,8 @@ MLFLOW_FLASK_SECRET_KEY=${MLFLOW_FLASK_SECRET_KEY:-"$(openssl rand -base64 32)"}
 
 # Create MinIO secret for KServe namespace
 ./scripts/create-sealed-secret.sh kserve-minio-secret kserve \
-  AWS_ACCESS_KEY_ID="minioadmin" \
-  AWS_SECRET_ACCESS_KEY="minioadmin123" \
+  AWS_ACCESS_KEY_ID="$MINIO_ACCESS_KEY" \
+  AWS_SECRET_ACCESS_KEY="$MINIO_SECRET_KEY" \
   AWS_ENDPOINT_URL=http://minio.minio.svc.cluster.local:9000 \
   AWS_DEFAULT_REGION=us-east-1
 
@@ -127,6 +128,31 @@ MLFLOW_FLASK_SECRET_KEY=${MLFLOW_FLASK_SECRET_KEY:-"$(openssl rand -base64 32)"}
   MLFLOW_S3_ENDPOINT_URL=http://minio.minio.svc.cluster.local:9000
 
 ./scripts/create-sealed-secret.sh iris-demo-mlflow iris-demo \
+  MLFLOW_TRACKING_USERNAME="$MLFLOW_TRACKING_USERNAME" \
+  MLFLOW_TRACKING_PASSWORD="$MLFLOW_TRACKING_PASSWORD" \
+  MLFLOW_FLASK_SERVER_SECRET_KEY="$MLFLOW_FLASK_SECRET_KEY"
+
+##########################
+# For the jupyterhub project
+##########################
+
+# GitHub Container Registry credentials for jupyterhub
+./scripts/create-sealed-docker-secret.sh jupyterhub-ghcr jupyterhub \
+  ghcr.io \
+  "$GITHUB_USERNAME" \
+  "$GITHUB_PAT" \
+  "$GITHUB_EMAIL"
+
+./scripts/create-sealed-secret.sh jupyterhub-minio jupyterhub \
+  access-key="$MINIO_ACCESS_KEY" \
+  secret-key="$MINIO_SECRET_KEY" \
+  AWS_ACCESS_KEY_ID="$MINIO_ACCESS_KEY" \
+  AWS_SECRET_ACCESS_KEY="$MINIO_SECRET_KEY" \
+  AWS_ENDPOINT_URL=http://minio.minio.svc.cluster.local:9000 \
+  AWS_DEFAULT_REGION=us-east-1 \
+  MLFLOW_S3_ENDPOINT_URL=http://minio.minio.svc.cluster.local:9000
+
+./scripts/create-sealed-secret.sh jupyterhub-mlflow jupyterhub \
   MLFLOW_TRACKING_USERNAME="$MLFLOW_TRACKING_USERNAME" \
   MLFLOW_TRACKING_PASSWORD="$MLFLOW_TRACKING_PASSWORD" \
   MLFLOW_FLASK_SERVER_SECRET_KEY="$MLFLOW_FLASK_SECRET_KEY"

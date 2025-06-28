@@ -17,6 +17,34 @@
     state: present
   tags: [platform, namespace]
 
+- name: Ensure jupyterhub-admin SealedSecret is applied
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    src: "{{ playbook_dir }}/../manifests/sealed-secrets/jupyterhub-admin.yaml"
+  tags: [platform, jupyter, secrets]
+
+- name: Ensure jupyterhub-minio SealedSecret is applied
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    src: "{{ playbook_dir }}/../manifests/sealed-secrets/jupyterhub-minio.yaml"
+  tags: [platform, jupyter, secrets]
+
+- name: Ensure jupyterhub-mlflow SealedSecret is applied
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    src: "{{ playbook_dir }}/../manifests/sealed-secrets/jupyterhub-mlflow.yaml"
+  tags: [platform, jupyter, secrets]
+
+- name: Ensure jupyterhub-ghcr SealedSecret is applied
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    src: "{{ playbook_dir }}/../manifests/sealed-secrets/jupyterhub-ghcr.yaml"
+  tags: [platform, jupyter, secrets]
+
 - name: Deploy JupyterHub
   kubernetes.core.helm:
     name: "{{ jupyterhub_name }}"
@@ -36,11 +64,10 @@
           resources:
             requests:
               memory: 320Mi
-              cpu: 0.2                    # ✅ Number format
+              cpu: 0.2
             limits:
               memory: 320Mi
-              cpu: 0.2                    # ✅ Number format
-      
+              cpu: 0.2
       hub:
         config:
           DummyAuthenticator:
@@ -51,14 +78,20 @@
         resources:
           requests:
             memory: "{{ jupyterhub_hub_memory_request }}"
-            cpu: "{{ jupyterhub_hub_cpu_request }}"    # This will be 0.2
+            cpu: "{{ jupyterhub_hub_cpu_request }}"
           limits:
             memory: "{{ jupyterhub_hub_memory_limit }}"
-            cpu: "{{ jupyterhub_hub_cpu_limit }}"      # This will be 0.5
+            cpu: "{{ jupyterhub_hub_cpu_limit }}"
         extraEnv:
           JUPYTER_ENABLE_LAB: "yes"
-      
+          JUPYTERHUB_ADMIN_PASSWORD:
+            valueFrom:
+              secretKeyRef:
+                name: jupyterhub-admin
+                key: password
       singleuser:
+        networkPolicy:
+          enabled: false
         image:
           name: "{{ jupyterhub_image_name }}"
           tag: "{{ jupyterhub_image_tag }}"
@@ -68,23 +101,57 @@
           capacity: "{{ jupyterhub_storage_size }}"
           dynamic:
             storageClass: "{{ jupyterhub_storage_class }}"
-        
-        # ✅ FIXED: CPU values as numbers
+          extraVolumes:
+            - name: shared-ml-data-pvc
+              persistentVolumeClaim:
+                claimName: shared-data-pvc
+            - name: shared-ml-artifacts-pvc
+              persistentVolumeClaim:
+                claimName: shared-artifacts-pvc
+          extraVolumeMounts:
+            - name: shared-ml-data-pvc
+              mountPath: /mnt/shared-data
+            - name: shared-ml-artifacts-pvc
+              mountPath: /mnt/shared-artifacts
         cpu:
-          limit: "{{ jupyterhub_user_cpu_limit }}"       # Will be 1.0
-          guarantee: "{{ jupyterhub_user_cpu_request }}" # Will be 0.1
-        
-        # Memory values remain as strings
+          limit: "{{ jupyterhub_user_cpu_limit }}"
+          guarantee: "{{ jupyterhub_user_cpu_request }}"
         memory:
-          limit: "{{ jupyterhub_user_memory_limit }}"       # "2Gi"
-          guarantee: "{{ jupyterhub_user_memory_request }}" # "1Gi"
-        
-        # MLOps-specific environment
+          limit: "{{ jupyterhub_user_memory_limit }}"
+          guarantee: "{{ jupyterhub_user_memory_request }}"
         extraEnv:
           MLFLOW_TRACKING_URI: "http://mlflow.mlflow.svc.cluster.local:5000"
           MINIO_ENDPOINT_URL: "http://minio.minio.svc.cluster.local:9000"
-        
-        # Pre-install MLOps packages
+          AWS_ACCESS_KEY_ID:
+            valueFrom:
+              secretKeyRef:
+                name: jupyterhub-minio
+                key: AWS_ACCESS_KEY_ID
+          AWS_SECRET_ACCESS_KEY:
+            valueFrom:
+              secretKeyRef:
+                name: jupyterhub-minio
+                key: AWS_SECRET_ACCESS_KEY
+          MLFLOW_TRACKING_USERNAME:
+            valueFrom:
+              secretKeyRef:
+                name: jupyterhub-mlflow
+                key: MLFLOW_TRACKING_USERNAME
+          MLFLOW_TRACKING_PASSWORD:
+            valueFrom:
+              secretKeyRef:
+                name: jupyterhub-mlflow
+                key: MLFLOW_TRACKING_PASSWORD
+          MLFLOW_FLASK_SERVER_SECRET_KEY:
+            valueFrom:
+              secretKeyRef:
+                name: jupyterhub-mlflow
+                key: MLFLOW_FLASK_SERVER_SECRET_KEY
+          GHCR_USERNAME:
+            valueFrom:
+              secretKeyRef:
+                name: jupyterhub-ghcr
+                key: .dockerconfigjson
         lifecycleHooks:
           postStart:
             exec:
@@ -93,8 +160,7 @@
                 - "-c"
                 - |
                   pip install --quiet mlflow boto3 scikit-learn pandas numpy matplotlib seaborn
-      
-      # Resource scheduling
+
       scheduling:
         userScheduler:
           enabled: true
@@ -103,7 +169,6 @@
         userPlaceholder:
           enabled: true
           replicas: 1
-
   register: jupyterhub_deployment
   retries: "{{ helm_retries }}"
   delay: "{{ helm_retry_delay }}"

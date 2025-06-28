@@ -13,6 +13,7 @@ jupyterhub_auth_type: dummy
 jupyterhub_password: mlops123
 
 # User Environment Configuration
+# This will be overridden by your values.yaml for the specific image: jtayl22/financial-predictor-jupyter:latest
 jupyterhub_image_name: jupyter/datascience-notebook
 jupyterhub_image_tag: latest
 jupyterhub_default_url: /lab
@@ -22,16 +23,18 @@ jupyterhub_storage_type: none  # Use 'dynamic' for persistent storage
 jupyterhub_storage_class: nfs-shared
 jupyterhub_storage_size: 10Gi
 
-# Resource Configuration (FIXED: Use numbers for CPU, strings for memory)
-jupyterhub_hub_memory_request: 512Mi
-jupyterhub_hub_memory_limit: 1Gi
-jupyterhub_hub_cpu_request: 0.2      # ✅ Number: 200m = 0.2 cores
-jupyterhub_hub_cpu_limit: 0.5        # ✅ Number: 500m = 0.5 cores
+# Resource Configuration (Increased for generous allocation given your cluster capacity)
+# Hub resources - Increased slightly for robustness
+jupyterhub_hub_memory_request: 1Gi   # Was 512Mi
+jupyterhub_hub_memory_limit: 2Gi   # Was 1Gi
+jupyterhub_hub_cpu_request: 0.5    # 500m - Was 0.2
+jupyterhub_hub_cpu_limit: 1.0      # 1000m - Was 0.5
 
-jupyterhub_user_memory_request: 1Gi
-jupyterhub_user_memory_limit: 2Gi
-jupyterhub_user_cpu_request: 0.1     # ✅ Number: 100m = 0.1 cores  
-jupyterhub_user_cpu_limit: 1.0       # ✅ Number: 1000m = 1.0 cores
+# User resources - Significantly increased for MLOps workloads
+jupyterhub_user_memory_request: 8Gi  # Was 1Gi
+jupyterhub_user_memory_limit: 16Gi # Was 2Gi
+jupyterhub_user_cpu_request: 2.0     # 2000m - Was 0.1
+jupyterhub_user_cpu_limit: 4.0       # 4000m - Was 1.0
 
 # Helm Configuration
 helm_wait_timeout: 600s

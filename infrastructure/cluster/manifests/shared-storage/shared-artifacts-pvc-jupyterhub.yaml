@@ -1,0 +1,13 @@
+# k3s-homelab/infrastructure/cluster/manifests/shared-storage/shared-artifacts-pvc-jupyterhub.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: shared-artifacts-pvc # This name will be referenced in JupyterHub's extraVolumes
+  namespace: jupyterhub # MUST be in the jupyterhub namespace
+spec:
+  accessModes:
+    - ReadWriteMany # Allows multiple pods to read and write concurrently
+  resources:
+    requests:
+      storage: 100Gi # Sufficient for project-specific artifacts like scalers, custom pickles etc.
+  storageClassName: nfs-shared # Must match your configured NFS StorageClass

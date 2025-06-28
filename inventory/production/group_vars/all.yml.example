@@ -100,12 +100,14 @@ jupyterhub_namespace: "jupyterhub"
 jupyterhub_nodeport: 30888
 jupyterhub_password: "mlops123"
 # Enhanced user resources for heavy ML workloads
-jupyterhub_user_memory_request: "4Gi"
-jupyterhub_user_memory_limit: "16Gi"
+jupyterhub_user_memory_request: "4G"
+jupyterhub_user_memory_limit: "16G"
 jupyterhub_user_cpu_request: 1.0
 jupyterhub_user_cpu_limit: 8.0
 jupyterhub_storage_type: "dynamic"
-jupyterhub_storage_size: "50Gi"
+jupyterhub_storage_size: "50G"
+jupyterhub_image_name: "jtayl22/financial-predictor-jupyter"
+jupyterhub_image_tag: "latest"
 
 # Argo Workflows - High-Performance Pipeline Execution
 argowf_namespace: "argowf"
