@@ -31,21 +31,7 @@ MLFLOW_FLASK_SECRET_KEY=${MLFLOW_FLASK_SECRET_KEY:-"6EF6B30F9E557F948C402C89002C
 # For the argowf namespace
 ##########################
 
-./scripts/create-sealed-secret.sh minio-credentials-wf argowf \
-  access-key="$MINIO_ACCESS_KEY" \
-  secret-key="$MINIO_SECRET_KEY" \
-  AWS_ACCESS_KEY_ID="$MINIO_ACCESS_KEY" \
-  AWS_SECRET_ACCESS_KEY="$MINIO_SECRET_KEY" \
-  AWS_ENDPOINT_URL=http://minio.minio.svc.cluster.local:9000 \
-  AWS_DEFAULT_REGION=us-east-1 \
-  MLFLOW_S3_ENDPOINT_URL=http://minio.minio.svc.cluster.local:9000
-
-# GitHub Container Registry credentials
-./scripts/create-sealed-docker-secret.sh ghcr-credentials argowf \
-  ghcr.io \
-  "$GITHUB_USERNAME" \
-  "$GITHUB_PAT" \
-  "$GITHUB_EMAIL"
+./scripts/generate-ml-secrets.sh argowf argowf-team@company.com
 
 ##########################
 # For the argocd namespace
@@ -64,9 +50,8 @@ MLFLOW_FLASK_SECRET_KEY=${MLFLOW_FLASK_SECRET_KEY:-"6EF6B30F9E557F948C402C89002C
 ##########################
 # For the jupyterhub namespace
 ##########################
-
-./scripts/create-sealed-secret.sh jupyterhub-admin jupyterhub \
-  password=mlops123
+./scripts/generate-ml-secrets.sh jupyterhub jupyterhub-team@company.com
+./scripts/create-sealed-secret.sh jupyterhub-admin jupyterhub password=mlops123
 
 ##########################
 # For the monitoring namespace
@@ -111,51 +96,12 @@ MLFLOW_FLASK_SECRET_KEY=${MLFLOW_FLASK_SECRET_KEY:-"6EF6B30F9E557F948C402C89002C
 # For the iris-demo project
 ##########################
 
-# GitHub Container Registry credentials for iris-demo
-./scripts/create-sealed-docker-secret.sh iris-demo-ghcr iris-demo \
-  ghcr.io \
-  "$GITHUB_USERNAME" \
-  "$GITHUB_PAT" \
-  "$GITHUB_EMAIL"
+./scripts/generate-ml-secrets.sh iris-demo iris-demo-team@company.com
 
-./scripts/create-sealed-secret.sh iris-demo-minio iris-demo \
-  access-key="$MINIO_ACCESS_KEY" \
-  secret-key="$MINIO_SECRET_KEY" \
-  AWS_ACCESS_KEY_ID="$MINIO_ACCESS_KEY" \
-  AWS_SECRET_ACCESS_KEY="$MINIO_SECRET_KEY" \
-  AWS_ENDPOINT_URL=http://minio.minio.svc.cluster.local:9000 \
-  AWS_DEFAULT_REGION=us-east-1 \
-  MLFLOW_S3_ENDPOINT_URL=http://minio.minio.svc.cluster.local:9000
-
-./scripts/create-sealed-secret.sh iris-demo-mlflow iris-demo \
-  MLFLOW_TRACKING_USERNAME="$MLFLOW_TRACKING_USERNAME" \
-  MLFLOW_TRACKING_PASSWORD="$MLFLOW_TRACKING_PASSWORD" \
-  MLFLOW_FLASK_SERVER_SECRET_KEY="$MLFLOW_FLASK_SECRET_KEY"
 
 ##########################
 # For the jupyterhub project
 ##########################
-
-# GitHub Container Registry credentials for jupyterhub
-./scripts/create-sealed-docker-secret.sh jupyterhub-ghcr jupyterhub \
-  ghcr.io \
-  "$GITHUB_USERNAME" \
-  "$GITHUB_PAT" \
-  "$GITHUB_EMAIL"
-
-./scripts/create-sealed-secret.sh jupyterhub-minio jupyterhub \
-  access-key="$MINIO_ACCESS_KEY" \
-  secret-key="$MINIO_SECRET_KEY" \
-  AWS_ACCESS_KEY_ID="$MINIO_ACCESS_KEY" \
-  AWS_SECRET_ACCESS_KEY="$MINIO_SECRET_KEY" \
-  AWS_ENDPOINT_URL=http://minio.minio.svc.cluster.local:9000 \
-  AWS_DEFAULT_REGION=us-east-1 \
-  MLFLOW_S3_ENDPOINT_URL=http://minio.minio.svc.cluster.local:9000
-
-./scripts/create-sealed-secret.sh jupyterhub-mlflow jupyterhub \
-  MLFLOW_TRACKING_USERNAME="$MLFLOW_TRACKING_USERNAME" \
-  MLFLOW_TRACKING_PASSWORD="$MLFLOW_TRACKING_PASSWORD" \
-  MLFLOW_FLASK_SERVER_SECRET_KEY="$MLFLOW_FLASK_SECRET_KEY"
 
 echo "✅ All sealed secrets created successfully!"
 echo ""

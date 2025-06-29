@@ -12,8 +12,7 @@ kubeconfig*
 
 # Sealed Secrets - Generated Files
 # ---------------------------------
-infrastructure/manifests/sealed-secrets/*.yaml
-infrastructure/manifests/sealed-secrets/*.yml
+infrastructure/manifests/sealed-secrets/**
 !infrastructure/manifests/sealed-secrets/.gitkeep
 !infrastructure/manifests/sealed-secrets/README.md
 
