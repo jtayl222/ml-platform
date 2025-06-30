@@ -201,7 +201,7 @@
         - name: Deploy Seldon Core
           include_role:
             name: platform/seldon
-          tags: [platform, model-serving]
+          tags: [platform, model-serving, seldon, seldon-core]
 
       when: k3s_state is not defined or k3s_state != "absent"
 

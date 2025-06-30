@@ -1,12 +1,12 @@
 ---
 - name: Add Seldon Helm repository
   kubernetes.core.helm_repository:
-    name: seldon
-    repo_url: https://storage.googleapis.com/seldon-charts
+    name: seldon-charts
+    repo_url: https://seldonio.github.io/helm-charts/
     kubeconfig: "{{ kubeconfig_path }}"
   retries: 3
   delay: 10
-  tags: [platform, helm-repos]
+  tags: [platform, seldon, seldon-system, helm-repos]
 
 - name: Create Seldon namespace
   kubernetes.core.k8s:
@@ -15,29 +15,31 @@
     api_version: v1
     kind: Namespace
     state: present
-  tags: [platform, namespace]
+  tags: [platform, seldon, seldon-system, namespace]
 
-- name: Deploy Seldon Core Operator
+- name: Install Seldon Core V2 CRDs
   kubernetes.core.helm:
-    name: "{{ seldon_name }}"
-    chart_ref: "{{ seldon_chart_ref }}"
+    name: seldon-core-v2-crds
+    chart_ref: "{{ seldon_crds_chart_ref }}"
+    chart_version: "{{ seldon_crds_chart_version }}"
+    release_namespace: "{{ seldon_namespace }}"
+    create_namespace: true
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_timeout: "{{ helm_wait_timeout }}"
+  tags: [platform, seldon, seldon-system, crds]
+
+- name: Install Seldon Core V2 Runtime
+  kubernetes.core.helm:
+    name: seldon-core-v2-runtime
+    chart_ref: "{{ seldon_runtime_chart_ref }}"
+    chart_version: "{{ seldon_runtime_chart_version }}"
     release_namespace: "{{ seldon_namespace }}"
     create_namespace: true
     kubeconfig: "{{ kubeconfig_path }}"
     wait: true
     wait_timeout: "{{ helm_wait_timeout }}"
     values:
-      usageMetrics:
-        enabled: "{{ seldon_usage_metrics }}"
-      istio:
-        enabled: "{{ seldon_istio_enabled }}"
-      ambassador:
-        enabled: "{{ seldon_ambassador_enabled }}"
-      certManager:
-        enabled: "{{ seldon_cert_manager_enabled }}"
-      keda:
-        enabled: "{{ seldon_keda_enabled }}"
-      
       # Controller configuration
       controllerManager:
         image:
@@ -49,11 +51,34 @@
           limits:
             cpu: "{{ seldon_manager_cpu_limit }}"
             memory: "{{ seldon_manager_memory_limit }}"
-
   register: seldon_deployment
   retries: "{{ helm_retries }}"
   delay: "{{ helm_retry_delay }}"
-  tags: [platform, seldon, helm-deploy]
+  tags: [platform, seldon, seldon-system, helm-deploy]
+
+- name: Install Seldon Core V2 servers
+  kubernetes.core.helm:
+    name: seldon-core-v2-servers
+    chart_ref: "{{ seldon_servers_chart_ref }}"
+    chart_version: "{{ seldon_servers_chart_version }}"
+    release_namespace: "{{ seldon_namespace }}"
+    create_namespace: true
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_timeout: "{{ helm_wait_timeout }}"
+  tags: [platform, seldon, seldon-system]
+
+- name: Install Seldon Core V2 setup
+  kubernetes.core.helm:
+    name: seldon-core-v2-setup
+    chart_ref: "{{ seldon_setup_chart_ref }}"
+    chart_version: "{{ seldon_setup_chart_version }}"
+    release_namespace: "{{ seldon_namespace }}"
+    create_namespace: true
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_timeout: "{{ helm_wait_timeout }}"
+  tags: [platform, seldon, seldon-system]
 
 - name: Wait for Seldon Core to be ready
   kubernetes.core.k8s_info:
@@ -66,7 +91,7 @@
       type: Available
       status: "True"
     wait_timeout: 300
-  tags: [platform, seldon, verify]
+  tags: [platform, seldon, seldon-system, verify]
 
 # FIXED: Remove the conflicting NodePort service creation
 # The Seldon operator will create its own services
@@ -137,7 +162,7 @@
                       limits:
                         memory: 1Gi
                         cpu: 1000m
-  tags: [platform, seldon, examples]
+  tags: [platform, seldon, seldon-system, examples]
 
 - name: Display Seldon Core deployment status
   debug:
@@ -159,7 +184,7 @@
       - "💡 Quick Commands:"
       - "- kubectl get seldondeployments -n {{ seldon_namespace }}"
       - "- kubectl apply -f <your-model.yaml>"
-  tags: [platform, summary]
+  tags: [platform, seldon, seldon-system, summary]
 
 # Add infrastructure-level registry access
 - name: Create container registry pull secret for Seldon platform
@@ -175,7 +200,7 @@
       data:
         .dockerconfigjson: "{{ ghcr_docker_config | b64encode }}"
   when: ghcr_docker_config is defined
-  tags: [platform, seldon, secrets]
+  tags: [platform, seldon, seldon-system, secrets]
 
 - name: Create base ClusterRole for Seldon deployments
   kubernetes.core.k8s:
@@ -195,7 +220,7 @@
       - apiGroups: ["apps"]
         resources: ["deployments"]
         verbs: ["get", "list", "watch"]
-  tags: [platform, seldon, rbac]
+  tags: [platform, seldon, seldon-system, rbac]
 
 - name: Create ClusterRoleBinding for default service account
   kubernetes.core.k8s:
@@ -213,4 +238,4 @@
         kind: ClusterRole
         name: seldon-deployment-manager
         apiGroup: rbac.authorization.k8s.io
-  tags: [platform, seldon, rbac]
+  tags: [platform, seldon, seldon-system, seldon, rbac]

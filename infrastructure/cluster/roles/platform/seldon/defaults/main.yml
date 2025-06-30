@@ -2,10 +2,23 @@
 # Seldon Core Configuration
 seldon_namespace: seldon-system
 seldon_name: seldon-core
-seldon_chart_ref: seldon/seldon-core-operator
+
+seldon_crds_chart_ref: seldon-charts/seldon-core-v2-crds
+seldon_crds_chart_version: "2.9.0"
+
+seldon_runtime_chart_ref: seldon-charts/seldon-core-v2-runtime
+seldon_runtime_chart_version: "2.9.0"
+
+seldon_servers_chart_ref: seldon-charts/seldon-core-v2-servers
+seldon_servers_chart_version: "2.9.0"
+
+seldon_setup_chart_ref: seldon-charts/seldon-core-v2-setup
+seldon_setup_chart_version: "2.9.0"
+
+
 
 # Operator Configuration
-seldon_operator_image_tag: 1.17.1
+seldon_operator_image_tag: 2.9.0
 seldon_manager_cpu_request: 100m
 seldon_manager_cpu_limit: 500m
 seldon_manager_memory_request: 128Mi
