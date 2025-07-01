@@ -1,0 +1,34 @@
+---
+- name: Add Argo Helm repository
+  kubernetes.core.helm_repository:
+    name: argo
+    repo_url: https://argoproj.github.io/argo-helm
+    kubeconfig: "{{ kubeconfig_path }}"
+  tags: [platform, argo-events, helm-repos]
+
+- name: Install Argo Events via Helm
+  kubernetes.core.helm:
+    name: argo-events
+    chart_ref: argo/argo-events
+    release_namespace: "{{ argo_events_namespace | default('argo-events') }}"
+    create_namespace: true
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_timeout: "{{ helm_wait_timeout | default(600) }}"
+  tags: [platform, argo-events, helm-install]  
+
+- name: Deploy shared EventSources
+  import_tasks: eventsource.yml
+  tags: [platform, argo-events, eventsource]
+
+- name: Deploy shared Sensors
+  import_tasks: sensor.yml
+  tags: [platform, argo-events, sensor]
+
+- name: Apply Argo Events native EventBus
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    namespace: "{{ argo_events_namespace | default('argo-events') }}"
+    src: https://raw.githubusercontent.com/argoproj/argo-events/stable/examples/eventbus/native.yaml
+  tags: [platform, argo-events, eventbus]

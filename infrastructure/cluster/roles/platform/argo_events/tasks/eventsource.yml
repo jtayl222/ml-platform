@@ -1,0 +1,22 @@
+---
+- name: Apply shared Argo Events EventSources
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    namespace: argo-events
+    src: "{{ item }}"
+  with_fileglob:
+    - "{{ playbook_dir }}/../manifests/argo-events/eventsources/*.yaml"
+  register: argo_events_eventsource_result
+  retries: 3
+  delay: 10
+  tags: [platform, argo-events, eventsource]
+
+- name: Verify Argo Events EventSources are available
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: argoproj.io/v1alpha1
+    kind: EventSource
+    namespace: argo-events
+  register: argo_events_eventsource_check
+  tags: [platform, argo-events, eventsource, verify]

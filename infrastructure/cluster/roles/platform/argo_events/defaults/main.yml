@@ -1,0 +1,16 @@
+---
+# Default variables for the argo_events role
+
+argo_events_namespace: argo-events
+
+# Example EventSource defaults (override as needed)
+eventsource_name: example-eventsource
+eventsource_type: webhook
+eventsource_config:
+  example:
+    endpoint: /example
+    method: POST
+    port: 12000
+
+# Example Sensor defaults (override as needed)
+sensor_name: example-

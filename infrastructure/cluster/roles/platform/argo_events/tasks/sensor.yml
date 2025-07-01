@@ -1,0 +1,22 @@
+---
+- name: Apply shared Argo Events Sensors
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    namespace: argo-events
+    src: "{{ item }}"
+  with_fileglob:
+    - "{{ playbook_dir }}/../manifests/argo-events/sensors/*.yaml"
+  register: argo_events_sensor_result
+  retries: 3
+  delay: 10
+  tags: [platform, argo-events, sensor]
+
+- name: Verify Argo Events Sensors are available
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: argoproj.io/v1alpha1
+    kind: Sensor
+    namespace: argo-events
+  register: argo_events_sensor_check
+  tags: [platform, argo-events, sensor, verify]

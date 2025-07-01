@@ -78,7 +78,23 @@
     kubeconfig: "{{ kubeconfig_path }}"
     wait: true
     wait_timeout: "{{ helm_wait_timeout }}"
-  tags: [platform, seldon, seldon-system]
+    values:
+      webhook:
+        enabled: true
+        port: 443
+      controllerManager:
+        webhookPort: 443
+        resources:
+          requests:
+            cpu: "{{ seldon_manager_cpu_request }}"
+            memory: "{{ seldon_manager_memory_request }}"
+          limits:
+            cpu: "{{ seldon_manager_cpu_limit }}"
+            memory: "{{ seldon_manager_memory_limit }}"
+  register: seldon_setup_deployment
+  retries: "{{ helm_retries }}"
+  delay: "{{ helm_retry_delay }}"
+  tags: [platform, seldon, seldon-system, helm-deploy]
 
 - name: Wait for Seldon Core to be ready
   kubernetes.core.k8s_info:

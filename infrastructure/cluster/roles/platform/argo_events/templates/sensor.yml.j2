@@ -1,0 +1,10 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: {{ sensor_name }}
+  namespace: argo-events
+spec:
+  dependencies:
+    {{ sensor_dependencies | to_nice_yaml(indent=4) | indent(4) }}
+  triggers:
+    {{ sensor_triggers | to_nice_yaml(indent=4) | indent(4) }}

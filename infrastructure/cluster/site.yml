@@ -186,6 +186,11 @@
             name: platform/argo_workflows
           tags: [platform, workflows]
 
+        - name: Deploy Argo Events
+          include_role:
+            name: platform/argo_events
+          tags: [platform, argo-events]
+
         # === DEVELOPMENT ENVIRONMENT ===
         - name: Deploy JupyterHub
           include_role:
