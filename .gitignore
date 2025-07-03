@@ -134,3 +134,5 @@ target/
 monitoring-data/
 backup-data/
 local-storage/
+
+.claude
