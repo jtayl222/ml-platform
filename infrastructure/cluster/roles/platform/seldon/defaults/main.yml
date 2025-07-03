@@ -31,11 +31,6 @@ seldon_ambassador_enabled: false
 seldon_cert_manager_enabled: false
 seldon_keda_enabled: false
 
-# Service Configuration - FIXED PORT CONFLICT
-seldon_service_type: NodePort
-seldon_nodeport: 32000  # Changed from 30900 to avoid conflict
-seldon_grpc_nodeport: 32001  # For gRPC traffic
-
 # Helm Configuration
 helm_wait_timeout: 600s
 helm_retries: 3

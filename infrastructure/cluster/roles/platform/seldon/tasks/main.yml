@@ -51,6 +51,18 @@
           limits:
             cpu: "{{ seldon_manager_cpu_limit }}"
             memory: "{{ seldon_manager_memory_limit }}"
+      istio:
+        enabled: true
+        gateway: "istio-system/istio-ingressgateway"
+        tls:
+          enabled: true
+          mode: STRICT
+      meshGateway:
+        enabled: true
+        replicas: 1
+        service:
+          enabled: true
+          type: ClusterIP
   register: seldon_deployment
   retries: "{{ helm_retries }}"
   delay: "{{ helm_retry_delay }}"

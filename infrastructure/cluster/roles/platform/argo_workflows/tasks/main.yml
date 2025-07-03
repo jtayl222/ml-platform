@@ -20,7 +20,7 @@
 - name: Ensure Argo Workflows MinIO credentials sealed secret is applied
   kubernetes.core.k8s:
     kubeconfig: "{{ kubeconfig_path }}"
-    src: "{{ playbook_dir }}/../manifests/sealed-secrets/minio-credentials-wf.yaml" # This secret is for workflows to use MinIO
+    src: "{{ playbook_dir }}/../manifests/sealed-secrets/argowf/ml-platform-sealed-secret.yaml"
     state: present
     namespace: "{{ argowf_namespace }}" # Explicitly state namespace, though manifest should have it
   register: argowf_minio_secret_result
@@ -33,7 +33,7 @@
     kubeconfig: "{{ kubeconfig_path }}"
     api_version: v1
     kind: Secret
-    name: minio-credentials-wf # Verifying the secret for workflows
+    name: ml-platform # Verifying the secret for workflows
     namespace: "{{ argowf_namespace }}"
   register: argowf_minio_secret_check
   until: argowf_minio_secret_check.resources | length > 0

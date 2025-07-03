@@ -28,21 +28,14 @@
   kubernetes.core.k8s:
     kubeconfig: "{{ kubeconfig_path }}"
     state: present
-    src: "{{ playbook_dir }}/../manifests/sealed-secrets/jupyterhub-minio.yaml"
-  tags: [platform, jupyter, secrets]
-
-- name: Ensure jupyterhub-mlflow SealedSecret is applied
-  kubernetes.core.k8s:
-    kubeconfig: "{{ kubeconfig_path }}"
-    state: present
-    src: "{{ playbook_dir }}/../manifests/sealed-secrets/jupyterhub-mlflow.yaml"
+    src: "{{ playbook_dir }}/../manifests/sealed-secrets/jupyterhub/ml-platform-sealed-secret.yaml"
   tags: [platform, jupyter, secrets]
 
 - name: Ensure jupyterhub-ghcr SealedSecret is applied
   kubernetes.core.k8s:
     kubeconfig: "{{ kubeconfig_path }}"
     state: present
-    src: "{{ playbook_dir }}/../manifests/sealed-secrets/jupyterhub-ghcr.yaml"
+    src: "{{ playbook_dir }}/../manifests/sealed-secrets/jupyterhub/ghcr-sealed-secret.yaml"
   tags: [platform, jupyter, secrets]
 
 - name: Deploy JupyterHub

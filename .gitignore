@@ -13,6 +13,7 @@ kubeconfig*
 # Sealed Secrets - Generated Files
 # ---------------------------------
 infrastructure/manifests/sealed-secrets/**
+infrastructure/packages/**
 !infrastructure/manifests/sealed-secrets/.gitkeep
 !infrastructure/manifests/sealed-secrets/README.md
 
