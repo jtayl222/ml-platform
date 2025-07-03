@@ -62,6 +62,22 @@ This will apply all manifests in those directories.
 
 To deploy a custom EventSource or Sensor, override the relevant variables or provide manifests in the directories above.
 
+## Listing EventSources and Sensors
+
+To see which EventSources and Sensors are deployed, use:
+
+```sh
+kubectl get eventsources -n argo-events
+kubectl get sensors -n argo-events
+```
+
+For more details:
+
+```sh
+kubectl describe eventsources -n argo-events
+kubectl describe sensors -n argo-events
+```
+
 ## References
 
 - [Argo Events Documentation](https://argoproj.github.io/argo-events/)
