@@ -14,8 +14,9 @@ kubeconfig*
 # ---------------------------------
 infrastructure/manifests/sealed-secrets/**
 infrastructure/packages/**
+infrastructure/*-ml-secrets-*.tar.gz
 !infrastructure/manifests/sealed-secrets/.gitkeep
-!infrastructure/manifests/sealed-secrets/README.md
+!infrastructure/README.md
 
 # kubernetes Secrets & ConfigMaps
 # --------------------------------
