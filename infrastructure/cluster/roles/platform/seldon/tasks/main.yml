@@ -40,7 +40,7 @@
     wait: true
     wait_timeout: "{{ helm_wait_timeout }}"
     values:
-      # Controller configuration
+      # Runtime configuration (no controller settings here)
       controllerManager:
         image:
           tag: "{{ seldon_operator_image_tag }}"
@@ -51,11 +51,6 @@
           limits:
             cpu: "{{ seldon_manager_cpu_limit }}"
             memory: "{{ seldon_manager_memory_limit }}"
-        env:
-          - name: CLUSTERWIDE
-            value: "true"
-        args:
-          - --clusterwide=true
       istio:
         enabled: true
         gateway: "istio-system/istio-ingressgateway"
@@ -96,6 +91,10 @@
     wait: true
     wait_timeout: "{{ helm_wait_timeout }}"
     values:
+      # IMPORTANT: Controller configuration belongs in the SETUP chart, not runtime chart
+      # The setup chart installs the actual controller deployment
+      controller:
+        clusterwide: true  # Enable cluster-wide model watching across all namespaces
       webhook:
         enabled: true
         port: 443

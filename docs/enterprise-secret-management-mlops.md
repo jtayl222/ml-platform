@@ -492,6 +492,15 @@ This implementation follows enterprise-grade patterns used by leading technology
 - Self-service deployment for application teams
 - Reduced infrastructure team bottlenecks
 
+### **Configuration Reliability**
+**✅ Defense against ecosystem problems:**
+- Systematic investigation techniques for broken operators
+- Evidence-based debugging over documentation trust
+- Workaround strategies for unreliable Helm charts
+- Documentation of working configurations vs. official claims
+
+*Note: During implementation, we discovered that Seldon Core uses multiple Helm charts with unclear responsibility boundaries. The `clusterwide` setting must be configured on the `seldon-core-v2-setup` chart (which installs the controller), not the `seldon-core-v2-runtime` chart (which we were initially configuring). This required systematic investigation to identify the correct chart mapping. See our [CRD Investigation Tutorial](kubectl-crd-investigation-tutorial.md) for the complete debugging process.*
+
 ## Common Pitfalls and Solutions
 
 ### Pitfall 1: Over-Engineering
