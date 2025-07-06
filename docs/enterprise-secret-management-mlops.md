@@ -525,6 +525,38 @@ This implementation follows enterprise-grade patterns used by leading technology
 
 ## Advanced Considerations
 
+### Cross-Namespace Access Challenges
+
+**Real-World Issue:** During implementation, we encountered a common enterprise challenge where Argo Workflows controller (running in `argowf` namespace) needed access to secrets in application namespaces (`iris-demo`, `financial-ml`, etc.).
+
+**Impact:** ML pipeline deployment blocked at container build step:
+```
+✅ train → ✅ validate → ✅ semantic-versioning → ❌ kaniko (secret access denied)
+```
+
+**Enterprise Solutions:**
+
+1. **Immediate Fix (Temporary):**
+   ```yaml
+   # Minimal RBAC for cross-namespace secret access
+   apiVersion: rbac.authorization.k8s.io/v1
+   kind: ClusterRole
+   metadata:
+     name: argowf-cross-namespace-secrets
+   rules:
+   - apiGroups: [""]
+     resources: ["secrets"]
+     verbs: ["get", "list"]
+     resourceNames: ["ghcr", "ml-platform"]  # Specific secrets only
+   ```
+
+2. **Target Architecture (Production):**
+   - **On-Premises:** External Secrets Operator + HashiCorp Vault
+   - **Cloud:** External Secrets Operator + Cloud Provider Secret Manager
+   - **Hybrid:** Enhanced Sealed Secrets with automated cross-namespace sync
+
+**See:** [Cross-Namespace Secrets Documentation](cross-namespace-secrets-temporary-fix.md) for complete analysis and migration planning.
+
 ### Multi-Cluster Deployments
 For organizations with multiple Kubernetes clusters, extend this pattern with:
 
@@ -559,6 +591,7 @@ Add monitoring for:
 - Secret decryption failures
 - Credential expiration warnings
 - Unauthorized access attempts
+- Cross-namespace access patterns
 - Pipeline credential usage patterns
 
 ## Conclusion
@@ -568,6 +601,8 @@ Enterprise secret management in MLOps requires balancing security, operational e
 This approach transforms secret management from a source of friction into an enabler of developer velocity. When combined with the MLOps components I've discussed in my previous articles, it creates a complete platform that can support enterprise-scale machine learning operations.
 
 The key insight is that technical solutions alone aren't enough. Success requires establishing clear organizational patterns that allow infrastructure teams to maintain security while enabling application teams to move fast.
+
+**Real-world complexity:** As demonstrated in our [cross-namespace access challenges](cross-namespace-secrets-temporary-fix.md), even well-designed secret management systems encounter operational complexities that require systematic analysis and both immediate and long-term solutions.
 
 You can explore complete implementations of these patterns across my MLOps repositories:
 

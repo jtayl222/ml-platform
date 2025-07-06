@@ -94,7 +94,8 @@ infrastructure/
 ## Related Documentation
 
 - **Implementation Guide:** `docs/enterprise-secret-management-mlops.md`
-- **Script Documentation:** `scripts/README.md` (if available)
+- **Cross-Namespace Issue:** `docs/cross-namespace-secrets-temporary-fix.md`
+- **CRD Investigation:** `docs/kubectl-crd-investigation-tutorial.md`
 - **Application Examples:** Referenced GitHub repositories
 - **Security Policies:** Internal security documentation
 
