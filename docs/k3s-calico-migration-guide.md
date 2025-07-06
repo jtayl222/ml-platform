@@ -73,10 +73,9 @@ kubectl get svc -A -o wide > services-pre-migration.txt
 
 ### **Phase 2: Cluster Migration**
 ```bash
-# 1. Run Ansible playbook with Calico enabled
+# 1. Run Ansible playbook (Calico enabled by default)
 ansible-playbook -i inventory/production site.yml \
-  --tags="k3s,calico" \
-  --extra-vars="calico_enabled=true"
+  --tags="k3s,calico"
 
 # 2. Verify Calico installation
 kubectl get pods -n calico-system
@@ -124,7 +123,7 @@ curl -X POST http://[ingress]/v2/models/test-model-simple/infer -d '[test-data]'
 # 1. Restore Flannel configuration
 ansible-playbook -i inventory/production site.yml \
   --tags="k3s" \
-  --extra-vars="calico_enabled=false flannel_backend=vxlan"
+  --extra-vars="calico_enabled=false"
 
 # 2. Restore original CIDRs
 # k3s_cluster_cidr: "10.42.0.0/16"
