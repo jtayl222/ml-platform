@@ -1,0 +1,61 @@
+---
+# Emergency fix for K3s intra-pod networking issue
+# Uses hostNetwork as temporary workaround per expert recommendations
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k3s-networking-emergency-fix
+  namespace: financial-ml
+  annotations:
+    description: "Emergency hostNetwork workaround for K3s localhost connectivity issue"
+    warning: "Temporary solution - reduces security isolation"
+    expert-reference: "ChatGPT-4.5 and Grok expert consultation recommendations"
+data:
+  status: "emergency-workaround-active"
+
+---
+# Emergency hostNetwork patch for MLServer StatefulSet
+# Based on expert consultation - use hostNetwork to bypass K3s restrictions
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mlserver
+  namespace: financial-ml
+spec:
+  template:
+    spec:
+      # Emergency workaround: Use host networking to bypass K3s restrictions
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+      - name: mlserver
+        env:
+        - name: MLSERVER_HOST
+          value: "127.0.0.1"
+        - name: MLSERVER_HTTP_PORT
+          value: "9000"
+        - name: MLSERVER_GRPC_PORT
+          value: "9500"
+        ports:
+        - containerPort: 9000
+          hostPort: 9000
+          name: server-http
+        - containerPort: 9500
+          hostPort: 9500
+          name: server-grpc
+      - name: agent
+        env:
+        - name: SELDON_SERVER_HOST
+          value: "127.0.0.1"
+        - name: SELDON_SERVER_HTTP_PORT
+          value: "9000" 
+        - name: SELDON_SERVER_GRPC_PORT
+          value: "9500"
+      - name: rclone
+        env:
+        - name: RCLONE_LOG_LEVEL
+          value: "INFO"
+        ports:
+        - containerPort: 5572
+          hostPort: 5572
+          name: rclone
