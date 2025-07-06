@@ -22,6 +22,11 @@
   when: k3s_state == "absent"
   tags: [uninstall, k3s, control_plane]
 
+- name: Install Calico CNI
+  include_tasks: calico.yml
+  when: k3s_state == "present" and calico_enabled | default(false)
+  tags: [calico, cni, networking]
+
 - name: Verify installation
   include_tasks: verify.yml
   when: k3s_state == "present"

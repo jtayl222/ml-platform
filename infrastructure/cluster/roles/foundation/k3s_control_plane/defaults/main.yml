@@ -14,11 +14,21 @@ k3s_server_args:
   - "--write-kubeconfig-mode=644"
   - "--disable=traefik"
   - "--disable=servicelb"
-  - "--flannel-backend=vxlan"
+  - "--disable-network-policy"
+  - "--flannel-backend=none"
 
-# Network configuration
-k3s_cluster_cidr: "10.42.0.0/16"
-k3s_service_cidr: "10.43.0.0/16"
+# Network configuration (Calico-compatible)
+k3s_cluster_cidr: "10.244.0.0/16"
+k3s_service_cidr: "10.96.0.0/12"
+
+# Calico configuration
+calico_enabled: true
+calico_version: "v3.28.2"
+calico_datastore: "kubernetes"
+calico_ipv4pool_cidr: "10.244.0.0/16"
+calico_node_image: "calico/node:{{ calico_version }}"
+calico_cni_image: "calico/cni:{{ calico_version }}"
+calico_kube_controllers_image: "calico/kube-controllers:{{ calico_version }}"
 
 # Security
 k3s_selinux: false

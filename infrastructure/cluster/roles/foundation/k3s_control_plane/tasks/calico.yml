@@ -1,0 +1,82 @@
+---
+- name: Wait for K3s to be ready
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Node
+    kubeconfig: "{{ k3s_config_dir }}/k3s.yaml"
+  register: k3s_nodes
+  until: k3s_nodes.resources | length > 0
+  retries: 30
+  delay: 5
+  tags: [calico, cni, networking]
+
+- name: Create Calico manifests directory
+  file:
+    path: "{{ k3s_config_dir }}/manifests"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  tags: [calico, cni, networking]
+
+- name: Download Calico operator manifest
+  get_url:
+    url: "https://raw.githubusercontent.com/projectcalico/calico/{{ calico_version }}/manifests/tigera-operator.yaml"
+    dest: "{{ k3s_config_dir }}/manifests/tigera-operator.yaml"
+    mode: '0644'
+  tags: [calico, cni, networking]
+
+- name: Apply Calico operator
+  kubernetes.core.k8s:
+    state: present
+    src: "{{ k3s_config_dir }}/manifests/tigera-operator.yaml"
+    kubeconfig: "{{ k3s_config_dir }}/k3s.yaml"
+  tags: [calico, cni, networking]
+
+- name: Create Calico installation manifest
+  template:
+    src: calico-installation.yaml.j2
+    dest: "{{ k3s_config_dir }}/manifests/calico-installation.yaml"
+    mode: '0644'
+  tags: [calico, cni, networking]
+
+- name: Apply Calico installation
+  kubernetes.core.k8s:
+    state: present
+    src: "{{ k3s_config_dir }}/manifests/calico-installation.yaml"
+    kubeconfig: "{{ k3s_config_dir }}/k3s.yaml"
+  tags: [calico, cni, networking]
+
+- name: Wait for Calico installation to be ready
+  kubernetes.core.k8s_info:
+    api_version: operator.tigera.io/v1
+    kind: Installation
+    name: default
+    kubeconfig: "{{ k3s_config_dir }}/k3s.yaml"
+    wait: true
+    wait_condition:
+      type: Ready
+      status: "True"
+    wait_timeout: 300
+  tags: [calico, cni, networking]
+
+- name: Wait for Calico pods to be ready
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: calico-system
+    label_selectors:
+      - k8s-app=calico-node
+    kubeconfig: "{{ k3s_config_dir }}/k3s.yaml"
+  register: calico_pods
+  until: >
+    calico_pods.resources | length > 0 and
+    calico_pods.resources | selectattr('status.phase', 'eq', 'Running') | list | length == calico_pods.resources | length
+  retries: 30
+  delay: 10
+  tags: [calico, cni, networking]
+
+- name: Display Calico installation status
+  debug:
+    msg: "✅ Calico CNI installed successfully - {{ calico_pods.resources | length }} nodes ready"
+  tags: [always]

@@ -1,2 +1,20 @@
-null
-...
+---
+# K3s worker node configuration
+k3s_node_role: "worker"
+k3s_state: "present"
+
+# Network configuration (must match control plane)
+k3s_cluster_cidr: "10.244.0.0/16"
+k3s_service_cidr: "10.96.0.0/12"
+
+# K3s worker-specific configuration
+k3s_worker_args:
+  - "--node-label=node-role.kubernetes.io/worker=true"
+
+# Installation
+k3s_install_dir: "/usr/local/bin"
+k3s_install_script_url: "https://get.k3s.io"
+
+# Security
+k3s_selinux: false
+k3s_rootless: false

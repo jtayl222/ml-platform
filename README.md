@@ -216,6 +216,8 @@ This platform supports the entire machine learning lifecycle:
 - [🔧 Administration](docs/administration.md) - Day-2 operations
 - [🐛 Troubleshooting](docs/troubleshooting.md) - Common issues & solutions
 - [📈 Scaling Guide](docs/scaling.md) - Growth strategies
+- [🔗 CNI Migration](docs/k3s-calico-migration-guide.md) - Flannel to Calico upgrade
+- [📋 Migration Analysis](docs/flannel-to-calico-migration-required.md) - Technical justification
 
 ### **👩‍💻 Development & Usage**
 - [🧪 Running Experiments](docs/experiments.md) - MLflow integration

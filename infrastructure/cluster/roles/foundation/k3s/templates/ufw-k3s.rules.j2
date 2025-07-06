@@ -14,7 +14,9 @@ ufw allow 22/tcp
 # Allow from {{ host }} ({{ hostvars[host]['ansible_default_ipv4']['address'] }})
 ufw allow from {{ hostvars[host]['ansible_default_ipv4']['address'] }} to any port 6443 proto tcp
 ufw allow from {{ hostvars[host]['ansible_default_ipv4']['address'] }} to any port 10250 proto tcp  
-ufw allow from {{ hostvars[host]['ansible_default_ipv4']['address'] }} to any port 8472 proto udp
+ufw allow from {{ hostvars[host]['ansible_default_ipv4']['address'] }} to any port 179 proto tcp
+ufw allow from {{ hostvars[host]['ansible_default_ipv4']['address'] }} to any port 4789 proto udp
+ufw allow from {{ hostvars[host]['ansible_default_ipv4']['address'] }} to any port 5473 proto tcp
 ufw allow from {{ hostvars[host]['ansible_default_ipv4']['address'] }} to any port 9100 proto tcp
 {% endif %}
 {% endfor %}
@@ -22,9 +24,9 @@ ufw allow from {{ hostvars[host]['ansible_default_ipv4']['address'] }} to any po
 # NodePort range for external access
 ufw allow 30000:32767/tcp
 
-# Pod and service networks
-ufw allow from 10.42.0.0/16
-ufw allow from 10.43.0.0/16
+# Pod and service networks (Calico)
+ufw allow from 10.244.0.0/16
+ufw allow from 10.96.0.0/12
 
 # Enable UFW
 ufw --force enable
