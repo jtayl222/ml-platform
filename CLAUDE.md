@@ -9,7 +9,7 @@ This is a production-ready MLOps platform built on K3s (lightweight Kubernetes) 
 ## Architecture
 
 ### Infrastructure Layer
-- **K3s Cluster**: 1 control plane + 4 worker nodes (36 CPU cores, 250GB RAM total)
+- **K3s Cluster**: 1 control plane + 4 worker nodes (36 CPU cores, 260GB RAM total)
 - **Storage**: MinIO (S3-compatible) + NFS + Local storage
 - **Security**: Sealed Secrets for GitOps-safe credential management
 - **Service Mesh**: Istio (optional, for KServe)
@@ -72,14 +72,28 @@ kubectl wait --for=condition=Ready nodes --all --timeout=300s
 ```
 
 ### Platform Services Access
-- **MLflow**: `http://<cluster-ip>:30800`
+- **MLflow**: `http://192.168.1.201:5000` (LoadBalancer) or `http://<cluster-ip>:30800` (NodePort fallback)
+- **MinIO API**: `http://192.168.1.200:9000` (LoadBalancer) or `http://<cluster-ip>:30900` (NodePort fallback)
+- **MinIO Console**: `http://192.168.1.202:9001` (LoadBalancer) or `http://<cluster-ip>:30901` (NodePort fallback)
 - **JupyterHub**: `http://<cluster-ip>:30888`
 - **Argo CD**: `http://<cluster-ip>:30080`
 - **Argo Workflows**: `http://<cluster-ip>:32746`
 - **Grafana**: `http://<cluster-ip>:30300`
 - **Prometheus**: `http://<cluster-ip>:30090`
-- **MinIO Console**: `http://<cluster-ip>:30901`
 - **Kubernetes Dashboard**: `http://<cluster-ip>:30443`
+
+### Stable Service Configuration
+
+For consistent service access across deployments, use LoadBalancer endpoints:
+
+```bash
+# Stable endpoints (recommended with MetalLB)
+export MLFLOW_TRACKING_URI=http://192.168.1.201:5000
+export MINIO_ENDPOINT=http://192.168.1.200:9000
+
+# Deploy platform with MetalLB LoadBalancer support
+ansible-playbook -i inventory/production/hosts infrastructure/cluster/site.yml -e metallb_state=present
+```
 
 ## Directory Structure
 
@@ -246,6 +260,29 @@ ansible-playbook -i inventory/production/hosts infrastructure/cluster/site.yml -
 - Security follows enterprise best practices with RBAC and sealed secrets
 - GitOps approach enables version-controlled infrastructure management
 - Current focus is on Flannel to Calico CNI migration for Seldon Core v2 compatibility
+
+## Development Guidelines
+
+- **YAML Template Rule**: Never mix Jinja2 templating syntax in YAML values - use conditional Ansible tasks instead
+- **Service Pattern**: Use separate tasks for LoadBalancer (MetalLB) vs NodePort (fallback) service types
+- **Documentation**: Always update CLAUDE.md when adding new operational patterns
+
+## Job-Seeking Context
+
+**MLOps Engineer Portfolio Evidence**: This repository demonstrates production-grade MLOps platform engineering skills. For job applications:
+
+**Recommended Git Attribution**:
+- **Personal commits**: Show your technical decision-making and platform design skills
+- **AI-assisted commits**: Be transparent about AI collaboration while emphasizing your orchestration and validation
+- **Example**: "Implement Calico CNI migration strategy (AI-assisted research and validation)"
+
+**Key Demonstration Areas**:
+- Infrastructure as Code (Ansible, K3s, Calico networking)
+- Platform reliability engineering (data persistence, service mesh)
+- MLOps stack integration (MLflow, Seldon, Argo workflows)
+- Production troubleshooting and incident response
+
+**Value Proposition**: Shows ability to leverage modern AI tools effectively while maintaining technical ownership and validation of solutions - a crucial skill for 2025+ MLOps roles.
 
 ## Article Documentation
 

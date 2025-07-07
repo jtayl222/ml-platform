@@ -303,13 +303,3 @@
         - k3s_state is not defined or k3s_state != "absent"
       tags: [summary]
 
-    # NFS Cleanup (nfs_server only) - FINAL STEP
-    - name: Clean up NFS storage
-      shell: |
-        find /srv/nfs/kubernetes/ -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} \;
-        echo "Cleaned up NFS storage"
-      become: true
-      when: 
-        - inventory_hostname in groups['nfs_server']
-        - k3s_state is defined and k3s_state == "absent"
-      tags: [cleanup, nfs-cleanup]
