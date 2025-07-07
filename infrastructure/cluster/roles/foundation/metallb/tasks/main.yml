@@ -1,0 +1,247 @@
+---
+# MetalLB Installation Tasks
+
+- name: MetalLB Installation and Configuration
+  block:
+    - name: Create MetalLB namespace
+      kubernetes.core.k8s:
+        name: "{{ metallb_namespace }}"
+        api_version: v1
+        kind: Namespace
+        state: present
+        kubeconfig: "{{ kubeconfig_path }}"
+        validate_certs: false
+      tags: [metallb, namespace]
+
+    - name: Download MetalLB manifest
+      uri:
+        url: "https://raw.githubusercontent.com/metallb/metallb/{{ metallb_version }}/config/manifests/metallb-native.yaml"
+        dest: /tmp/metallb-native.yaml
+        mode: '0644'
+      tags: [metallb, install]
+
+    - name: Apply MetalLB CRDs first
+      kubernetes.core.k8s:
+        state: present
+        src: /tmp/metallb-native.yaml
+        wait: false
+        kubeconfig: "{{ kubeconfig_path }}"
+        validate_certs: false
+      tags: [metallb, install]
+
+    - name: Wait for CRDs to be established
+      kubernetes.core.k8s_info:
+        api_version: apiextensions.k8s.io/v1
+        kind: CustomResourceDefinition
+        name: "{{ item }}"
+        wait: true
+        wait_condition:
+          type: Established
+          status: "True"
+        wait_timeout: 120
+        kubeconfig: "{{ kubeconfig_path }}"
+        validate_certs: false
+      loop:
+        - ipaddresspools.metallb.io
+        - l2advertisements.metallb.io
+        - bgpadvertisements.metallb.io
+        - bgppeers.metallb.io
+        - communities.metallb.io
+      tags: [metallb, install]
+
+    - name: Wait for MetalLB controller deployment to exist
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        name: controller
+        namespace: "{{ metallb_namespace }}"
+        kubeconfig: "{{ kubeconfig_path }}"
+        validate_certs: false
+      register: controller_check
+      until: controller_check.resources | length > 0
+      retries: 30
+      delay: 5
+      tags: [metallb, wait]
+
+    - name: Wait for MetalLB controller to be ready
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        name: controller
+        namespace: "{{ metallb_namespace }}"
+        kubeconfig: "{{ kubeconfig_path }}"
+        validate_certs: false
+      register: controller_status
+      until: 
+        - controller_status.resources | length > 0
+        - controller_status.resources[0].status.readyReplicas is defined
+        - controller_status.resources[0].status.readyReplicas >= 1
+      retries: 30
+      delay: 6
+      tags: [metallb, wait]
+
+    - name: Wait for MetalLB speaker daemonset to exist
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: DaemonSet
+        name: speaker
+        namespace: "{{ metallb_namespace }}"
+        kubeconfig: "{{ kubeconfig_path }}"
+        validate_certs: false
+      register: speaker_check
+      until: speaker_check.resources | length > 0
+      retries: 30
+      delay: 5
+      tags: [metallb, wait]
+
+    - name: Check MetalLB speaker status
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: DaemonSet
+        name: speaker
+        namespace: "{{ metallb_namespace }}"
+        kubeconfig: "{{ kubeconfig_path }}"
+        validate_certs: false
+      register: speaker_initial_check
+      tags: [metallb, wait]
+
+    - name: Debug speaker status
+      debug:
+        msg:
+          - "Speaker DaemonSet found: {{ speaker_initial_check.resources | length > 0 }}"
+          - "Desired: {{ speaker_initial_check.resources[0].status.desiredNumberScheduled if speaker_initial_check.resources | length > 0 else 'N/A' }}"
+          - "Ready: {{ speaker_initial_check.resources[0].status.numberReady if speaker_initial_check.resources | length > 0 else 'N/A' }}"
+      when: speaker_initial_check.resources | length > 0
+      tags: [metallb, wait, debug]
+
+    - name: Wait for MetalLB speaker to be ready
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: DaemonSet
+        name: speaker
+        namespace: "{{ metallb_namespace }}"
+        kubeconfig: "{{ kubeconfig_path }}"
+        validate_certs: false
+      register: speaker_status
+      until: 
+        - speaker_status.resources | length > 0
+        - speaker_status.resources[0].status.numberReady is defined
+        - speaker_status.resources[0].status.numberReady == speaker_status.resources[0].status.desiredNumberScheduled
+      retries: 10
+      delay: 5
+      failed_when: false
+      tags: [metallb, wait]
+
+    - name: Final speaker verification
+      debug:
+        msg: "MetalLB Speaker DaemonSet is {{ 'ready' if (speaker_status.resources | length > 0 and speaker_status.resources[0].status.numberReady == speaker_status.resources[0].status.desiredNumberScheduled) else 'not fully ready but continuing' }}"
+      tags: [metallb, wait]
+
+    - name: Create MetalLB IP Address Pool
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: metallb.io/v1beta1
+          kind: IPAddressPool
+          metadata:
+            name: "{{ metallb_ip_pool_name }}"
+            namespace: "{{ metallb_namespace }}"
+          spec:
+            addresses:
+              - "{{ metallb_ip_range }}"
+            autoAssign: true
+        kubeconfig: "{{ kubeconfig_path }}"
+        validate_certs: false
+      register: ippool_result
+      retries: 3
+      delay: 10
+      tags: [metallb, config, ippool]
+
+    - name: Create MetalLB L2Advertisement
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: metallb.io/v1beta1
+          kind: L2Advertisement
+          metadata:
+            name: "{{ metallb_advertisement_name }}"
+            namespace: "{{ metallb_namespace }}"
+          spec:
+            ipAddressPools:
+              - "{{ metallb_ip_pool_name }}"
+        kubeconfig: "{{ kubeconfig_path }}"
+        validate_certs: false
+      register: advertisement_result
+      retries: 3
+      delay: 10
+      tags: [metallb, config, advertisement]
+
+    - name: Clean up downloaded manifest
+      file:
+        path: /tmp/metallb-native.yaml
+        state: absent
+      tags: [metallb, cleanup]
+
+    - name: Verify MetalLB installation
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: "{{ metallb_namespace }}"
+        label_selectors:
+          - "app=metallb"
+        kubeconfig: "{{ kubeconfig_path }}"
+        validate_certs: false
+      register: metallb_pods
+      tags: [metallb, verify]
+
+    - name: Display MetalLB installation status
+      debug:
+        msg: 
+          - "MetalLB installation completed successfully"
+          - "Namespace: {{ metallb_namespace }}"
+          - "IP Pool: {{ metallb_ip_pool_name }} ({{ metallb_ip_range }})"
+          - "Running pods: {{ metallb_pods.resources | length }}"
+      tags: [metallb, verify]
+
+  when: metallb_state == "present"
+
+- name: MetalLB Uninstallation
+  block:
+    - name: Remove MetalLB L2Advertisement
+      kubernetes.core.k8s:
+        state: absent
+        api_version: metallb.io/v1beta1
+        kind: L2Advertisement
+        name: "{{ metallb_advertisement_name }}"
+        namespace: "{{ metallb_namespace }}"
+      tags: [metallb, uninstall]
+
+    - name: Remove MetalLB IP Address Pool
+      kubernetes.core.k8s:
+        state: absent
+        api_version: metallb.io/v1beta1
+        kind: IPAddressPool
+        name: "{{ metallb_ip_pool_name }}"
+        namespace: "{{ metallb_namespace }}"
+      tags: [metallb, uninstall]
+
+    - name: Remove MetalLB manifest
+      kubernetes.core.k8s:
+        state: absent
+        src: "https://raw.githubusercontent.com/metallb/metallb/{{ metallb_version }}/config/manifests/metallb-native.yaml"
+      tags: [metallb, uninstall]
+
+    - name: Remove MetalLB namespace
+      kubernetes.core.k8s:
+        name: "{{ metallb_namespace }}"
+        api_version: v1
+        kind: Namespace
+        state: absent
+      tags: [metallb, uninstall]
+
+    - name: Display MetalLB uninstallation status
+      debug:
+        msg: "MetalLB has been successfully uninstalled"
+      tags: [metallb, uninstall]
+
+  when: metallb_state == "absent"

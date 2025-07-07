@@ -246,3 +246,15 @@ ansible-playbook -i inventory/production/hosts infrastructure/cluster/site.yml -
 - Security follows enterprise best practices with RBAC and sealed secrets
 - GitOps approach enables version-controlled infrastructure management
 - Current focus is on Flannel to Calico CNI migration for Seldon Core v2 compatibility
+
+## Article Documentation
+
+**Instruction:** Document the CNI migration experience in a comprehensive article covering:
+- Technical root cause analysis of CIDR configuration mismatches
+- Platform vs application team responsibility boundaries for network policies  
+- Production debugging techniques for Kubernetes networking issues
+- Automation strategies for CNI management and validation
+- Real-world lessons learned from migrating production ML workloads
+
+See `ARTICLE_OUTLINE.md` for detailed table of contents and key points to cover.
+The article should serve as a practical guide for platform engineers facing similar CNI migration challenges.
