@@ -1,0 +1,64 @@
+# Platform-managed baseline network policy for ML namespaces
+# Application teams should layer additional policies on top of this baseline
+# See: docs/network-policies.md for complete documentation
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ namespace }}-platform-baseline
+  namespace: {{ namespace }}
+  labels:
+    managed-by: platform-team
+    policy-type: baseline
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from seldon-system (required for model serving)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: seldon-system
+  # Allow intra-namespace communication
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: {{ namespace }}
+  egress:
+  # Allow traffic to seldon-system (required for model serving)
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: seldon-system
+  # Allow intra-namespace communication
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: {{ namespace }}
+  # CRITICAL: Allow DNS resolution to kube-system
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow external access (HTTPS/HTTP for model downloads)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80
+{% if seldon_allow_external_telemetry | default(true) %}
+  # Allow external telemetry (OpenTelemetry, etc.)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 4317
+    - protocol: TCP
+      port: 4318
+{% endif %}

@@ -80,6 +80,12 @@
             name: foundation/nfs_provisioner
           tags: [storage, nfs, nfs-provisioner]
 
+        # MetalLB Load Balancer
+        - name: Deploy MetalLB Load Balancer
+          include_role:
+            name: foundation/metallb
+          tags: [networking, metallb, load-balancer]
+
         # Sealed Secrets (MUST be before secrets)
         - name: Deploy Sealed Secrets
           include_role:
@@ -163,6 +169,8 @@
             kind: Namespace
             name: jupyterhub
             state: present
+            kubeconfig: "{{ kubeconfig_path }}"
+            validate_certs: false
           tags: [jupyter, jupyterhub_pvc_setup]
 
         - name: Create MLOps shared storage PVCs for JupyterHub
@@ -170,6 +178,8 @@
             state: present
             # Path relative to the site.yml playbook location (infrastructure/cluster/)
             src: "{{ item }}"
+            kubeconfig: "{{ kubeconfig_path }}"
+            validate_certs: false
           loop:
             - "manifests/shared-storage/shared-data-pvc-jupyterhub.yaml"
             - "manifests/shared-storage/shared-artifacts-pvc-jupyterhub.yaml"
@@ -245,20 +255,8 @@
       when: k3s_state is not defined or k3s_state != "absent"
 
 # =============================
-# PHASE 7: DEMO & VALIDATION
+# PHASE 7: CLEANUP & VALIDATION
 # =============================
-
-# Play 8: Deploy Demo Application
-- name: Deploy Demo Application
-  hosts: localhost
-  connection: local
-  gather_facts: false
-  tasks:
-    - name: Deploy ML Demo Pipeline
-      include_role:
-        name: demo/mlops_demo_app
-      when: k3s_state is not defined or k3s_state != "absent"
-      tags: [demo, mlops-demo]
 
 # =============================
 # PHASE 8: SUMMARY & CLEANUP
@@ -281,6 +279,9 @@
           - "- Argo CD: http://192.168.1.85:30080"
           - "- JupyterHub: http://192.168.1.85:30888"
           - "- Kubernetes Dashboard: http://192.168.1.85:30443"
+          - ""
+          - "🔗 Load Balancer Services:"
+          - "- MetalLB: LoadBalancer IPs from 192.168.1.200-250"
           - ""
           - "📊 Monitoring & Storage:"
           - "- Grafana: http://192.168.1.85:30300"

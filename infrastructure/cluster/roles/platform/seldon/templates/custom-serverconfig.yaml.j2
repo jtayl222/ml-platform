@@ -1,0 +1,32 @@
+---
+apiVersion: mlops.seldon.io/v1alpha1
+kind: ServerConfig
+metadata:
+  name: mlserver
+  namespace: {{ seldon_namespace }}
+  labels:
+    app: seldon
+    component: mlserver
+    custom-image: "true"
+spec:
+  podSpec:
+    containers:
+    - name: agent
+      image: {{ seldon_custom_images.registry }}/{{ seldon_custom_images.agent.repository }}:{{ seldon_custom_images.agent.tag }}
+      imagePullPolicy: {{ seldon_custom_images.agent.pullPolicy }}
+      env:
+{% if seldon_server_host.enabled %}
+      - name: SELDON_SERVER_HOST
+        value: "{{ seldon_server_host.value }}"
+{% endif %}
+{% for env_var in seldon_agent_env_vars %}
+      - name: "{{ env_var.name }}"
+        value: "{{ env_var.value }}"
+{% endfor %}
+      resources:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "512Mi"
+          cpu: "500m"

@@ -7,7 +7,7 @@ metadata:
   name: default
 spec:
   # Configure Calico for K3s environment
-  kubernetesProvider: k3s
+  kubernetesProvider: ""
   
   # Network configuration
   calicoNetwork:
@@ -22,8 +22,11 @@ spec:
     # Container settings
     containerIPForwarding: Enabled
     
-    # Host ports configuration
+    # Host ports configuration  
     hostPorts: Enabled
+    
+    # Multi-interface mode for pod networking
+    multiInterfaceMode: None
 
   # Node configuration  
   nodeAddressAutodetection:
@@ -33,8 +36,8 @@ spec:
   # Flexvolume path for K3s
   flexVolumePath: /var/lib/kubelet/volumeplugins
 
-  # Registry configuration
-  registry: docker.io
+  # Registry configuration - use Quay.io to avoid Docker Hub rate limits
+  registry: quay.io
 
 ---
 # Calico API Server (optional but recommended for NetworkPolicy)

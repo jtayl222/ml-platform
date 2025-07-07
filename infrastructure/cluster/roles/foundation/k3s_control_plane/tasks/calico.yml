@@ -47,6 +47,35 @@
     kubeconfig: "{{ k3s_config_dir }}/k3s.yaml"
   tags: [calico, cni, networking]
 
+- name: Wait for Tigera operator to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: tigera-operator
+    namespace: tigera-operator
+    kubeconfig: "{{ k3s_config_dir }}/k3s.yaml"
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 180
+  tags: [calico, cni, networking]
+
+- name: Check if Installation CRD exists
+  kubernetes.core.k8s_info:
+    api_version: operator.tigera.io/v1
+    kind: Installation
+    name: default
+    kubeconfig: "{{ k3s_config_dir }}/k3s.yaml"
+  register: installation_check
+  ignore_errors: true
+  tags: [calico, cni, networking]
+
+- name: Debug Installation status
+  debug:
+    msg: "Installation exists: {{ installation_check.resources | length > 0 }}"
+  tags: [calico, cni, networking]
+
 - name: Wait for Calico installation to be ready
   kubernetes.core.k8s_info:
     api_version: operator.tigera.io/v1
@@ -58,25 +87,79 @@
       type: Ready
       status: "True"
     wait_timeout: 300
+  when: installation_check.resources | length > 0
   tags: [calico, cni, networking]
 
-- name: Wait for Calico pods to be ready
+- name: Wait for Calico DaemonSet to be ready
   kubernetes.core.k8s_info:
-    api_version: v1
-    kind: Pod
+    api_version: apps/v1
+    kind: DaemonSet
+    name: calico-node
     namespace: calico-system
-    label_selectors:
-      - k8s-app=calico-node
     kubeconfig: "{{ k3s_config_dir }}/k3s.yaml"
-  register: calico_pods
+  register: calico_daemonset
   until: >
-    calico_pods.resources | length > 0 and
-    calico_pods.resources | selectattr('status.phase', 'eq', 'Running') | list | length == calico_pods.resources | length
+    calico_daemonset.resources | length > 0 and
+    calico_daemonset.resources[0].status.numberReady == calico_daemonset.resources[0].status.desiredNumberScheduled
   retries: 30
   delay: 10
   tags: [calico, cni, networking]
 
+- name: Create default allow policy for DNS resolution
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k3s_config_dir }}/k3s.yaml"
+    definition:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-dns
+        namespace: kube-system
+      spec:
+        podSelector: {}
+        policyTypes:
+        - Ingress
+        ingress:
+        - {}
+  tags: [calico, cni, networking, dns]
+
+- name: Ensure default namespace allows intra-namespace communication
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ k3s_config_dir }}/k3s.yaml"
+    definition:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-intra-namespace
+        namespace: default
+      spec:
+        podSelector: {}
+        policyTypes:
+        - Ingress
+        - Egress
+        ingress:
+        - from:
+          - namespaceSelector:
+              matchLabels:
+                name: default
+        egress:
+        - to:
+          - namespaceSelector:
+              matchLabels:
+                name: default
+        - to:
+          - namespaceSelector:
+              matchLabels:
+                name: kube-system
+          ports:
+          - protocol: UDP
+            port: 53
+          - protocol: TCP
+            port: 53
+  tags: [calico, cni, networking, default-policies]
+
 - name: Display Calico installation status
   debug:
-    msg: "✅ Calico CNI installed successfully - {{ calico_pods.resources | length }} nodes ready"
+    msg: "✅ Calico CNI installed successfully - {{ calico_daemonset.resources[0].status.numberReady }} nodes ready"
   tags: [always]

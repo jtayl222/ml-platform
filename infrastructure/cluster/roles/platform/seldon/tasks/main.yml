@@ -17,6 +17,32 @@
     state: present
   tags: [platform, seldon, seldon-system, namespace]
 
+- name: Ensure kube-system namespace has required labels for network policies
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: v1
+    kind: Namespace
+    name: kube-system
+    merge_type: merge
+    definition:
+      metadata:
+        labels:
+          name: kube-system
+  tags: [platform, seldon, seldon-system, namespace, network-policy]
+
+- name: Label seldon-system namespace for network policies
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: v1
+    kind: Namespace
+    name: "{{ seldon_namespace }}"
+    merge_type: merge
+    definition:
+      metadata:
+        labels:
+          name: "{{ seldon_namespace }}"
+  tags: [platform, seldon, seldon-system, namespace, network-policy]
+
 - name: Install Seldon Core V2 CRDs
   kubernetes.core.helm:
     name: seldon-core-v2-crds
@@ -124,6 +150,61 @@
       status: "True"
     wait_timeout: 300
   tags: [platform, seldon, seldon-system, verify]
+
+- name: Create Seldon configuration ConfigMap
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: seldon-config
+        namespace: "{{ seldon_namespace }}"
+      data:
+        predictor_servers: "{{ seldon_predictor_servers | to_nice_json }}"
+  tags: [platform, seldon, seldon-system, config]
+
+- name: Create network policy template for ML namespaces
+  template:
+    src: namespace-network-policy.yaml.j2
+    dest: "/tmp/namespace-network-policy-{{ item }}.yaml"
+  vars:
+    namespace: "{{ item }}"
+  loop: "{{ seldon_ml_namespaces | default([]) }}"
+  when: seldon_enable_network_policies | default(true)
+  tags: [platform, seldon, network-policy]
+
+- name: Create ML namespaces
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: v1
+    kind: Namespace
+    name: "{{ item }}"
+    state: present
+    definition:
+      metadata:
+        labels:
+          name: "{{ item }}"
+  loop: "{{ seldon_ml_namespaces | default([]) }}"
+  when: seldon_enable_network_policies | default(true)
+  tags: [platform, seldon, network-policy, namespace]
+
+- name: Apply network policies to ML namespaces
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    src: "/tmp/namespace-network-policy-{{ item }}.yaml"
+  loop: "{{ seldon_ml_namespaces | default([]) }}"
+  when: seldon_enable_network_policies | default(true)
+  tags: [platform, seldon, network-policy]
+
+- name: Clean up network policy templates
+  file:
+    path: "/tmp/namespace-network-policy-{{ item }}.yaml"
+    state: absent
+  loop: "{{ seldon_ml_namespaces | default([]) }}"
+  when: seldon_enable_network_policies | default(true)
+  tags: [platform, seldon, network-policy]
 
 # FIXED: Remove the conflicting NodePort service creation
 # The Seldon operator will create its own services
@@ -271,3 +352,41 @@
         name: seldon-deployment-manager
         apiGroup: rbac.authorization.k8s.io
   tags: [platform, seldon, seldon-system, seldon, rbac]
+
+# Custom Agent Configuration for PR Testing
+- name: Patch ServerConfig with custom agent image
+  shell: |
+    kubectl patch serverconfig mlserver -n {{ seldon_namespace }} --type='json' -p='[
+      {"op": "replace", "path": "/spec/podSpec/containers/1/image", "value": "{{ seldon_custom_images.registry }}/{{ seldon_custom_images.agent.repository }}:{{ seldon_custom_images.agent.tag }}"},
+      {"op": "replace", "path": "/spec/podSpec/containers/1/imagePullPolicy", "value": "{{ seldon_custom_images.agent.pullPolicy }}"}
+    ]'
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+  when: seldon_custom_images.enabled
+  tags: [platform, seldon, seldon-system, seldon-custom]
+
+- name: Add SELDON_SERVER_HOST environment variable if not exists
+  shell: |
+    if ! kubectl get serverconfig mlserver -n {{ seldon_namespace }} -o json | jq -e '.spec.podSpec.containers[1].env[] | select(.name=="SELDON_SERVER_HOST")' > /dev/null; then
+      kubectl patch serverconfig mlserver -n {{ seldon_namespace }} --type='json' -p='[
+        {"op": "add", "path": "/spec/podSpec/containers/1/env/-", "value": {"name": "SELDON_SERVER_HOST", "value": "{{ seldon_server_host.value }}"}}
+      ]'
+    fi
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+  when: seldon_custom_images.enabled and seldon_server_host.enabled
+  tags: [platform, seldon, seldon-system, seldon-custom]
+
+- name: Restart mlserver StatefulSet to apply custom agent
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: absent
+    api_version: v1
+    kind: Pod
+    name: mlserver-0
+    namespace: "{{ seldon_namespace }}"
+    wait: true
+    wait_timeout: 60
+  when: seldon_custom_images.enabled
+  tags: [platform, seldon, seldon-system, seldon-custom]
+  failed_when: false
