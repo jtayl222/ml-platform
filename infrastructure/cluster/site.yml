@@ -19,7 +19,7 @@
     - name: Deploy or Remove K3s Control Plane
       include_role:
         name: foundation/k3s_control_plane
-      tags: [k3s, control_plane]
+      tags: [k3s, control_plane, cilium, cni, networking]
 
 # Play 1b: K3s Workers
 - name: Setup K3s Workers

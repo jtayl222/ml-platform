@@ -1,0 +1,173 @@
+---
+- name: Test kubectl connectivity before Cilium installation
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Node
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: kubectl_test
+  failed_when: false
+
+- name: Display kubectl test results
+  debug:
+    msg:
+      - "kubectl connectivity test: {{ 'SUCCESS' if kubectl_test.failed == false else 'FAILED' }}"
+      - "Nodes found: {{ kubectl_test.resources | length if kubectl_test.resources is defined else 'None' }}"
+      - "Error: {{ kubectl_test.msg if kubectl_test.failed else 'None' }}"
+
+- name: Add Cilium Helm repository
+  kubernetes.core.helm_repository:
+    name: cilium
+    repo_url: "{{ cilium_chart_repo }}"
+    kubeconfig: "{{ kubeconfig_path }}"
+
+- name: Install Cilium CNI via Helm
+  kubernetes.core.helm:
+    name: "{{ cilium_release_name }}"
+    chart_ref: "{{ cilium_chart_name }}"
+    release_namespace: "{{ cilium_namespace }}"
+    create_namespace: false
+    kubeconfig: "{{ kubeconfig_path }}"
+    values:
+      # K3s integration
+      kubeProxyReplacement: "{{ cilium_kube_proxy_replacement }}"
+      k8sServiceHost: "{{ cilium_k8s_service_host }}"
+      k8sServicePort: "{{ cilium_k8s_service_port }}"
+      
+      # Network configuration
+      routingMode: "{{ cilium_routing_mode }}"
+      tunnelProtocol: "{{ cilium_tunnel_protocol }}"
+      ipam:
+        mode: "{{ cilium_ipam_mode }}"
+        operator:
+          clusterPoolIPv4PodCIDRList:
+            - "{{ cilium_cluster_pool_ipv4_cidr }}"
+      
+      # IPv4/IPv6 support
+      ipv4:
+        enabled: "{{ cilium_enable_ipv4 }}"
+      ipv6:
+        enabled: "{{ cilium_enable_ipv6 }}"
+      
+      # Network policies (required for Seldon Core v2)
+      policyEnforcementMode: "default"
+      
+      # Observability
+      hubble:
+        enabled: "{{ cilium_enable_hubble }}"
+        relay:
+          enabled: "{{ cilium_hubble_relay_enabled }}"
+        ui:
+          enabled: "{{ cilium_hubble_ui_enabled }}"
+      
+      # BGP configuration
+      bgp:
+        enabled: "{{ cilium_enable_bgp }}"
+      
+      # Security features
+      encryption:
+        enabled: "{{ cilium_enable_encryption }}"
+        type: "{{ 'wireguard' if cilium_enable_wireguard else 'disabled' }}"
+
+- name: Wait for Cilium DaemonSet to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: DaemonSet
+    name: cilium
+    namespace: "{{ cilium_namespace }}"
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: cilium_daemonset
+  until: >
+    cilium_daemonset.resources | length > 0 and
+    cilium_daemonset.resources[0].status.numberReady == cilium_daemonset.resources[0].status.desiredNumberScheduled
+  retries: 30
+  delay: 10
+
+- name: Wait for Cilium operator to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: cilium-operator
+    namespace: "{{ cilium_namespace }}"
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 300
+
+- name: Test pod connectivity after Cilium installation
+  kubernetes.core.k8s:
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: cilium-connectivity-test
+        namespace: default
+      spec:
+        restartPolicy: Never
+        containers:
+        - name: test
+          image: nicolaka/netshoot
+          command: ["sh", "-c"]
+          args:
+            - |
+              echo "Testing connectivity..."
+              ping -c 3 8.8.8.8 && echo "✅ External connectivity: SUCCESS" || echo "❌ External connectivity: FAILED"
+              nslookup kubernetes.default.svc.cluster.local && echo "✅ DNS resolution: SUCCESS" || echo "❌ DNS resolution: FAILED"
+  register: connectivity_test
+  failed_when: false
+
+- name: Wait for connectivity test to complete
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    name: cilium-connectivity-test
+    namespace: default
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_condition:
+      type: PodReadyCondition
+      status: "False"
+      reason: PodCompleted
+    wait_timeout: 60
+  failed_when: false
+
+- name: Get connectivity test results
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    name: cilium-connectivity-test
+    namespace: default
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: test_pod
+  failed_when: false
+
+- name: Display connectivity test logs
+  kubernetes.core.k8s_log:
+    api_version: v1
+    kind: Pod
+    name: cilium-connectivity-test
+    namespace: default
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: test_logs
+  failed_when: false
+
+- name: Show test results
+  debug:
+    msg: "{{ test_logs.log.split('\n') if test_logs.log is defined else 'No logs available' }}"
+
+- name: Clean up connectivity test pod
+  kubernetes.core.k8s:
+    state: absent
+    api_version: v1
+    kind: Pod
+    name: cilium-connectivity-test
+    namespace: default
+    kubeconfig: "{{ kubeconfig_path }}"
+  failed_when: false
+
+- name: Display Cilium installation status
+  debug:
+    msg: "✅ Cilium CNI installed successfully - {{ cilium_daemonset.resources[0].status.numberReady }} nodes ready"
