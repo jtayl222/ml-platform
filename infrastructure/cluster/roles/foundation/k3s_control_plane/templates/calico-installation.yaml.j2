@@ -9,13 +9,17 @@ spec:
   # Configure Calico for K3s environment
   kubernetesProvider: ""
   
+  # Calico version - upgrade to v3.30.2 to fix pod-to-API connectivity
+  variant: Calico
+  calicoVersion: v3.30.2
+  
   # Network configuration
   calicoNetwork:
     # Configure IP pools
     ipPools:
     - blockSize: 26
       cidr: {{ calico_ipv4pool_cidr }}
-      encapsulation: VXLANCrossSubnet
+      encapsulation: VXLAN
       natOutgoing: Enabled
       nodeSelector: all()
     

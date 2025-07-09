@@ -33,20 +33,6 @@
     kubeconfig: "{{ k3s_config_dir }}/k3s.yaml"
   tags: [calico, cni, networking]
 
-- name: Create Calico installation manifest
-  template:
-    src: calico-installation.yaml.j2
-    dest: "{{ k3s_config_dir }}/manifests/calico-installation.yaml"
-    mode: '0644'
-  tags: [calico, cni, networking]
-
-- name: Apply Calico installation
-  kubernetes.core.k8s:
-    state: present
-    src: "{{ k3s_config_dir }}/manifests/calico-installation.yaml"
-    kubeconfig: "{{ k3s_config_dir }}/k3s.yaml"
-  tags: [calico, cni, networking]
-
 - name: Wait for Tigera operator to be ready
   kubernetes.core.k8s_info:
     api_version: apps/v1
@@ -74,6 +60,20 @@
 - name: Debug Installation status
   debug:
     msg: "Installation exists: {{ installation_check.resources | length > 0 }}"
+  tags: [calico, cni, networking]
+
+- name: Create Calico installation manifest
+  template:
+    src: calico-installation.yaml.j2
+    dest: "{{ k3s_config_dir }}/manifests/calico-installation.yaml"
+    mode: '0644'
+  tags: [calico, cni, networking]
+
+- name: Apply Calico installation
+  kubernetes.core.k8s:
+    state: present
+    src: "{{ k3s_config_dir }}/manifests/calico-installation.yaml"
+    kubeconfig: "{{ k3s_config_dir }}/k3s.yaml"
   tags: [calico, cni, networking]
 
 - name: Wait for Calico installation to be ready

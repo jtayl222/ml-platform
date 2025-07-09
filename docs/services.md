@@ -162,10 +162,11 @@ kubectl -n kubernetes-dashboard create token admin-user
 **Cluster Specifications:**
 - **Total Resources**: 36 CPU cores, ~250GB RAM
 - **Node Configuration**: 5 Intel NUCs (NUC8i5, NUC10i3/i4/i5/i7)
-- **Network**: High-speed internal networking
+- **Network**: High-speed internal networking with **Cilium CNI**
 - **Storage**: NFS-based persistent volumes
 
 **Performance Optimizations Applied:**
+- **CNI**: Cilium CNI with tunnel mode (resolves Calico ARP bug #8689)
 - **MinIO**: 8Gi-16Gi RAM allocation for high-throughput storage
 - **MLflow**: 8Gi-16Gi RAM for large experiment handling
 - **JupyterHub**: Up to 16Gi RAM per user for heavy ML workloads

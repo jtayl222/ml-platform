@@ -59,6 +59,7 @@ namespace: $namespace
 resources:
   - ml-platform-sealed-secret.yaml
   - ghcr-sealed-secret.yaml
+  - seldon-rclone-sealed-secret.yaml
 EOF
 
 done
@@ -226,6 +227,7 @@ for env in "${ENV_ARRAY[@]}"; do
 ### $env/ 
 - \`ml-platform-sealed-secret.yaml\` - Secret name: \`ml-platform\`
 - \`ghcr-sealed-secret.yaml\` - Secret name: \`ghcr\`
+- \`seldon-rclone-sealed-secret.yaml\` - Secret name: \`seldon-rclone-gs-public\`
 - \`kustomization.yaml\` - Ready-to-apply kustomization
 
 EOF

@@ -10,6 +10,7 @@ This is a production-ready MLOps platform built on K3s (lightweight Kubernetes) 
 
 ### Infrastructure Layer
 - **K3s Cluster**: 1 control plane + 4 worker nodes (36 CPU cores, 260GB RAM total)
+- **CNI**: Cilium (default, resolves Calico ARP bug #8689)
 - **Storage**: MinIO (S3-compatible) + NFS + Local storage
 - **Security**: Sealed Secrets for GitOps-safe credential management
 - **Service Mesh**: Istio (optional, for KServe)
@@ -265,6 +266,11 @@ ansible-playbook -i inventory/production/hosts infrastructure/cluster/site.yml -
 
 - **YAML Template Rule**: Never mix Jinja2 templating syntax in YAML values - use conditional Ansible tasks instead
 - **Service Pattern**: Use separate tasks for LoadBalancer (MetalLB) vs NodePort (fallback) service types
+- **Infrastructure as Code**: Always prefer updating and testing Ansible plays over patching resources directly with kubectl
+- **TLS Certificate Fix**: Anytime you see `x509: certificate signed by unknown authority` error, run:
+  ```bash
+  ssh 192.168.1.85 "sudo cat /etc/rancher/k3s/k3s.yaml" | sed -e 's/127.0.0.1/192.168.1.85/' > ~/.kube/config
+  ```
 - **Documentation**: Always update CLAUDE.md when adding new operational patterns
 
 ## Job-Seeking Context

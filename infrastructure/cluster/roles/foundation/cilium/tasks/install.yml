@@ -19,6 +19,7 @@
     name: cilium
     repo_url: "{{ cilium_chart_repo }}"
     kubeconfig: "{{ kubeconfig_path }}"
+  delegate_to: localhost
 
 - name: Install Cilium CNI via Helm
   kubernetes.core.helm:
@@ -67,6 +68,7 @@
       encryption:
         enabled: "{{ cilium_enable_encryption }}"
         type: "{{ 'wireguard' if cilium_enable_wireguard else 'disabled' }}"
+  delegate_to: localhost
 
 - name: Wait for Cilium DaemonSet to be ready
   kubernetes.core.k8s_info:
@@ -81,6 +83,7 @@
     cilium_daemonset.resources[0].status.numberReady == cilium_daemonset.resources[0].status.desiredNumberScheduled
   retries: 30
   delay: 10
+  delegate_to: localhost
 
 - name: Wait for Cilium operator to be ready
   kubernetes.core.k8s_info:
@@ -94,6 +97,7 @@
       type: Available
       status: "True"
     wait_timeout: 300
+  delegate_to: localhost
 
 - name: Test pod connectivity after Cilium installation
   kubernetes.core.k8s:
@@ -118,6 +122,7 @@
               nslookup kubernetes.default.svc.cluster.local && echo "✅ DNS resolution: SUCCESS" || echo "❌ DNS resolution: FAILED"
   register: connectivity_test
   failed_when: false
+  delegate_to: localhost
 
 - name: Wait for connectivity test to complete
   kubernetes.core.k8s_info:
@@ -133,6 +138,7 @@
       reason: PodCompleted
     wait_timeout: 60
   failed_when: false
+  delegate_to: localhost
 
 - name: Get connectivity test results
   kubernetes.core.k8s_info:
@@ -143,6 +149,7 @@
     kubeconfig: "{{ kubeconfig_path }}"
   register: test_pod
   failed_when: false
+  delegate_to: localhost
 
 - name: Display connectivity test logs
   kubernetes.core.k8s_log:
@@ -153,6 +160,7 @@
     kubeconfig: "{{ kubeconfig_path }}"
   register: test_logs
   failed_when: false
+  delegate_to: localhost
 
 - name: Show test results
   debug:
@@ -167,6 +175,7 @@
     namespace: default
     kubeconfig: "{{ kubeconfig_path }}"
   failed_when: false
+  delegate_to: localhost
 
 - name: Display Cilium installation status
   debug:
