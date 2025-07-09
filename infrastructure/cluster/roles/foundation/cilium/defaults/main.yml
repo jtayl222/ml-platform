@@ -1,0 +1,40 @@
+---
+# Cilium CNI configuration
+cilium_enabled: true
+cilium_version: "1.16.5"  # Latest stable version
+cilium_state: "present"
+
+# Cilium Helm chart configuration
+cilium_namespace: "kube-system"
+cilium_chart_repo: "https://helm.cilium.io/"
+cilium_chart_name: "cilium/cilium"
+cilium_release_name: "cilium"
+
+# Network configuration (align with K3s)
+cilium_cluster_pool_ipv4_cidr: "{{ k3s_pod_cidr | default('10.42.0.0/16') }}"
+cilium_k8s_service_host: "{{ hostvars[groups['k3s_control_plane'][0]]['ansible_host'] }}"
+cilium_k8s_service_port: "6443"
+
+# Cilium feature configuration
+cilium_kube_proxy_replacement: true
+cilium_routing_mode: "tunnel"  # Use tunnel mode (correct for Cilium 1.17+)
+cilium_tunnel_protocol: "vxlan"  # VXLAN tunneling protocol
+cilium_ipam_mode: "cluster-pool"
+cilium_enable_ipv4: true
+cilium_enable_ipv6: false
+
+# Network policies (required for Seldon Core v2)
+cilium_enable_network_policy: true
+cilium_enable_cilium_network_policy: true
+
+# Observability features
+cilium_enable_hubble: true
+cilium_hubble_relay_enabled: true
+cilium_hubble_ui_enabled: true
+
+# BGP configuration (optional)
+cilium_enable_bgp: false
+
+# Security features
+cilium_enable_wireguard: false
+cilium_enable_encryption: false

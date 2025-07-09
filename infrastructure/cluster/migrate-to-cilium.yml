@@ -1,0 +1,157 @@
+---
+# CNI Migration: Calico to Cilium
+# This playbook migrates from Calico to Cilium CNI to resolve the 169.254.1.1 ARP bug
+# Reference: GitHub Issues #8689, #4186
+
+- name: CNI Migration - Calico to Cilium
+  hosts: k3s_control_plane
+  become: false
+  gather_facts: true
+  vars:
+    # Override CNI selection
+    cni_provider: "cilium"
+    cilium_state: "present"
+    calico_state: "absent"
+    
+  tasks:
+    - name: Display migration information
+      debug:
+        msg:
+          - "🚨 CRITICAL CNI MIGRATION: Calico → Cilium"
+          - "Reason: Calico ARP resolution bug (169.254.1.1 gateway)"
+          - "GitHub Issues: #8689, #4186"
+          - "Expected downtime: 2-5 minutes"
+          - "Seldon Core v2 compatibility: Maintained"
+
+    - name: Ensure kubeconfig is available
+      include_role:
+        name: foundation/fetch_kubeconfig
+      tags: [kubeconfig]
+
+    - name: Remove existing Calico installation
+      kubernetes.core.k8s:
+        state: absent
+        api_version: operator.tigera.io/v1
+        kind: Installation
+        name: default
+        kubeconfig: "/home/user/REPOS/ml-platform/infrastructure/fetched_tokens/k3s-kubeconfig"
+        wait: true
+        wait_timeout: 120
+      failed_when: false
+      tags: [cleanup, calico]
+
+    - name: Remove Calico IP pools
+      kubernetes.core.k8s:
+        state: absent
+        api_version: projectcalico.org/v3
+        kind: IPPool
+        name: default-ipv4-ippool
+        kubeconfig: "/home/user/REPOS/ml-platform/infrastructure/fetched_tokens/k3s-kubeconfig"
+      failed_when: false
+      tags: [cleanup, calico]
+
+    - name: Remove Tigera operator
+      kubernetes.core.k8s:
+        state: absent
+        api_version: apps/v1
+        kind: Deployment
+        name: tigera-operator
+        namespace: tigera-operator
+        kubeconfig: "/home/user/REPOS/ml-platform/infrastructure/fetched_tokens/k3s-kubeconfig"
+      failed_when: false
+      tags: [cleanup, calico]
+
+    - name: Wait for Calico cleanup to complete
+      pause:
+        seconds: 30
+        prompt: "Waiting for Calico cleanup..."
+      tags: [cleanup]
+
+    - name: Install Cilium CNI
+      include_role:
+        name: foundation/cilium
+      vars:
+        cilium_state: present
+        kubeconfig_path: "/home/user/REPOS/ml-platform/infrastructure/fetched_tokens/k3s-kubeconfig"
+      tags: [cilium, install]
+
+    - name: Verify cluster connectivity after migration
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Node
+        kubeconfig: "/home/user/REPOS/ml-platform/infrastructure/fetched_tokens/k3s-kubeconfig"
+      register: node_check
+      retries: 10
+      delay: 10
+      until: node_check.resources | length > 0
+
+    - name: Display migration completion status
+      debug:
+        msg:
+          - "✅ CNI MIGRATION COMPLETE"
+          - "New CNI: Cilium"
+          - "Nodes ready: {{ node_check.resources | length }}"
+          - "Next steps: Test pod connectivity and Seldon Core deployment"
+
+# Test connectivity with debug pods
+- name: Post-Migration Connectivity Tests
+  hosts: k3s_control_plane
+  become: false
+  gather_facts: false
+  tasks:
+    - name: Create connectivity test pod
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "/home/user/REPOS/ml-platform/infrastructure/fetched_tokens/k3s-kubeconfig"
+        definition:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: post-migration-test
+            namespace: default
+          spec:
+            restartPolicy: Never
+            containers:
+            - name: test
+              image: nicolaka/netshoot
+              command: ["sh", "-c"]
+              args:
+                - |
+                  echo "=== POST-MIGRATION CONNECTIVITY TEST ==="
+                  echo "Testing API server connectivity..."
+                  curl -k https://10.43.0.1:443/healthz && echo "✅ API server: SUCCESS" || echo "❌ API server: FAILED"
+                  echo "Testing external connectivity..."
+                  ping -c 3 8.8.8.8 && echo "✅ External: SUCCESS" || echo "❌ External: FAILED"
+                  echo "Testing DNS resolution..."
+                  nslookup kubernetes.default.svc.cluster.local && echo "✅ DNS: SUCCESS" || echo "❌ DNS: FAILED"
+                  echo "=== TEST COMPLETE ==="
+      tags: [test]
+
+    - name: Wait for test completion and get results
+      kubernetes.core.k8s_log:
+        api_version: v1
+        kind: Pod
+        name: post-migration-test
+        namespace: default
+        kubeconfig: "/home/user/REPOS/ml-platform/infrastructure/fetched_tokens/k3s-kubeconfig"
+      register: test_results
+      retries: 10
+      delay: 5
+      until: test_results.log is defined
+      tags: [test]
+
+    - name: Display test results
+      debug:
+        msg: "{{ test_results.log.split('\n') }}"
+      tags: [test]
+
+    - name: Clean up test pod
+      kubernetes.core.k8s:
+        state: absent
+        api_version: v1
+        kind: Pod
+        name: post-migration-test
+        namespace: default
+        kubeconfig: "/home/user/REPOS/ml-platform/infrastructure/fetched_tokens/k3s-kubeconfig"
+      failed_when: false
+      tags: [cleanup, test]

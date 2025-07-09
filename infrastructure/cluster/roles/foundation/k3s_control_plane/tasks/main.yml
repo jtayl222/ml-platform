@@ -1,6 +1,17 @@
 ---
+- name: Gather facts if not available
+  setup:
+  when: ansible_os_family is not defined
+  tags: [always]
+
 - name: Include platform-specific variables
-  include_vars: "{{ ansible_os_family }}.yml"
+  include_vars: "{{ ansible_os_family | default('Debian') }}.yml"
+  failed_when: false
+  tags: [always]
+
+- name: Include default variables as fallback
+  include_vars: "Debian.yml"
+  when: k3s_dependencies is not defined
   tags: [always]
 
 - name: Validate prerequisites
@@ -21,6 +32,23 @@
   include_tasks: uninstall.yml
   when: k3s_state == "absent"
   tags: [uninstall, k3s, control_plane]
+
+- name: Fetch kubeconfig for CNI installation
+  include_role:
+    name: foundation/fetch_kubeconfig
+  when: k3s_state == "present" and cilium_enabled | default(true)
+  tags: [cilium, cni, networking, kubeconfig]
+
+- name: Install Cilium CNI (default)
+  include_role:
+    name: foundation/cilium
+  when: k3s_state == "present" and cilium_enabled | default(true)
+  tags: [cilium, cni, networking]
+
+- name: Install Calico CNI (legacy fallback)
+  include_tasks: calico.yml
+  when: k3s_state == "present" and calico_enabled | default(false) and not cilium_enabled | default(true)
+  tags: [calico, cni, networking, legacy]
 
 - name: Verify installation
   include_tasks: verify.yml

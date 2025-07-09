@@ -17,7 +17,47 @@
     state: present
   tags: [storage, namespace]
 
-- name: Deploy MinIO (S3-compatible storage)
+- name: Deploy MinIO with LoadBalancer (MetalLB enabled)
+  kubernetes.core.helm:
+    name: "{{ minio_name }}"
+    chart_ref: "{{ minio_chart_ref }}"
+    release_namespace: "{{ minio_namespace }}"
+    create_namespace: true
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_timeout: "{{ helm_wait_timeout }}"
+    values:
+      mode: "{{ minio_mode }}"
+      replicas: "{{ minio_replicas }}"
+      persistence:
+        enabled: true
+        size: "{{ minio_storage_size }}"
+        storageClass: "{{ minio_storage_class }}"
+      auth:
+        rootUser: "{{ minio_access_key }}"
+        rootPassword: "{{ minio_secret_key }}"
+      service:
+        type: LoadBalancer
+        annotations:
+          metallb.universe.tf/loadBalancer-ips: "192.168.1.200"
+      consoleService:
+        type: LoadBalancer
+        annotations:
+          metallb.universe.tf/loadBalancer-ips: "192.168.1.202"
+      resources:
+        requests:
+          memory: "{{ minio_memory_request }}"
+          cpu: "{{ minio_cpu_request }}"
+        limits:
+          memory: "{{ minio_memory_limit }}"
+          cpu: "{{ minio_cpu_limit }}"
+  when: metallb_state is defined and metallb_state == 'present'
+  register: minio_deployment
+  retries: "{{ helm_retries }}"
+  delay: 30
+  tags: [storage, minio, helm-deploy, metallb]
+
+- name: Deploy MinIO with NodePort (fallback)
   kubernetes.core.helm:
     name: "{{ minio_name }}"
     chart_ref: "{{ minio_chart_ref }}"
@@ -51,6 +91,7 @@
         limits:
           memory: "{{ minio_memory_limit }}"
           cpu: "{{ minio_cpu_limit }}"
+  when: metallb_state is not defined or metallb_state != 'present'
   register: minio_deployment
   retries: "{{ helm_retries }}"
   delay: 30

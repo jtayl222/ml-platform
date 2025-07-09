@@ -1,9 +1,26 @@
 ---
+- name: Test kubectl connectivity before Helm operations
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Node
+    kubeconfig: "{{ kubeconfig_path }}"
+    validate_certs: false
+  register: kubectl_test
+  failed_when: false
+
+- name: Display kubectl test results
+  debug:
+    msg:
+      - "kubectl connectivity test: {{ 'SUCCESS' if kubectl_test.failed == false else 'FAILED' }}"
+      - "Nodes found: {{ kubectl_test.resources | length if kubectl_test.resources is defined else 'None' }}"
+      - "Error: {{ kubectl_test.msg if kubectl_test.failed else 'None' }}"
+
 - name: Add NFS CSI Helm repository
   kubernetes.core.helm_repository:
     name: csi-driver-nfs
     repo_url: https://raw.githubusercontent.com/kubernetes-csi/csi-driver-nfs/master/charts
     kubeconfig: "{{ kubeconfig_path }}"
+    validate_certs: false
 
 - name: Install NFS CSI driver
   kubernetes.core.helm:
@@ -12,6 +29,7 @@
     release_namespace: kube-system
     create_namespace: false
     kubeconfig: "{{ kubeconfig_path }}"
+    validate_certs: false
     values:
       driver:
         name: nfs.csi.k8s.io
@@ -21,6 +39,7 @@
 - name: Create NFS StorageClass
   kubernetes.core.k8s:
     kubeconfig: "{{ kubeconfig_path }}"
+    validate_certs: false
     definition:
       apiVersion: storage.k8s.io/v1
       kind: StorageClass
@@ -45,6 +64,7 @@
 - name: Create test PVC to verify NFS storage
   kubernetes.core.k8s:
     kubeconfig: "{{ kubeconfig_path }}"
+    validate_certs: false
     definition:
       apiVersion: v1
       kind: PersistentVolumeClaim

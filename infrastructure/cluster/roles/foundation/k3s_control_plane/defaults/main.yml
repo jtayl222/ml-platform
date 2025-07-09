@@ -13,12 +13,25 @@ k3s_token_file: "{{ k3s_data_dir }}/server/node-token"
 k3s_server_args:
   - "--write-kubeconfig-mode=644"
   - "--disable=traefik"
-  - "--disable=servicelb"
-  - "--flannel-backend=vxlan"
+  - "--disable=servicelb" 
+  - "--disable-network-policy"
+  - "--flannel-backend=none"
+  - "--disable-cloud-controller"
+  - "--cluster-cidr={{ k3s_pod_cidr | default('10.42.0.0/16') }}"
+  - "--service-cidr={{ k3s_service_cidr | default('10.43.0.0/16') }}"
 
-# Network configuration
-k3s_cluster_cidr: "10.42.0.0/16"
-k3s_service_cidr: "10.43.0.0/16"
+# Network configuration (Calico-compatible) - use inventory values
+k3s_cluster_cidr: "{{ k3s_pod_cidr | default('10.42.0.0/16') }}"
+k3s_service_cidr: "{{ k3s_service_cidr | default('10.43.0.0/16') }}"
+
+# Calico configuration
+calico_enabled: true
+calico_version: "v3.30.2"
+calico_datastore: "kubernetes"
+calico_ipv4pool_cidr: "{{ k3s_pod_cidr | default('10.42.0.0/16') }}"
+calico_node_image: "calico/node:{{ calico_version }}"
+calico_cni_image: "calico/cni:{{ calico_version }}"
+calico_kube_controllers_image: "calico/kube-controllers:{{ calico_version }}"
 
 # Security
 k3s_selinux: false

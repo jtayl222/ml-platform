@@ -99,6 +99,13 @@ k3s_token: "{{ node_token.stdout }}"  # Generated during installation
 - **Service Management** - Configures systemd service with auto-start
 - **Health Checks** - Waits for API server to be ready on port 6443
 
+### ✅ Calico CNI Integration
+- **Flannel Replacement** - Automatically disables built-in Flannel CNI
+- **Tigera Operator** - Deploys Calico using the official Tigera operator
+- **Intra-Pod Networking** - Enables proper localhost connectivity for multi-container pods
+- **Advanced NetworkPolicies** - Supports enterprise-grade network security policies
+- **BGP Routing** - Enables efficient Layer 3 networking where possible
+
 ### ✅ Token Management
 - **Extraction** - Retrieves node token from control plane
 - **Storage** - Makes token available to worker nodes via Ansible facts
@@ -117,7 +124,7 @@ k3s_token: "{{ node_token.stdout }}"  # Generated during installation
 
 ### ✅ Firewall Configuration
 - **UFW Integration** - Automatically configures firewall rules for K3s
-- **Port Management** - Opens required ports (6443, 10250, 8472)
+- **Port Management** - Opens required ports (6443, 10250, Calico networking)
 - **Network Security** - Allows pod and service network CIDRs
 - **Node Communication** - Enables inter-node cluster communication
 
@@ -126,15 +133,17 @@ k3s_token: "{{ node_token.stdout }}"  # Generated during installation
 # Control Plane Ports
 6443/tcp    # Kubernetes API server
 10250/tcp   # Kubelet API
-8472/udp    # Flannel VXLAN overlay
+179/tcp     # Calico BGP routing
+4789/udp    # Calico VXLAN overlay
+5473/tcp    # Calico Typha (if enabled)
 9100/tcp    # Node exporter (monitoring)
 
 # Service Access
 30000-32767/tcp  # NodePort range
 
-# Internal Networks
-10.42.0.0/16     # Pod network CIDR
-10.43.0.0/16     # Service network CIDR
+# Internal Networks (Calico)
+10.244.0.0/16    # Pod network CIDR
+10.96.0.0/12     # Service network CIDR
 ```
 
 #### Firewall Tasks
@@ -174,7 +183,9 @@ INSTALL_K3S_EXEC: --datastore-endpoint='sqlite:///var/lib/rancher/k3s/server.db'
 ### Network Ports
 - **6443** - Kubernetes API server
 - **10250** - Kubelet API (internal)
-- **8472** - Flannel VXLAN (if using Flannel CNI)
+- **179** - Calico BGP routing protocol
+- **4789** - Calico VXLAN overlay networking
+- **5473** - Calico Typha scaling component
 
 ## Integration with Homelab
 

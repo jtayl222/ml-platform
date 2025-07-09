@@ -1,0 +1,29 @@
+---
+# MetalLB Role Metadata
+
+galaxy_info:
+  author: MLOps Platform Team
+  description: MetalLB Load Balancer for Kubernetes
+  company: Homelab
+  license: MIT
+  min_ansible_version: 2.10
+  platforms:
+    - name: Ubuntu
+      versions:
+        - 20.04
+        - 22.04
+    - name: Debian
+      versions:
+        - 11
+        - 12
+  galaxy_tags:
+    - kubernetes
+    - k3s
+    - metallb
+    - loadbalancer
+    - networking
+
+dependencies: []
+
+collections:
+  - kubernetes.core

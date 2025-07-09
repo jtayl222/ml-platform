@@ -19,11 +19,29 @@
       with_items: "{{ groups['all'] }}"
       when: hostvars[item]['ansible_default_ipv4']['address'] != ansible_default_ipv4.address
 
-    - name: Allow Flannel VXLAN (8472)
+    - name: Allow Calico BGP (179)
       community.general.ufw:
         rule: allow
-        port: "8472"
+        port: "179"
+        proto: tcp
+        src: "{{ hostvars[item]['ansible_default_ipv4']['address'] }}"
+      with_items: "{{ groups['all'] }}"
+      when: hostvars[item]['ansible_default_ipv4']['address'] != ansible_default_ipv4.address
+
+    - name: Allow Calico VXLAN (4789)
+      community.general.ufw:
+        rule: allow
+        port: "4789"
         proto: udp
+        src: "{{ hostvars[item]['ansible_default_ipv4']['address'] }}"
+      with_items: "{{ groups['all'] }}"
+      when: hostvars[item]['ansible_default_ipv4']['address'] != ansible_default_ipv4.address
+
+    - name: Allow Calico Typha (5473)
+      community.general.ufw:
+        rule: allow
+        port: "5473"
+        proto: tcp
         src: "{{ hostvars[item]['ansible_default_ipv4']['address'] }}"
       with_items: "{{ groups['all'] }}"
       when: hostvars[item]['ansible_default_ipv4']['address'] != ansible_default_ipv4.address
@@ -44,16 +62,16 @@
         proto: tcp
         comment: "K3s NodePort services"
 
-    - name: Allow pod-to-pod communication (CNI)
+    - name: Allow pod-to-pod communication (Calico)
       community.general.ufw:
         rule: allow
-        src: "10.42.0.0/16"
-        comment: "K3s pod network"
+        src: "10.244.0.0/16"
+        comment: "Calico pod network"
 
     - name: Allow service network
       community.general.ufw:
         rule: allow
-        src: "10.43.0.0/16"
+        src: "10.96.0.0/12"
         comment: "K3s service network"
 
     - name: Reload UFW rules

@@ -186,7 +186,33 @@
   when: mlflow_db_enabled | default(true)
   tags: [mlops, mlflow, postgresql]
 
-- name: Create MLflow NodePort service
+- name: Create MLflow LoadBalancer service (with MetalLB)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: mlflow
+        namespace: "{{ mlflow_namespace }}"
+        labels:
+          app: mlflow
+        annotations:
+          metallb.universe.tf/loadBalancer-ips: "192.168.1.201"
+      spec:
+        type: LoadBalancer
+        ports:
+        - port: 5000
+          targetPort: 5000
+          protocol: TCP
+          name: http
+        selector:
+          app: mlflow
+  when: metallb_state is defined and metallb_state == 'present'
+  tags: [mlops, mlflow, service, metallb]
+
+- name: Create MLflow NodePort service (fallback)
   kubernetes.core.k8s:
     kubeconfig: "{{ kubeconfig_path }}"
     state: present
@@ -208,4 +234,5 @@
           name: http
         selector:
           app: mlflow
+  when: metallb_state is not defined or metallb_state != 'present'
   tags: [mlops, mlflow, service]

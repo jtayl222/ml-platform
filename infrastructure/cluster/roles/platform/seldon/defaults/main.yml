@@ -26,10 +26,15 @@ seldon_manager_memory_limit: 512Mi
 
 # Feature Configuration
 seldon_usage_metrics: true
-seldon_istio_enabled: false
+seldon_istio_enabled: true
 seldon_ambassador_enabled: false
 seldon_cert_manager_enabled: false
 seldon_keda_enabled: false
+
+# MetalLB Integration
+seldon_enable_loadbalancer: true
+seldon_loadbalancer_annotations:
+  metallb.universe.tf/allow-shared-ip: "seldon-shared"
 
 # Helm Configuration
 helm_wait_timeout: 600s
@@ -47,3 +52,63 @@ ghcr_docker_config: |
       }
     }
   }
+
+# Custom image configuration
+seldon_custom_images:
+  enabled: false
+  registry: "docker.io"
+  agent:
+    repository: "seldonio/seldon-agent"
+    tag: "{{ seldon_operator_image_tag }}"
+    pullPolicy: "IfNotPresent"
+
+# PR #6582 - SELDON_SERVER_HOST support
+seldon_server_host:
+  enabled: false
+  value: "localhost"
+
+# Additional agent environment variables
+seldon_agent_env_vars: []
+# Example usage:
+# seldon_agent_env_vars:
+#   - name: "SELDON_SERVER_HOST"
+#     value: "localhost"
+#   - name: "CUSTOM_SETTING"  
+#     value: "custom_value"
+
+# Network Policy Configuration
+seldon_enable_network_policies: true
+seldon_allow_external_telemetry: true
+
+# ML Namespaces that need network policies applied
+# These namespaces will get network policies that allow:
+# - Communication with seldon-system
+# - Intra-namespace communication  
+# - DNS resolution to kube-system
+# - External HTTPS/HTTP access for model downloads
+seldon_ml_namespaces:
+  - financial-ml
+  # Add other ML project namespaces here as needed
+  # - iris-demo
+  # - another-ml-project
+
+# Seldon predictor servers configuration
+seldon_predictor_servers:
+  MLSERVER:
+    grpc:
+      image: "docker.io/seldonio/mlserver:1.6.1"
+      defaultImageVersion: "1.6.1"
+    rest:
+      image: "docker.io/seldonio/mlserver:1.6.1"
+      defaultImageVersion: "1.6.1"
+    protocols: ["seldon", "v2"]
+    capabilities: ["sklearn", "xgboost", "mlflow", "pytorch", "torch", "scikit-learn", "python", "numpy"]
+  TRITON:
+    grpc:
+      image: "nvcr.io/nvidia/tritonserver:24.04-py3"
+      defaultImageVersion: "24.04-py3"
+    rest:
+      image: "nvcr.io/nvidia/tritonserver:24.04-py3"
+      defaultImageVersion: "24.04-py3"
+    protocols: ["v2"]
+    capabilities: ["tensorflow", "pytorch", "onnx", "python"]

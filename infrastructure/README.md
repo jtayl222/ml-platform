@@ -94,6 +94,8 @@ infrastructure/
 ## Related Documentation
 
 - **Implementation Guide:** `docs/enterprise-secret-management-mlops.md`
+- **CNI Migration:** `docs/k3s-calico-migration-guide.md`
+- **Migration Analysis:** `docs/flannel-to-calico-migration-required.md`
 - **Cross-Namespace Issue:** `docs/cross-namespace-secrets-temporary-fix.md`
 - **CRD Investigation:** `docs/kubectl-crd-investigation-tutorial.md`
 - **Application Examples:** Referenced GitHub repositories
