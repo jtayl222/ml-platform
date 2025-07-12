@@ -126,6 +126,12 @@
         port: 443
       controllerManager:
         webhookPort: 443
+        # Fix for PLAT-2025-07-12-001: Controller manager → scheduler connectivity
+        # Explicitly set scheduler host/port to resolve "Scheduler not ready" gRPC errors
+        # Required for A/B testing and cross-namespace model discovery
+        env:
+          SELDON_SCHEDULER_HOST: seldon-scheduler
+          SELDON_SCHEDULER_PORT: "9004"
         resources:
           requests:
             cpu: "{{ seldon_manager_cpu_request }}"
