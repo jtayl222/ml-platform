@@ -4,8 +4,7 @@ echo "Removing K3s cluster and cleaning up storage..."
 
 # Remove K3s cluster and cleanup NFS in one command
 ansible-playbook -i inventory/production/hosts infrastructure/cluster/site.yml \
-  --extra-vars="k3s_state=absent" \
-  --tags="k3s,cleanup,nfs-cleanup"
+  --extra-vars="k3s_state=absent"
 
 # Verify NFS cleanup
 echo "Verifying NFS cleanup..."
