@@ -165,10 +165,38 @@
   delay: 10
   tags: [platform, workflows, verify]
 
+- name: Create Argo Workflows LoadBalancer service (when MetalLB enabled)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: argo-workflows-server
+        namespace: "{{ argowf_namespace }}"
+        labels:
+          app.kubernetes.io/component: server
+          app.kubernetes.io/name: argo-workflows-server
+        annotations:
+          metallb.universe.tf/loadBalancerIPs: "192.168.1.205"
+      spec:
+        type: LoadBalancer
+        ports:
+        - port: 80
+          targetPort: 2746
+          protocol: TCP
+          name: http
+        selector:
+          app.kubernetes.io/name: argo-workflows-server
+  when: metallb_state is defined and metallb_state == 'present'
+  tags: [platform, workflows, loadbalancer]
+
 - name: Display Argo Workflows deployment status
   debug:
     msg:
       - "🎉 Argo Workflows {{ argowf_app_version }} deployment completed successfully!"
-      - "🌐 Workflows UI: http://{{ ansible_host | default('192.168.1.85') }}:{{ argowf_service_nodeport }}"
+      - "🌐 Workflows UI (NodePort): http://{{ ansible_host | default('192.168.1.85') }}:{{ argowf_service_nodeport }}"
+      - "🌐 Workflows UI (LoadBalancer): http://192.168.1.205 (when MetalLB enabled)"
       - "📁 Namespace: {{ argowf_namespace }}"
   tags: [platform, summary]

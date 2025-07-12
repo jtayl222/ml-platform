@@ -39,11 +39,11 @@
       service:
         type: LoadBalancer
         annotations:
-          metallb.universe.tf/loadBalancer-ips: "192.168.1.200"
+          metallb.universe.tf/loadBalancerIPs: "192.168.1.200"
       consoleService:
         type: LoadBalancer
         annotations:
-          metallb.universe.tf/loadBalancer-ips: "192.168.1.202"
+          metallb.universe.tf/loadBalancerIPs: "192.168.1.202"
       resources:
         requests:
           memory: "{{ minio_memory_request }}"
@@ -141,8 +141,10 @@
   debug:
     msg:
       - "🎉 MinIO deployment completed successfully!"
-      - "📦 MinIO API: http://{{ ansible_host | default('192.168.1.85') }}:{{ minio_nodeport }}"
-      - "🎛️ MinIO Console: http://{{ ansible_host | default('192.168.1.85') }}:{{ minio_console_nodeport }}"
+      - "📦 MinIO API (NodePort): http://{{ ansible_host | default('192.168.1.85') }}:{{ minio_nodeport }}"
+      - "📦 MinIO API (LoadBalancer): http://192.168.1.200:9000 (when MetalLB enabled)"
+      - "🎛️ MinIO Console (NodePort): http://{{ ansible_host | default('192.168.1.85') }}:{{ minio_console_nodeport }}"
+      - "🎛️ MinIO Console (LoadBalancer): http://192.168.1.202:9090 (when MetalLB enabled)"
       - "🔑 Access Key: {{ minio_access_key }}"
       - "🔒 Secret Key: {{ minio_secret_key }}"
       - "🪣 Buckets: mlflow-artifacts, argo-artifacts, kubeflow-artifacts"

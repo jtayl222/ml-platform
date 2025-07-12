@@ -24,10 +24,42 @@
           nodePort: "{{ argocd_nodeport }}"
   tags: [platform, argocd]
 
+- name: Create Argo CD LoadBalancer service (when MetalLB enabled)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: argocd-server
+        namespace: "{{ argocd_namespace }}"
+        labels:
+          app.kubernetes.io/component: server
+          app.kubernetes.io/name: argocd-server
+        annotations:
+          metallb.universe.tf/loadBalancerIPs: "192.168.1.204"
+      spec:
+        type: LoadBalancer
+        ports:
+        - port: 80
+          targetPort: 8080
+          protocol: TCP
+          name: http
+        - port: 443
+          targetPort: 8080
+          protocol: TCP
+          name: https
+        selector:
+          app.kubernetes.io/name: argocd-server
+  when: metallb_state is defined and metallb_state == 'present'
+  tags: [platform, argocd, loadbalancer]
+
 - name: Display Argo CD access information
   debug:
     msg:
       - "🎉 Argo CD deployed successfully!"
-      - "🌐 Access URL: http://{{ ansible_host | default('192.168.1.85') }}:{{ argocd_nodeport }}"
+      - "🌐 Access URL (NodePort): http://{{ ansible_host | default('192.168.1.85') }}:{{ argocd_nodeport }}"
+      - "🌐 Access URL (LoadBalancer): http://192.168.1.204 (when MetalLB enabled)"
       - "📁 Namespace: {{ argocd_namespace }}"
   tags: [platform, summary]

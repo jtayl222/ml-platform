@@ -168,11 +168,38 @@
   failed_when: false  # Don't fail if ingress controller not available
   tags: [platform, dashboard, ingress]
 
+- name: Create Dashboard LoadBalancer service (when MetalLB enabled)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: dashboard
+        namespace: "{{ dashboard_namespace }}"
+        labels:
+          app: kubernetes-dashboard
+        annotations:
+          metallb.universe.tf/loadBalancerIPs: "192.168.1.208"
+      spec:
+        type: LoadBalancer
+        ports:
+        - port: 443
+          targetPort: 8443
+          protocol: TCP
+          name: https
+        selector:
+          app.kubernetes.io/name: kong
+  when: metallb_state is defined and metallb_state == 'present'
+  tags: [platform, dashboard, loadbalancer]
+
 - name: Display Kubernetes Dashboard deployment status
   debug:
     msg:
       - "🎉 Kubernetes Dashboard deployment completed successfully!"
-      - "🌐 Dashboard URL: https://{{ ansible_host | default('192.168.1.85') }}:{{ dashboard_nodeport }}"
+      - "🌐 Dashboard URL (NodePort): https://{{ ansible_host | default('192.168.1.85') }}:{{ dashboard_nodeport }}"
+      - "🌐 Dashboard URL (LoadBalancer): https://192.168.1.208 (when MetalLB enabled)"
       - "🔑 Access Mode: Skip Login Enabled (Demo Mode)"
       - "👤 Admin ServiceAccount: {{ dashboard_admin_account }}"
       - "📁 Namespace: {{ dashboard_namespace }}"

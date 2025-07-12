@@ -20,18 +20,19 @@
 
 ## 📋 **Complete Service Table with Credentials**
 
-| **Service** | **URL** | **Status** | **Credentials & Notes** |
-|-------------|---------|------------|--------------------------|
-| **ArgoCD** | [https://192.168.1.85:30080](https://192.168.1.85:30080) | ✅ | **User:** `admin`<br/>**Password:** [Get Password](#argocd-password) |
-| **Argo Workflows** | [http://192.168.1.85:32746](http://192.168.1.85:32746) | ✅ | **User:** `admin`<br/>**Password:** `mlopsadmin123` ⚠️ *Demo only* |
-| **JupyterHub** | [http://192.168.1.85:30888](http://192.168.1.85:30888) | ✅ | **User:** Any username<br/>**Password:** `mlops123` ⚠️ *Demo only* |
-| **Kubeflow Pipelines** | [http://192.168.1.85:31234](http://192.168.1.85:31234) | ⚠️ | **Auth:** None required ⚠️ *Enable auth for production*<br/>**Note:** Some cache pods may be restarting |
-| **Kubernetes Dashboard** | [https://192.168.1.85:30444](https://192.168.1.85:30444) | ✅ | **Auth:** Service Account Token ([Get Token](#dashboard-token)) |
-| **MinIO Console** | [http://192.168.1.85:31578](http://192.168.1.85:31578) | ✅ | **User:** `minioadmin`<br/>**Password:** `minioadmin123` ⚠️ *Demo only*<br/>**API Port:** 30900 |
-| **MLflow** | [http://192.168.1.85:30800](http://192.168.1.85:30800) | ✅ | **Backend:** S3 via MinIO ⚠️ *No auth - enable for production*<br/>**Artifacts:** `s3://mlflow-artifacts/` |
-| **Grafana** | [http://192.168.1.85:30300](http://192.168.1.85:30300) | ✅ | **User:** `admin`<br/>**Password:** `admin123` ⚠️ *Demo only* |
-| **Prometheus** | [http://192.168.1.85:30090](http://192.168.1.85:30090) | ✅ | **Metrics Collection** ⚠️ *No auth - secure for production* |
-| **Seldon Core** | **API/CLI Only** | ✅ | **Swagger UI:** Port-forward to 8080<br/>**Model Serving Platform** - Deploy via kubectl |
+| **Service** | **URL (LoadBalancer)** | **URL (NodePort Fallback)** | **Status** | **Credentials & Notes** |
+|-------------|------------------------|------------------------------|------------|--------------------------|
+| **ArgoCD** | [http://192.168.1.204](http://192.168.1.204) | [https://192.168.1.85:30080](https://192.168.1.85:30080) | ✅ | **User:** `admin`<br/>**Password:** [Get Password](#argocd-password) |
+| **Argo Workflows** | [http://192.168.1.205](http://192.168.1.205) | [http://192.168.1.85:32746](http://192.168.1.85:32746) | ✅ | **User:** `admin`<br/>**Password:** `mlopsadmin123` ⚠️ *Demo only* |
+| **JupyterHub** | [http://192.168.1.206](http://192.168.1.206) | [http://192.168.1.85:30888](http://192.168.1.85:30888) | ✅ | **User:** Any username<br/>**Password:** `mlops123` ⚠️ *Demo only* |
+| **Grafana** | [http://192.168.1.207](http://192.168.1.207) | [http://192.168.1.85:30300](http://192.168.1.85:30300) | ✅ | **User:** `admin`<br/>**Password:** `admin123` ⚠️ *Demo only* |
+| **Kubernetes Dashboard** | [https://192.168.1.208](https://192.168.1.208) | [https://192.168.1.85:30444](https://192.168.1.85:30444) | ✅ | **Auth:** Service Account Token ([Get Token](#dashboard-token)) |
+| **MLflow** | [http://192.168.1.203:5000](http://192.168.1.203:5000) | [http://192.168.1.85:30800](http://192.168.1.85:30800) | ✅ | **Backend:** S3 via MinIO ⚠️ *No auth - enable for production*<br/>**Artifacts:** `s3://mlflow-artifacts/` |
+| **MinIO API** | [http://192.168.1.200:9000](http://192.168.1.200:9000) | [http://192.168.1.85:30900](http://192.168.1.85:30900) | ✅ | **User:** `minioadmin`<br/>**Password:** `minioadmin123` ⚠️ *Demo only* |
+| **MinIO Console** | [http://192.168.1.202:9090](http://192.168.1.202:9090) | [http://192.168.1.85:31578](http://192.168.1.85:31578) | ✅ | **User:** `minioadmin`<br/>**Password:** `minioadmin123` ⚠️ *Demo only* |
+| **Prometheus** | *NodePort Only* | [http://192.168.1.85:30090](http://192.168.1.85:30090) | ✅ | **Metrics Collection** ⚠️ *No auth - secure for production* |
+| **Seldon Core** | [http://192.168.1.202](http://192.168.1.202) | **API/CLI Only** | ✅ | **Model Serving Platform** - Deploy via kubectl |
+| **NGINX Ingress** | [http://192.168.1.249](http://192.168.1.249) | *LoadBalancer Only* | ✅ | **Routes:** ml-api.local → financial-inference services |
 
 ## 🤖 **Model Serving with Seldon Core**
 
@@ -174,8 +175,32 @@ kubectl -n kubernetes-dashboard create token admin-user
 
 ## 🚀 **Quick Access Workflow**
 
+### **🏆 LoadBalancer Access (Recommended)**
 ```bash
 # ⚠️ DEMO ENVIRONMENT - Change passwords before production use
+
+# 1. Access development environment
+open http://192.168.1.206  # JupyterHub (any-user/mlops123)
+
+# 2. Track experiments  
+open http://192.168.1.203:5000  # MLflow
+
+# 3. Create ML pipelines
+open http://192.168.1.205  # Argo Workflows (admin/mlopsadmin123)
+
+# 4. Deploy models with Seldon
+kubectl get seldondeployments -A  # Check running models
+
+# 5. Deploy via GitOps
+open http://192.168.1.204  # ArgoCD (admin/<get-password>)
+
+# 6. Monitor platform
+open http://192.168.1.207  # Grafana (admin/admin123)
+```
+
+### **📡 NodePort Access (Fallback)**
+```bash
+# Use these if LoadBalancer IPs are not accessible
 
 # 1. Access development environment
 open http://192.168.1.85:30888  # JupyterHub (any-user/mlops123)
@@ -184,16 +209,12 @@ open http://192.168.1.85:30888  # JupyterHub (any-user/mlops123)
 open http://192.168.1.85:30800  # MLflow
 
 # 3. Create ML pipelines
-open http://192.168.1.85:31234  # Kubeflow Pipelines
 open http://192.168.1.85:32746  # Argo Workflows (admin/mlopsadmin123)
 
-# 4. Deploy models with Seldon
-kubectl get seldondeployments -A  # Check running models
-
-# 5. Deploy via GitOps
+# 4. Deploy via GitOps
 open https://192.168.1.85:30080 # ArgoCD (admin/<get-password>)
 
-# 6. Monitor platform
+# 5. Monitor platform
 open http://192.168.1.85:30300  # Grafana (admin/admin123)
 ```
 

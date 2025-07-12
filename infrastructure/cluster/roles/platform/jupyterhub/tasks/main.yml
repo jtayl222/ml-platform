@@ -200,11 +200,40 @@
           echo "✅ Ready for ML experiments!"
   tags: [platform, jupyter, config]
 
+- name: Create JupyterHub LoadBalancer service (when MetalLB enabled)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: jupyterhub
+        namespace: "{{ jupyterhub_namespace }}"
+        labels:
+          app: jupyterhub
+          component: proxy
+        annotations:
+          metallb.universe.tf/loadBalancerIPs: "192.168.1.206"
+      spec:
+        type: LoadBalancer
+        ports:
+        - port: 80
+          targetPort: 8000
+          protocol: TCP
+          name: http
+        selector:
+          app: jupyterhub
+          component: proxy
+  when: metallb_state is defined and metallb_state == 'present'
+  tags: [platform, jupyter, loadbalancer]
+
 - name: Display JupyterHub deployment status
   debug:
     msg:
       - "🎉 JupyterHub deployment completed successfully!"
-      - "🌐 JupyterHub URL: http://{{ ansible_host | default('192.168.1.85') }}:{{ jupyterhub_nodeport }}"
+      - "🌐 JupyterHub URL (NodePort): http://{{ ansible_host | default('192.168.1.85') }}:{{ jupyterhub_nodeport }}"
+      - "🌐 JupyterHub URL (LoadBalancer): http://192.168.1.206 (when MetalLB enabled)"
       - "🔑 Login: Use any username with password '{{ jupyterhub_password }}'"
       - "📁 Namespace: {{ jupyterhub_namespace }}"
       - "🐳 User Image: {{ jupyterhub_image_name }}:{{ jupyterhub_image_tag }}"
@@ -215,7 +244,7 @@
       - "- Pre-installed: mlflow, boto3, scikit-learn, pandas"
       - ""
       - "💡 Quick Start:"
-      - "1. Navigate to {{ ansible_host | default('192.168.1.85') }}:{{ jupyterhub_nodeport }}"
+      - "1. Navigate to {{ ansible_host | default('192.168.1.85') }}:{{ jupyterhub_nodeport }} or http://192.168.1.206"
       - "2. Login with any username and password '{{ jupyterhub_password }}'"
       - "3. Start your ML experiments!"
   tags: [platform, summary]
