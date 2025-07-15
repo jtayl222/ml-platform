@@ -1,8 +1,8 @@
-# 🚀 Production MLOps Platform on K3s Homelab
+# 🚀 Production MLOps Platform on K3s
 
 ## 🏗️ **High-Performance Cluster Architecture**
 ```
-🎯 K3s Homelab MLOps Platform (36 CPU cores, 250GB RAM)
+🎯 K3s MLOps Platform (36 CPU cores, 250GB RAM)
 ├── Infrastructure Layer
 │   ├── K3s Cluster (1 control + 4 worker nodes)
 │   ├── NFS Storage (1Ti+ persistent volumes) 
@@ -40,7 +40,7 @@
 [![MinIO](https://img.shields.io/badge/MinIO-Object%20Storage-blue)](https://min.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A complete, production-ready MLOps platform built on Kubernetes (K3s), featuring experiment tracking, model serving, pipeline orchestration, GitOps, and comprehensive monitoring - all optimized for high-performance homelab deployment.
+A complete, production-ready MLOps platform built on Kubernetes (K3s), featuring experiment tracking, model serving, pipeline orchestration, GitOps, and comprehensive monitoring - all optimized for high-performance on-premises deployment.
 
 ## 🎯 **What This Demonstrates**
 
@@ -109,8 +109,8 @@ A complete, production-ready MLOps platform built on Kubernetes (K3s), featuring
 # GRANT ALL PRIVILEGES ON DATABASE mlflow TO mlflow;
 
 # 1. Clone and configure
-git clone https://github.com/yourusername/k3s-homelab.git
-cd k3s-homelab
+git clone https://github.com/yourusername/ml-platform.git
+cd ml-platform
 
 # 2. Configure your inventory
 cp inventory/production/hosts.yml.example inventory/production/hosts.yml
@@ -266,7 +266,7 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) for deta
 
 ## 🏅 **Platform Highlights**
 
-**This homelab MLOps platform rivals enterprise solutions costing $200k+ annually, demonstrating:**
+**This MLOps platform rivals enterprise solutions costing $200k+ annually, demonstrating:**
 
 - ✅ **Complete MLOps infrastructure** with all major components
 - ✅ **Production-grade reliability** and monitoring

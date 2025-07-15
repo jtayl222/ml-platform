@@ -1,6 +1,6 @@
-# 🚀 K3s MLOps Homelab Setup Guide
+# 🚀 K3s MLOps Platform Setup Guide
 
-**Complete enterprise-grade MLOps platform deployment on high-performance homelab cluster**
+**Complete enterprise-grade MLOps platform deployment on high-performance on-premises cluster**
 
 ## 🏗️ **Infrastructure Overview**
 
@@ -37,8 +37,8 @@
 ### **1. Clone and Setup**
 ```bash
 # Clone the repository
-git clone <your-repo-url> k3s-homelab
-cd k3s-homelab
+git clone <your-repo-url> ml-platform
+cd ml-platform
 
 # Install Ansible dependencies
 pip3 install ansible kubernetes
@@ -276,13 +276,13 @@ kubectl get secrets --all-namespaces -o yaml > backup-secrets.yaml
 
 **Your deployed platform includes:**
 - ✅ Enterprise-grade MLOps infrastructure ($200k+ commercial value)
-- ✅ High-performance homelab optimization 
+- ✅ High-performance on-premises optimization 
 - ✅ Production-ready monitoring and observability
 - ✅ Complete ML lifecycle management
 - ✅ GitOps-enabled CI/CD pipelines
 - ✅ Scalable model serving capabilities
 
-**Congratulations! You now have a production-grade MLOps platform running on your homelab cluster!** 🎉
+**Congratulations! You now have a production-grade MLOps platform running on your on-premises cluster!** 🎉
 
 ---
 

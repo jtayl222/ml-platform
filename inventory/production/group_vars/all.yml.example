@@ -1,6 +1,6 @@
 ---
 # =============================================================================
-# HOMELAB K3S CLUSTER CONFIGURATION
+# K3S CLUSTER CONFIGURATION
 # High-Resource Cluster: 5 nodes, 36 CPU cores, ~250GB RAM
 # =============================================================================
 
@@ -35,7 +35,7 @@ nfs_path: "/srv/nfs/kubernetes"
 nfs_allowed_networks: "192.168.1.0/24"
 
 # =============================================================================
-# OPTIMIZED RESOURCE ALLOCATION FOR HIGH-RESOURCE HOMELAB
+# OPTIMIZED RESOURCE ALLOCATION FOR HIGH-RESOURCE ON-PREMISES DEPLOYMENT
 # =============================================================================
 
 # MinIO - High-Performance Storage
@@ -149,7 +149,7 @@ ufw_default_policy_incoming: deny
 ufw_default_policy_outgoing: allow
 
 # =============================================================================
-# FEATURE FLAGS FOR HOMELAB OPTIMIZATION
+# FEATURE FLAGS FOR ON-PREMISES OPTIMIZATION
 # =============================================================================
 
 # Enable/Disable heavy components based on needs
@@ -160,7 +160,7 @@ enable_advanced_monitoring: true
 enable_gpu_support: false
 
 # Development vs Production modes
-homelab_mode: true
+on_premises_mode: true
 development_mode: true
 high_availability: false
 

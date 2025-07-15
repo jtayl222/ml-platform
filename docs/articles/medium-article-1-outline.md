@@ -1,4 +1,4 @@
-# Medium Article 1: "Building a Fortune 500-Grade MLOps Platform in Your Homelab"
+# Medium Article 1: "Building a Fortune 500-Grade MLOps Platform On-Premises"
 
 **Publication Target:** Medium.com + Personal Blog  
 **Word Count Goal:** 3,000+ words  
@@ -9,11 +9,11 @@
 
 ## Article Hook & Value Proposition
 
-**Opening Hook:** "What if you could build the same MLOps infrastructure that powers Fortune 500 machine learning at scale—right in your homelab? After 18 months of production deployments and countless 3 AM debugging sessions, I've learned that the gap between enterprise and homelab MLOps isn't hardware—it's architecture."
+**Opening Hook:** "What if you could build the same MLOps infrastructure that powers Fortune 500 machine learning at scale—right in your on-premises environment? After 18 months of production deployments and countless 3 AM debugging sessions, I've learned that the gap between enterprise and on-premises MLOps isn't hardware—it's architecture."
 
 **Key Value Propositions:**
 1. **Real Production Experience**: Lessons from actual production MLOps deployments
-2. **Enterprise-Grade Architecture**: Fortune 500 patterns applied to homelab constraints
+2. **Enterprise-Grade Architecture**: Fortune 500 patterns applied to on-premises constraints
 3. **Battle-Tested Solutions**: Technologies that survived real-world pressure testing
 4. **Complete Transparency**: Open-source everything, including the mistakes
 
@@ -33,7 +33,7 @@
 - Security compliance (SOC 2, ISO 27001)
 - Cost optimization and resource management
 
-**The Homelab Challenge:**
+**The On-Premises Challenge:**
 - Limited hardware resources (vs. cloud infinite scaling)
 - Single administrator (vs. dedicated platform teams)
 - Cost constraints (vs. enterprise budgets)

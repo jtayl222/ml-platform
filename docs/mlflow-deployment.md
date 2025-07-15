@@ -1,6 +1,6 @@
 # MLflow Deployment Guide
 
-This document describes how MLflow is deployed in this homelab, with a focus on secure authentication, secret management, and production readiness.
+This document describes how MLflow is deployed in this platform, with a focus on secure authentication, secret management, and production readiness.
 
 ---
 

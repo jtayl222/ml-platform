@@ -8,7 +8,7 @@ NUC10i7FNH ansible_host=192.168.1.107 ansible_user=user
 U850 ansible_host=192.168.1.100 ansible_user=user
 localhost ansible_connection=local
 
-# Homelab SSH settings - bypass host key checking for development
+# Development SSH settings - bypass host key checking for development
 [all:vars]
 ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
 

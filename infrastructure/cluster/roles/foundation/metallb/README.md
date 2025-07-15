@@ -4,7 +4,7 @@ This Ansible role installs and configures MetalLB, a load balancer implementatio
 
 ## Overview
 
-MetalLB provides a network load balancer implementation for Kubernetes clusters that do not run on a cloud provider. It allows you to use LoadBalancer services in your homelab or on-premises Kubernetes environment.
+MetalLB provides a network load balancer implementation for Kubernetes clusters that do not run on a cloud provider. It allows you to use LoadBalancer services in your on-premises Kubernetes environment.
 
 ## Features
 

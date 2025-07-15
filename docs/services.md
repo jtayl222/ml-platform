@@ -237,4 +237,4 @@ open http://192.168.1.85:30300  # Grafana (admin/admin123)
 
 **⚠️ Security Reminder**: This is a development/demo environment. Secure appropriately before production use.
 
-**🏆 Enterprise Value**: This platform demonstrates production-grade MLOps infrastructure worth $200k+ in commercial solutions, optimized for your high-performance homelab.
+**🏆 Enterprise Value**: This platform demonstrates production-grade MLOps infrastructure worth $200k+ in commercial solutions, optimized for high-performance on-premises deployment.

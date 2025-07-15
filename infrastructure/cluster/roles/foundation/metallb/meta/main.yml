@@ -4,7 +4,7 @@
 galaxy_info:
   author: MLOps Platform Team
   description: MetalLB Load Balancer for Kubernetes
-  company: Homelab
+  company: MLOps Platform
   license: MIT
   min_ansible_version: 2.10
   platforms:

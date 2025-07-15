@@ -1,6 +1,6 @@
-# Homelab MLOps Components
+# MLOps Platform Components
 
-This document provides an overview of the main components deployed in this homelab MLOps environment.
+This document provides an overview of the main components deployed in this MLOps platform environment.
 
 ---
 
