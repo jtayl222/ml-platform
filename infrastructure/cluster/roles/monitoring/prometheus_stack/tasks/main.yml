@@ -70,26 +70,6 @@
                     storage: "{{ prometheus_storage_size }}"
           retention: 30d
 
-      # Prometheus Pushgateway Configuration
-      prometheus-pushgateway:
-        enabled: true
-        service:
-          type: NodePort
-          nodePort: "{{ pushgateway_nodeport | default(32091) }}"
-        resources:
-          requests:
-            memory: "{{ pushgateway_memory_request | default('128Mi') }}"
-            cpu: "{{ pushgateway_cpu_request | default('100m') }}"
-          limits:
-            memory: "{{ pushgateway_memory_limit | default('512Mi') }}"
-            cpu: "{{ pushgateway_cpu_limit | default('500m') }}"
-        persistence:
-          enabled: true
-          storageClassName: "{{ prometheus_storage_class }}"
-          size: "{{ pushgateway_storage_size | default('1Gi') }}"
-        serviceMonitor:
-          enabled: true
-          namespace: "{{ prometheus_stack_namespace }}"
       
       # AlertManager Configuration
       alertmanager:
@@ -134,6 +114,37 @@
   delay: 10
   tags: [monitoring, verify]
 
+- name: Deploy Prometheus Pushgateway
+  kubernetes.core.helm:
+    name: prometheus-pushgateway
+    chart_ref: prometheus-community/prometheus-pushgateway
+    release_namespace: "{{ prometheus_stack_namespace }}"
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_timeout: "{{ helm_wait_timeout }}"
+    values:
+      service:
+        type: NodePort
+        nodePort: "{{ pushgateway_nodeport | default(32091) }}"
+      resources:
+        requests:
+          memory: "{{ pushgateway_memory_request | default('128Mi') }}"
+          cpu: "{{ pushgateway_cpu_request | default('100m') }}"
+        limits:
+          memory: "{{ pushgateway_memory_limit | default('512Mi') }}"
+          cpu: "{{ pushgateway_cpu_limit | default('500m') }}"
+      persistence:
+        enabled: true
+        storageClass: "{{ prometheus_storage_class }}"
+        size: "{{ pushgateway_storage_size | default('1Gi') }}"
+      serviceMonitor:
+        enabled: true
+        namespace: "{{ prometheus_stack_namespace }}"
+  register: pushgateway_deployment
+  retries: "{{ helm_retries }}"
+  delay: "{{ helm_retry_delay }}"
+  tags: [monitoring, pushgateway, helm-deploy]
+
 - name: Create Grafana LoadBalancer service (when MetalLB enabled)
   kubernetes.core.k8s:
     kubeconfig: "{{ kubeconfig_path }}"
@@ -160,6 +171,32 @@
   when: metallb_state is defined and metallb_state == 'present'
   tags: [monitoring, grafana, loadbalancer]
 
+- name: Create Prometheus Pushgateway LoadBalancer service (when MetalLB enabled)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: prometheus-pushgateway-lb
+        namespace: "{{ prometheus_stack_namespace }}"
+        labels:
+          app.kubernetes.io/name: prometheus-pushgateway
+        annotations:
+          metallb.universe.tf/loadBalancerIPs: "192.168.1.209"
+      spec:
+        type: LoadBalancer
+        ports:
+        - port: 9091
+          targetPort: 9091
+          protocol: TCP
+          name: http
+        selector:
+          app.kubernetes.io/name: prometheus-pushgateway
+  when: metallb_state is defined and metallb_state == 'present'
+  tags: [monitoring, pushgateway, loadbalancer]
+
 - name: Display Prometheus Stack deployment status
   debug:
     msg:
@@ -167,7 +204,8 @@
       - "📊 Grafana Dashboard (NodePort): http://{{ ansible_host | default('192.168.1.85') }}:{{ grafana_nodeport }}"
       - "📊 Grafana Dashboard (LoadBalancer): http://192.168.1.207 (when MetalLB enabled)"
       - "🔍 Prometheus UI: http://{{ ansible_host | default('192.168.1.85') }}:{{ prometheus_nodeport }}"
-      - "📤 Pushgateway: http://{{ ansible_host | default('192.168.1.85') }}:{{ pushgateway_nodeport | default(32091) }}"
+      - "📤 Pushgateway (NodePort): http://{{ ansible_host | default('192.168.1.85') }}:{{ pushgateway_nodeport | default(32091) }}"
+      - "📤 Pushgateway (LoadBalancer): http://192.168.1.209:9091 (when MetalLB enabled)"
       - "🔑 Grafana Credentials: admin / {{ grafana_admin_password }}"
       - "📈 Namespace: {{ prometheus_stack_namespace }}"
   tags: [monitoring, summary]
