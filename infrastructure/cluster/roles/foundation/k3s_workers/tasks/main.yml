@@ -74,6 +74,26 @@
       become: true
       when: k3s_state == 'present'
 
+    - name: Create K3s config directory on workers
+      file:
+        path: /etc/rancher/k3s
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      tags: [k3s, registry, harbor]
+      when: k3s_state == 'present'
+
+    - name: Configure Harbor registry for K3s workers
+      template:
+        src: ../../k3s_control_plane/templates/registries.yaml.j2
+        dest: /etc/rancher/k3s/registries.yaml
+        owner: root
+        group: root
+        mode: '0644'
+      when: k3s_state == 'present' and harbor_loadbalancer_ip is defined
+      tags: [k3s, registry, harbor]
+
     - name: Install k3s worker
       ansible.builtin.shell: |
         export K3S_URL="https://{{ k3s_control_plane_endpoint_ip }}:6443"

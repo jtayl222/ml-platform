@@ -1,0 +1,133 @@
+---
+- name: Configure Harbor Registry for K3s Cluster
+  hosts: k3s_control_plane:k3s_workers
+  become: true
+  gather_facts: true
+  vars:
+    harbor_loadbalancer_ip: "{{ harbor_loadbalancer_ip | default('192.168.1.210') }}"
+    harbor_admin_user: "{{ harbor_admin_user | default('admin') }}"
+    harbor_admin_password: "{{ harbor_admin_password | default('Harbor12345') }}"
+  tasks:
+    - name: Create K3s config directory
+      file:
+        path: /etc/rancher/k3s
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Deploy Harbor registry configuration
+      template:
+        content: |
+          mirrors:
+            docker.io:
+              endpoint:
+                - "http://{{ harbor_loadbalancer_ip }}"
+            "{{ harbor_loadbalancer_ip }}":
+              endpoint:
+                - "http://{{ harbor_loadbalancer_ip }}"
+          
+          configs:
+            "{{ harbor_loadbalancer_ip }}":
+              auth:
+                username: "{{ harbor_admin_user }}"
+                password: "{{ harbor_admin_password }}"
+              tls:
+                insecure_skip_verify: true
+        dest: /etc/rancher/k3s/registries.yaml
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart k3s
+
+    - name: Restart K3s on control plane
+      systemd:
+        name: k3s
+        state: restarted
+      when: inventory_hostname in groups['k3s_control_plane']
+
+    - name: Restart K3s agent on workers
+      systemd:
+        name: k3s-agent
+        state: restarted
+      when: inventory_hostname in groups['k3s_workers']
+
+    - name: Wait for K3s to stabilize
+      pause:
+        seconds: 30
+
+    - name: Verify K3s is running
+      command: systemctl is-active k3s
+      register: k3s_status
+      changed_when: false
+      when: inventory_hostname in groups['k3s_control_plane']
+
+    - name: Verify K3s agent is running
+      command: systemctl is-active k3s-agent
+      register: k3s_agent_status
+      changed_when: false
+      when: inventory_hostname in groups['k3s_workers']
+
+- name: Configure Harbor pull secrets in namespaces
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    kubeconfig_path: "/tmp/k3s-kubeconfig.yaml"
+    harbor_loadbalancer_ip: "{{ harbor_loadbalancer_ip | default('192.168.1.210') }}"
+    harbor_admin_password: "{{ harbor_admin_password | default('Harbor12345') }}"
+    namespaces_to_configure:
+      - default
+      - kube-system
+      - seldon-system
+      - mlflow
+      - jupyterhub
+      - argowf
+      - harbor
+  tasks:
+    - name: Create Harbor pull secret in namespaces
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig_path }}"
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: harbor-pull-secret
+            namespace: "{{ item }}"
+          type: kubernetes.io/dockerconfigjson
+          data:
+            .dockerconfigjson: "{{ harbor_docker_config | to_json | b64encode }}"
+      vars:
+        harbor_docker_config:
+          auths:
+            "{{ harbor_loadbalancer_ip }}":
+              username: "admin"
+              password: "{{ harbor_admin_password }}"
+              auth: "{{ ('admin:' + harbor_admin_password) | b64encode }}"
+      loop: "{{ namespaces_to_configure }}"
+      ignore_errors: true
+
+    - name: Update default service account with Harbor pull secret
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig_path }}"
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: default
+            namespace: "{{ item }}"
+          imagePullSecrets:
+            - name: harbor-pull-secret
+      loop: "{{ namespaces_to_configure }}"
+      ignore_errors: true
+
+    - name: Display configuration status
+      debug:
+        msg:
+          - "✅ Harbor registry configured for K3s cluster"
+          - "📦 Registry URL: http://{{ harbor_loadbalancer_ip }}"
+          - "🔐 Pull secrets created in {{ namespaces_to_configure | length }} namespaces"
+          - ""
+          - "🧪 Test with:"
+          - "kubectl run test-harbor --image={{ harbor_loadbalancer_ip }}/library/nginx:latest"

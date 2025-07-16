@@ -41,6 +41,7 @@ ansible-playbook -i inventory/production/hosts infrastructure/cluster/site.yml -
 ansible-playbook -i inventory/production/hosts infrastructure/cluster/site.yml --tags mlops
 ansible-playbook -i inventory/production/hosts infrastructure/cluster/site.yml --tags monitoring
 ansible-playbook -i inventory/production/hosts infrastructure/cluster/site.yml --tags metallb
+ansible-playbook -i inventory/production/hosts infrastructure/cluster/site.yml --tags harbor
 
 # Deploy with MetalLB enabled (enables LoadBalancer services)
 ansible-playbook -i inventory/production/hosts infrastructure/cluster/site.yml -e metallb_state=present
@@ -76,6 +77,7 @@ kubectl wait --for=condition=Ready nodes --all --timeout=300s
 - **MLflow**: `http://192.168.1.201:5000` (LoadBalancer) or `http://<cluster-ip>:30800` (NodePort fallback)
 - **MinIO API**: `http://192.168.1.200:9000` (LoadBalancer) or `http://<cluster-ip>:30900` (NodePort fallback)
 - **MinIO Console**: `http://192.168.1.202:9001` (LoadBalancer) or `http://<cluster-ip>:30901` (NodePort fallback)
+- **Harbor Registry**: `http://192.168.1.210:80` (LoadBalancer) or `http://<cluster-ip>:30880` (NodePort fallback)
 - **JupyterHub**: `http://<cluster-ip>:30888`
 - **Argo CD**: `http://<cluster-ip>:30080`
 - **Argo Workflows**: `http://<cluster-ip>:32746`
@@ -91,6 +93,7 @@ For consistent service access across deployments, use LoadBalancer endpoints:
 # Stable endpoints (recommended with MetalLB)
 export MLFLOW_TRACKING_URI=http://192.168.1.201:5000
 export MINIO_ENDPOINT=http://192.168.1.200:9000
+export HARBOR_REGISTRY=http://192.168.1.210
 
 # Deploy platform with MetalLB LoadBalancer support
 ansible-playbook -i inventory/production/hosts infrastructure/cluster/site.yml -e metallb_state=present
@@ -110,6 +113,7 @@ ansible-playbook -i inventory/production/hosts infrastructure/cluster/site.yml -
 - `foundation/sealed_secrets` - Sealed Secrets controller
 - `mlops/mlflow` - MLflow deployment with PostgreSQL backend
 - `platform/seldon` - Seldon Core model serving
+- `platform/harbor` - Harbor container registry
 - `platform/jupyterhub` - JupyterHub collaborative environment
 - `platform/argo_cd` - ArgoCD GitOps deployment
 - `monitoring/prometheus_stack` - Prometheus + Grafana monitoring
@@ -226,6 +230,56 @@ kubectl apply -f k8s/base/network-policy.yaml -n financial-ml
 
 See `docs/network-policies.md` for complete documentation and policy templates.
 
+## Harbor Container Registry
+
+Harbor is integrated as the platform's container registry, providing secure image storage, vulnerability scanning, and content signing capabilities.
+
+### Harbor Configuration
+
+```yaml
+# Harbor Registry Settings
+harbor_namespace: "harbor"
+harbor_nodeport: 30880
+harbor_loadbalancer_ip: "192.168.1.210"
+harbor_admin_password: "set-via-environment-or-vault"
+harbor_trivy_enabled: true
+harbor_notary_enabled: true
+harbor_chartmuseum_enabled: true
+```
+
+### Harbor Usage
+
+```bash
+# Login to Harbor registry
+docker login 192.168.1.210 -u admin -p $HARBOR_ADMIN_PASSWORD
+
+# Tag and push image
+docker tag myapp:latest 192.168.1.210/library/myapp:latest
+docker push 192.168.1.210/library/myapp:latest
+
+# Pull image
+docker pull 192.168.1.210/library/myapp:latest
+
+# Create project via Harbor UI
+# Navigate to http://192.168.1.210 → Projects → New Project
+```
+
+### Harbor Integration
+
+Harbor is automatically integrated with:
+- **Seldon Core**: Registry secrets created for model serving
+- **JupyterHub**: Registry access for notebook environments
+- **Kubernetes**: Service accounts configured with pull secrets
+
+### Harbor Features
+
+- **Vulnerability Scanning**: Trivy integration for security analysis
+- **Content Trust**: Notary service for image signing
+- **Helm Charts**: ChartMuseum for Helm chart repository
+- **RBAC**: Role-based access control for projects and repositories
+- **Replication**: Cross-registry replication support
+- **Webhook**: Integration with CI/CD pipelines
+
 ## Troubleshooting
 
 ### Common Issues
@@ -235,6 +289,8 @@ See `docs/network-policies.md` for complete documentation and policy templates.
 - **Service mesh issues**: Ensure Istio is properly configured for KServe
 - **DNS resolution failures**: Check network policies allow port 53 to kube-system
 - **Cross-namespace communication**: Verify namespace labels and network policy rules
+- **Harbor registry issues**: Check persistent volume claims and database connectivity
+- **Container image push failures**: Verify Harbor admin credentials and network connectivity
 
 ### Debug Commands
 ```bash
@@ -248,6 +304,11 @@ kubectl describe pod -n mlflow
 # Check persistent volumes
 kubectl get pv,pvc --all-namespaces
 
+# Harbor troubleshooting
+kubectl logs -n harbor deployment/harbor-core
+kubectl get pods -n harbor
+kubectl get svc -n harbor
+
 # Ansible fact gathering issues
 ansible k3s_control_plane -i inventory/production/hosts -m setup
 ansible-playbook -i inventory/production/hosts infrastructure/cluster/site.yml --tags k3s -vvv
@@ -260,6 +321,7 @@ ansible-playbook -i inventory/production/hosts infrastructure/cluster/site.yml -
 - Monitoring is built-in with Prometheus and Grafana
 - Security follows enterprise best practices with RBAC and sealed secrets
 - GitOps approach enables version-controlled infrastructure management
+- Harbor registry provides secure container image storage with vulnerability scanning
 - Current focus is on Flannel to Calico CNI migration for Seldon Core v2 compatibility
 
 ## Development Guidelines

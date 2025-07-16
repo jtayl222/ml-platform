@@ -28,6 +28,10 @@ k3s_pod_cidr: "10.42.0.0/16"
 k3s_service_cidr: "10.43.0.0/16"
 k3s_api_port: 6443
 
+# CNI Configuration (Cilium default, resolves Calico ARP bug #8689)
+cilium_enabled: true
+calico_enabled: false
+
 # Storage
 global_storage_class: "nfs-shared"
 nfs_server_ip: "{{ hostvars[groups['nfs_server'][0]]['ansible_host'] }}"
@@ -62,7 +66,7 @@ grafana_storage_size: "100Gi"
 # MLflow - Enhanced ML Experiment Tracking
 mlflow_namespace: "mlflow"
 mlflow_nodeport: 30800
-mlflow_image: "jtayl22/mlflow-postgresql:3.1.0-4"
+mlflow_image: "192.168.1.210/library/mlflow-postgresql:3.1.0-4"
 mlflow_storage_size: "500Gi"
 mlflow_memory_request: "8Gi"
 mlflow_memory_limit: "16Gi"
@@ -95,6 +99,26 @@ seldon_cpu_limit: 8
 seldon_minio_bucket: "seldon-models"
 seldon_enable_analytics: true
 
+# Seldon Core v2 Custom Configuration
+# Enable PR #6582 - SELDON_SERVER_HOST support
+seldon_server_host:
+  enabled: true
+  value: "localhost"
+
+# Enable custom images for PR testing
+seldon_custom_images:
+  enabled: true
+  registry: "192.168.1.210"
+  agent:
+    repository: "library/seldon-agent"
+    tag: "2.9.0-pr6582-test"
+    pullPolicy: "Always"
+
+# Additional agent environment variables for PR #6582
+seldon_agent_env_vars:
+  - name: "SELDON_LOG_LEVEL"
+    value: "info"
+
 # JupyterHub - High-Performance Data Science Environment
 jupyterhub_namespace: "jupyterhub"
 jupyterhub_nodeport: 30888
@@ -106,7 +130,7 @@ jupyterhub_user_cpu_request: 1.0
 jupyterhub_user_cpu_limit: 8.0
 jupyterhub_storage_type: "dynamic"
 jupyterhub_storage_size: "50G"
-jupyterhub_image_name: "jtayl22/financial-predictor-jupyter"
+jupyterhub_image_name: "192.168.1.210/library/financial-predictor-jupyter"
 jupyterhub_image_tag: "latest"
 
 # Argo Workflows - High-Performance Pipeline Execution
@@ -139,6 +163,28 @@ elasticsearch_storage_size: "200Gi"
 # SECURITY & NETWORKING
 # =============================================================================
 
+# MetalLB Load Balancer Configuration
+metallb_namespace: "metallb-system"
+metallb_version: "v0.14.8"
+metallb_ip_pool_name: "homelab-pool"
+metallb_ip_range: "192.168.1.200-192.168.1.250"
+metallb_advertisement_name: "homelab-l2-advertisement"
+metallb_state: "present"
+metallb_controller_resources:
+  requests:
+    cpu: "100m"
+    memory: "100Mi"
+  limits:
+    cpu: "200m"
+    memory: "200Mi"
+metallb_speaker_resources:
+  requests:
+    cpu: "100m"
+    memory: "100Mi"
+  limits:
+    cpu: "200m"
+    memory: "200Mi"
+
 # Sealed Secrets
 sealed_secrets_namespace: "kube-system"
 sealed_secrets_controller_name: "sealed-secrets"
@@ -158,6 +204,7 @@ enable_kubeflow: false
 enable_istio: true
 enable_advanced_monitoring: true
 enable_gpu_support: false
+enable_harbor: true
 
 # Development vs Production modes
 on_premises_mode: true
@@ -193,6 +240,7 @@ helm_retry_delay: 10
 # Istio Configuration
 istio_gateway_http_nodeport: 31080
 istio_gateway_https_nodeport: 31443
+istio_gateway_loadbalancer_ip: ""  # Leave empty for auto-assignment from MetalLB pool
 istio_pilot_memory_request: "128Mi"
 istio_pilot_memory_limit: "512Mi" 
 istio_pilot_cpu_request: "100m"
@@ -233,3 +281,20 @@ postgresql_memory_request: 512Mi
 postgresql_memory_limit: 1Gi
 postgresql_cpu_request: 250m
 postgresql_cpu_limit: 500m
+
+# Harbor Registry Configuration
+harbor_namespace: "harbor"
+harbor_nodeport: 30880
+harbor_admin_password: "Harbor12345"
+harbor_secret_key: "not-a-secure-key"
+harbor_database_internal_password: "changeit"
+harbor_storage_class: "{{ global_storage_class }}"
+harbor_storage_size: "50Gi"
+harbor_registry_storage_size: "200Gi"
+harbor_loadbalancer_enabled: true
+harbor_loadbalancer_ip: "192.168.1.210"
+harbor_integrate_with_seldon: true
+harbor_integrate_with_jupyter: true
+harbor_trivy_enabled: true
+harbor_notary_enabled: true
+harbor_chartmuseum_enabled: true

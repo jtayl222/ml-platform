@@ -100,6 +100,28 @@ MLFLOW_FLASK_SECRET_KEY=${MLFLOW_FLASK_SECRET_KEY:-"6EF6B30F9E557F948C402C89002C
 
 
 ##########################
+# For the harbor namespace
+##########################
+
+# Harbor Configuration
+HARBOR_ADMIN_PASSWORD=${HARBOR_ADMIN_PASSWORD:-"Harbor12345"}
+HARBOR_DATABASE_PASSWORD=${HARBOR_DATABASE_PASSWORD:-"changeit"}
+HARBOR_SECRET_KEY=${HARBOR_SECRET_KEY:-"not-a-secure-key"}
+HARBOR_REGISTRY_URL=${HARBOR_REGISTRY_URL:-"192.168.1.210"}
+
+# Create Harbor admin secret
+./scripts/create-sealed-secret.sh harbor-admin-secret harbor \
+  admin-password="$HARBOR_ADMIN_PASSWORD" \
+  database-password="$HARBOR_DATABASE_PASSWORD" \
+  secret-key="$HARBOR_SECRET_KEY"
+
+# Create Harbor registry secret for integration
+./scripts/create-sealed-secret.sh harbor-registry-credentials harbor \
+  registry-url="$HARBOR_REGISTRY_URL" \
+  registry-username=admin \
+  registry-password="$HARBOR_ADMIN_PASSWORD"
+
+##########################
 # For the jupyterhub project
 ##########################
 
@@ -111,3 +133,5 @@ echo "   export MINIO_SECRET_KEY='your-secret-key'"
 echo "   export GITHUB_USERNAME='your-username'"
 echo "   export GITHUB_PAT='your-personal-access-token'"
 echo "   export GITHUB_EMAIL='your-email@example.com'"
+echo "   export HARBOR_ADMIN_PASSWORD='your-harbor-password'"
+echo "   export HARBOR_REGISTRY_URL='your-harbor-url'"

@@ -1,0 +1,462 @@
+---
+- name: Add Harbor Helm repository
+  kubernetes.core.helm_repository:
+    name: "{{ harbor_chart_repo_name }}"
+    repo_url: "{{ harbor_chart_repo }}"
+    kubeconfig: "{{ kubeconfig_path }}"
+  retries: 3
+  delay: 10
+  tags: [platform, harbor, helm-repos]
+
+- name: Create Harbor namespace
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    name: "{{ harbor_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+  tags: [platform, harbor, namespace]
+
+- name: Create Harbor persistent volume claims
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: "{{ item.name }}"
+        namespace: "{{ harbor_namespace }}"
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: "{{ harbor_storage_class }}"
+        resources:
+          requests:
+            storage: "{{ item.size }}"
+  loop:
+    - { name: "harbor-registry-pvc", size: "{{ harbor_registry_storage_size }}" }
+    - { name: "harbor-database-pvc", size: "{{ harbor_storage_size }}" }
+    - { name: "harbor-redis-pvc", size: "5Gi" }
+  tags: [platform, harbor, storage]
+
+- name: Create Harbor configuration secret
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: harbor-secret
+        namespace: "{{ harbor_namespace }}"
+      type: Opaque
+      data:
+        HARBOR_ADMIN_PASSWORD: "{{ harbor_admin_password | b64encode }}"
+        DATABASE_PASSWORD: "{{ harbor_database_internal_password | b64encode }}"
+        SECRET_KEY: "{{ harbor_secret_key | b64encode }}"
+  tags: [platform, harbor, secrets]
+
+- name: Deploy Harbor with NodePort service
+  kubernetes.core.helm:
+    name: harbor
+    chart_ref: "{{ harbor_chart_repo_name }}/{{ harbor_chart_name }}"
+    chart_version: "{{ harbor_chart_version }}"
+    release_namespace: "{{ harbor_namespace }}"
+    create_namespace: true
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_timeout: "{{ helm_wait_timeout }}"
+    values:
+      expose:
+        type: nodePort
+        tls:
+          enabled: false
+          auto:
+            commonName: "{{ control_plane_ip }}"
+        nodePort:
+          name: harbor
+          ports:
+            http:
+              port: 80
+              nodePort: "{{ harbor_nodeport }}"
+            https:
+              port: 443
+              nodePort: "{{ harbor_nodeport | int + 1 }}"
+            notary:
+              port: 4443
+              nodePort: "{{ harbor_notary_nodeport }}"
+      externalURL: "http://{{ control_plane_ip }}:{{ harbor_nodeport }}"
+      
+      # Harbor Core Configuration
+      core:
+        replicas: 1
+        resources:
+          requests:
+            cpu: "{{ harbor_core_cpu_request }}"
+            memory: "{{ harbor_core_memory_request }}"
+          limits:
+            cpu: "{{ harbor_core_cpu_limit }}"
+            memory: "{{ harbor_core_memory_limit }}"
+      
+      # Harbor Registry Configuration
+      registry:
+        replicas: 1
+        resources:
+          requests:
+            cpu: "{{ harbor_registry_cpu_request }}"
+            memory: "{{ harbor_registry_memory_request }}"
+          limits:
+            cpu: "{{ harbor_registry_cpu_limit }}"
+            memory: "{{ harbor_registry_memory_limit }}"
+      
+      # Database Configuration
+      database:
+        type: internal
+        internal:
+          password: "{{ harbor_database_internal_password }}"
+          resources:
+            requests:
+              cpu: "{{ harbor_database_cpu_request }}"
+              memory: "{{ harbor_database_memory_request }}"
+            limits:
+              cpu: "{{ harbor_database_cpu_limit }}"
+              memory: "{{ harbor_database_memory_limit }}"
+      
+      # Redis Configuration
+      redis:
+        type: internal
+        internal:
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+      
+      # Trivy Security Scanner
+      trivy:
+        enabled: "{{ harbor_trivy_enabled }}"
+        resources:
+          requests:
+            cpu: "{{ harbor_trivy_cpu_request }}"
+            memory: "{{ harbor_trivy_memory_request }}"
+          limits:
+            cpu: "{{ harbor_trivy_cpu_limit }}"
+            memory: "{{ harbor_trivy_memory_limit }}"
+      
+      # Notary Configuration
+      notary:
+        enabled: "{{ harbor_notary_enabled }}"
+        server:
+          resources:
+            requests:
+              cpu: "{{ harbor_notary_cpu_request }}"
+              memory: "{{ harbor_notary_memory_request }}"
+            limits:
+              cpu: "{{ harbor_notary_cpu_limit }}"
+              memory: "{{ harbor_notary_memory_limit }}"
+        signer:
+          resources:
+            requests:
+              cpu: "{{ harbor_notary_cpu_request }}"
+              memory: "{{ harbor_notary_memory_request }}"
+            limits:
+              cpu: "{{ harbor_notary_cpu_limit }}"
+              memory: "{{ harbor_notary_memory_limit }}"
+      
+      # ChartMuseum Configuration
+      chartmuseum:
+        enabled: "{{ harbor_chartmuseum_enabled }}"
+        resources:
+          requests:
+            cpu: "{{ harbor_chartmuseum_cpu_request }}"
+            memory: "{{ harbor_chartmuseum_memory_request }}"
+          limits:
+            cpu: "{{ harbor_chartmuseum_cpu_limit }}"
+            memory: "{{ harbor_chartmuseum_memory_limit }}"
+      
+      # Persistence Configuration
+      persistence:
+        enabled: true
+        persistentVolumeClaim:
+          registry:
+            existingClaim: "harbor-registry-pvc"
+          database:
+            existingClaim: "harbor-database-pvc"
+          redis:
+            existingClaim: "harbor-redis-pvc"
+      
+      # Security Configuration
+      secretkey: "{{ harbor_secret_key }}"
+      harborAdminPassword: "{{ harbor_admin_password }}"
+      
+  register: harbor_deployment
+  retries: "{{ helm_retries }}"
+  delay: "{{ helm_retry_delay }}"
+  when: not harbor_loadbalancer_enabled
+  tags: [platform, harbor, helm-deploy]
+
+- name: Deploy Harbor with LoadBalancer service (MetalLB)
+  kubernetes.core.helm:
+    name: harbor
+    chart_ref: "{{ harbor_chart_repo_name }}/{{ harbor_chart_name }}"
+    chart_version: "{{ harbor_chart_version }}"
+    release_namespace: "{{ harbor_namespace }}"
+    create_namespace: true
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_timeout: "{{ helm_wait_timeout }}"
+    values:
+      expose:
+        type: loadBalancer
+        tls:
+          enabled: false
+          auto:
+            commonName: "{{ harbor_loadbalancer_ip or '192.168.1.210' }}"
+        loadBalancer:
+          name: harbor
+          IP: "{{ harbor_loadbalancer_ip }}"
+          ports:
+            httpPort: 80
+            httpsPort: 443
+            notaryPort: 4443
+      externalURL: "http://{{ harbor_loadbalancer_ip or '192.168.1.210' }}"
+      
+      # Harbor Core Configuration
+      core:
+        replicas: 1
+        resources:
+          requests:
+            cpu: "{{ harbor_core_cpu_request }}"
+            memory: "{{ harbor_core_memory_request }}"
+          limits:
+            cpu: "{{ harbor_core_cpu_limit }}"
+            memory: "{{ harbor_core_memory_limit }}"
+      
+      # Harbor Registry Configuration
+      registry:
+        replicas: 1
+        resources:
+          requests:
+            cpu: "{{ harbor_registry_cpu_request }}"
+            memory: "{{ harbor_registry_memory_request }}"
+          limits:
+            cpu: "{{ harbor_registry_cpu_limit }}"
+            memory: "{{ harbor_registry_memory_limit }}"
+      
+      # Database Configuration
+      database:
+        type: internal
+        internal:
+          password: "{{ harbor_database_internal_password }}"
+          resources:
+            requests:
+              cpu: "{{ harbor_database_cpu_request }}"
+              memory: "{{ harbor_database_memory_request }}"
+            limits:
+              cpu: "{{ harbor_database_cpu_limit }}"
+              memory: "{{ harbor_database_memory_limit }}"
+      
+      # Redis Configuration
+      redis:
+        type: internal
+        internal:
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+      
+      # Trivy Security Scanner
+      trivy:
+        enabled: "{{ harbor_trivy_enabled }}"
+        resources:
+          requests:
+            cpu: "{{ harbor_trivy_cpu_request }}"
+            memory: "{{ harbor_trivy_memory_request }}"
+          limits:
+            cpu: "{{ harbor_trivy_cpu_limit }}"
+            memory: "{{ harbor_trivy_memory_limit }}"
+      
+      # Notary Configuration
+      notary:
+        enabled: "{{ harbor_notary_enabled }}"
+        server:
+          resources:
+            requests:
+              cpu: "{{ harbor_notary_cpu_request }}"
+              memory: "{{ harbor_notary_memory_request }}"
+            limits:
+              cpu: "{{ harbor_notary_cpu_limit }}"
+              memory: "{{ harbor_notary_memory_limit }}"
+        signer:
+          resources:
+            requests:
+              cpu: "{{ harbor_notary_cpu_request }}"
+              memory: "{{ harbor_notary_memory_request }}"
+            limits:
+              cpu: "{{ harbor_notary_cpu_limit }}"
+              memory: "{{ harbor_notary_memory_limit }}"
+      
+      # ChartMuseum Configuration
+      chartmuseum:
+        enabled: "{{ harbor_chartmuseum_enabled }}"
+        resources:
+          requests:
+            cpu: "{{ harbor_chartmuseum_cpu_request }}"
+            memory: "{{ harbor_chartmuseum_memory_request }}"
+          limits:
+            cpu: "{{ harbor_chartmuseum_cpu_limit }}"
+            memory: "{{ harbor_chartmuseum_memory_limit }}"
+      
+      # Persistence Configuration
+      persistence:
+        enabled: true
+        persistentVolumeClaim:
+          registry:
+            existingClaim: "harbor-registry-pvc"
+          database:
+            existingClaim: "harbor-database-pvc"
+          redis:
+            existingClaim: "harbor-redis-pvc"
+      
+      # Security Configuration
+      secretkey: "{{ harbor_secret_key }}"
+      harborAdminPassword: "{{ harbor_admin_password }}"
+      
+  register: harbor_loadbalancer_deployment
+  retries: "{{ helm_retries }}"
+  delay: "{{ helm_retry_delay }}"
+  when: harbor_loadbalancer_enabled and metallb_state == 'present'
+  tags: [platform, harbor, helm-deploy, loadbalancer]
+
+- name: Wait for Harbor Core to be ready
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: apps/v1
+    kind: Deployment
+    name: harbor-core
+    namespace: "{{ harbor_namespace }}"
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 300
+  tags: [platform, harbor, verify]
+
+- name: Create Harbor Docker registry secret for default namespace
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: harbor-registry-secret
+        namespace: default
+      type: kubernetes.io/dockerconfigjson
+      data:
+        .dockerconfigjson: "{{ harbor_docker_config | to_json | b64encode }}"
+  vars:
+    harbor_docker_config:
+      auths:
+        "{{ control_plane_ip }}:{{ harbor_nodeport }}":
+          username: "admin"
+          password: "{{ harbor_admin_password }}"
+          auth: "{{ ('admin:' + harbor_admin_password) | b64encode }}"
+  tags: [platform, harbor, secrets, docker]
+
+- name: Create Harbor Docker registry secret for Seldon namespace
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: harbor-registry-secret
+        namespace: "{{ seldon_namespace }}"
+      type: kubernetes.io/dockerconfigjson
+      data:
+        .dockerconfigjson: "{{ harbor_docker_config | to_json | b64encode }}"
+  vars:
+    harbor_docker_config:
+      auths:
+        "{{ control_plane_ip }}:{{ harbor_nodeport }}":
+          username: "admin"
+          password: "{{ harbor_admin_password }}"
+          auth: "{{ ('admin:' + harbor_admin_password) | b64encode }}"
+  when: harbor_integrate_with_seldon
+  tags: [platform, harbor, secrets, docker, seldon]
+
+- name: Create Harbor Docker registry secret for JupyterHub namespace
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: harbor-registry-secret
+        namespace: "{{ jupyterhub_namespace }}"
+      type: kubernetes.io/dockerconfigjson
+      data:
+        .dockerconfigjson: "{{ harbor_docker_config | to_json | b64encode }}"
+  vars:
+    harbor_docker_config:
+      auths:
+        "{{ control_plane_ip }}:{{ harbor_nodeport }}":
+          username: "admin"
+          password: "{{ harbor_admin_password }}"
+          auth: "{{ ('admin:' + harbor_admin_password) | b64encode }}"
+  when: harbor_integrate_with_jupyter
+  tags: [platform, harbor, secrets, docker, jupyter]
+
+- name: Create Harbor configuration ConfigMap
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: harbor-config
+        namespace: "{{ harbor_namespace }}"
+      data:
+        harbor_url: "{{ control_plane_ip }}:{{ harbor_nodeport }}"
+        harbor_admin_user: "admin"
+        harbor_registry_url: "{{ control_plane_ip }}:{{ harbor_nodeport }}"
+        docker_login_command: "docker login {{ control_plane_ip }}:{{ harbor_nodeport }} -u admin -p {{ harbor_admin_password }}"
+        docker_push_example: "docker tag myimage:latest {{ control_plane_ip }}:{{ harbor_nodeport }}/library/myimage:latest && docker push {{ control_plane_ip }}:{{ harbor_nodeport }}/library/myimage:latest"
+  tags: [platform, harbor, config]
+
+- name: Display Harbor deployment status
+  debug:
+    msg:
+      - "🎉 Harbor Registry deployment completed successfully!"
+      - "🐳 Container Registry Platform Ready!"
+      - "📁 Namespace: {{ harbor_namespace }}"
+      - "🔧 Service: harbor-core"
+      - ""
+      - "🌐 Access URLs:"
+      - "- Harbor Web UI: http://{{ control_plane_ip }}:{{ harbor_nodeport }}"
+      - "- Registry API: {{ control_plane_ip }}:{{ harbor_nodeport }}"
+      - "- Admin User: admin"
+      - "- Admin Password: [configured via harbor_admin_password]"
+      - ""
+      - "🐳 Docker Commands:"
+      - "- Login: docker login {{ control_plane_ip }}:{{ harbor_nodeport }} -u admin -p $HARBOR_ADMIN_PASSWORD"
+      - "- Push: docker push {{ control_plane_ip }}:{{ harbor_nodeport }}/library/myimage:latest"
+      - "- Pull: docker pull {{ control_plane_ip }}:{{ harbor_nodeport }}/library/myimage:latest"
+      - ""
+      - "🔍 Features Enabled:"
+      - "- Trivy Security Scanner: {{ harbor_trivy_enabled }}"
+      - "- Notary Content Trust: {{ harbor_notary_enabled }}"
+      - "- ChartMuseum Helm Charts: {{ harbor_chartmuseum_enabled }}"
+      - ""
+      - "🚀 Platform Integration:"
+      - "- Seldon Core: {{ harbor_integrate_with_seldon }}"
+      - "- JupyterHub: {{ harbor_integrate_with_jupyter }}"
+      - ""
+      - "💡 Quick Commands:"
+      - "- kubectl get pods -n {{ harbor_namespace }}"
+      - "- kubectl get svc -n {{ harbor_namespace }}"
+      - "- kubectl get pvc -n {{ harbor_namespace }}"
+  tags: [platform, harbor, summary]

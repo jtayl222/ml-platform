@@ -1,0 +1,75 @@
+---
+# Harbor Registry Configuration
+harbor_namespace: "harbor"
+harbor_chart_repo: "https://helm.goharbor.io"
+harbor_chart_repo_name: "harbor"
+harbor_chart_name: "harbor"
+harbor_chart_version: "1.15.2"
+
+# Harbor Service Configuration
+harbor_nodeport: 30880
+harbor_notary_nodeport: 30881
+harbor_admin_password: "Harbor12345"
+harbor_secret_key: "not-a-secure-key"
+
+# Harbor Database Configuration
+harbor_database_type: "internal"  # or "external"
+harbor_database_internal_password: "changeit"
+
+# Harbor Storage Configuration
+harbor_storage_type: "filesystem"  # or "s3"
+harbor_storage_class: "{{ global_storage_class }}"
+harbor_storage_size: "50Gi"
+harbor_registry_storage_size: "200Gi"
+
+# Harbor Resource Configuration
+harbor_core_cpu_request: "500m"
+harbor_core_cpu_limit: "1000m"
+harbor_core_memory_request: "1Gi"
+harbor_core_memory_limit: "2Gi"
+
+harbor_registry_cpu_request: "500m"
+harbor_registry_cpu_limit: "1000m"
+harbor_registry_memory_request: "1Gi"
+harbor_registry_memory_limit: "2Gi"
+
+harbor_database_cpu_request: "500m"
+harbor_database_cpu_limit: "1000m"
+harbor_database_memory_request: "1Gi"
+harbor_database_memory_limit: "2Gi"
+
+# Harbor Security Configuration
+harbor_tls_enabled: false
+harbor_certificate_authority: ""
+harbor_certificate_cert: ""
+harbor_certificate_key: ""
+
+# Harbor Integration Configuration
+harbor_integrate_with_docker: true
+harbor_integrate_with_seldon: true
+harbor_integrate_with_jupyter: true
+
+# Harbor MetalLB Configuration
+harbor_loadbalancer_enabled: true
+harbor_loadbalancer_ip: ""  # Auto-assign from MetalLB pool
+
+# Harbor Trivy Security Scanner
+harbor_trivy_enabled: true
+harbor_trivy_cpu_request: "200m"
+harbor_trivy_cpu_limit: "500m"
+harbor_trivy_memory_request: "512Mi"
+harbor_trivy_memory_limit: "1Gi"
+
+# Harbor Notary Configuration
+harbor_notary_enabled: true
+harbor_notary_cpu_request: "200m"
+harbor_notary_cpu_limit: "500m"
+harbor_notary_memory_request: "256Mi"
+harbor_notary_memory_limit: "512Mi"
+
+# Harbor ChartMuseum Configuration
+harbor_chartmuseum_enabled: true
+harbor_chartmuseum_cpu_request: "200m"
+harbor_chartmuseum_cpu_limit: "500m"
+harbor_chartmuseum_memory_request: "256Mi"
+harbor_chartmuseum_memory_limit: "512Mi"

@@ -212,6 +212,13 @@
             name: platform/dashboard
           tags: [platform, dashboard]
 
+        # === CONTAINER REGISTRY ===
+        - name: Deploy Harbor Registry
+          include_role:
+            name: platform/harbor
+          when: enable_harbor | default(true)
+          tags: [platform, registry, harbor]
+
         # === MODEL SERVING ===
         - name: Deploy Seldon Core
           include_role:
@@ -294,6 +301,10 @@
           - "- KServe Models: Available via Istio Gateway"
           - "- Kubeflow Pipelines: http://192.168.1.85:31234 (if deployed)"
           - "- Argo Workflows: http://192.168.1.85:32746"
+          - ""
+          - "🐳 Container Registry:"
+          - "- Harbor Registry: http://192.168.1.210 (LoadBalancer) or http://192.168.1.85:30880 (NodePort)"
+          - "- Harbor Admin: admin (password configured via harbor_admin_password)"
           - ""
           - "🔑 Access Instructions:"
           - "- kubectl: export KUBECONFIG=/tmp/k3s-kubeconfig.yaml"

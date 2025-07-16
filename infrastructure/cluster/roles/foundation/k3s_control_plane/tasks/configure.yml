@@ -1,4 +1,23 @@
 ---
+- name: Create K3s config directory
+  file:
+    path: /etc/rancher/k3s
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  tags: [k3s, registry, harbor]
+
+- name: Configure Harbor registry for K3s
+  template:
+    src: registries.yaml.j2
+    dest: /etc/rancher/k3s/registries.yaml
+    owner: root
+    group: root
+    mode: '0644'
+  when: harbor_loadbalancer_ip is defined
+  tags: [k3s, registry, harbor]
+
 - name: Ensure K3s service is enabled and started
   ansible.builtin.systemd:
     name: k3s
