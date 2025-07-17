@@ -39,7 +39,7 @@ harbor_database_memory_request: "1Gi"
 harbor_database_memory_limit: "2Gi"
 
 # Harbor Security Configuration
-harbor_tls_enabled: false
+harbor_tls_enabled: true
 harbor_certificate_authority: ""
 harbor_certificate_cert: ""
 harbor_certificate_key: ""

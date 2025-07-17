@@ -4,9 +4,9 @@
   become: true
   gather_facts: true
   vars:
-    harbor_loadbalancer_ip: "{{ harbor_loadbalancer_ip | default('192.168.1.210') }}"
-    harbor_admin_user: "{{ harbor_admin_user | default('admin') }}"
-    harbor_admin_password: "{{ harbor_admin_password | default('Harbor12345') }}"
+    harbor_ip: "{{ harbor_loadbalancer_ip | default('192.168.1.210') }}"
+    harbor_user: "{{ harbor_admin_user | default('admin') }}"
+    harbor_pass: "{{ harbor_admin_password | default('Harbor12345') }}"
   tasks:
     - name: Create K3s config directory
       file:
@@ -17,28 +17,27 @@
         mode: '0755'
 
     - name: Deploy Harbor registry configuration
-      template:
+      copy:
         content: |
           mirrors:
             docker.io:
               endpoint:
-                - "http://{{ harbor_loadbalancer_ip }}"
-            "{{ harbor_loadbalancer_ip }}":
+                - "https://{{ harbor_ip }}"
+            "{{ harbor_ip }}":
               endpoint:
-                - "http://{{ harbor_loadbalancer_ip }}"
+                - "https://{{ harbor_ip }}"
           
           configs:
-            "{{ harbor_loadbalancer_ip }}":
+            "{{ harbor_ip }}":
               auth:
-                username: "{{ harbor_admin_user }}"
-                password: "{{ harbor_admin_password }}"
+                username: "{{ harbor_user }}"
+                password: "{{ harbor_pass }}"
               tls:
                 insecure_skip_verify: true
         dest: /etc/rancher/k3s/registries.yaml
         owner: root
         group: root
         mode: '0644'
-      notify: restart k3s
 
     - name: Restart K3s on control plane
       systemd:
@@ -74,8 +73,8 @@
   gather_facts: false
   vars:
     kubeconfig_path: "/tmp/k3s-kubeconfig.yaml"
-    harbor_loadbalancer_ip: "{{ harbor_loadbalancer_ip | default('192.168.1.210') }}"
-    harbor_admin_password: "{{ harbor_admin_password | default('Harbor12345') }}"
+    harbor_ip: "{{ harbor_loadbalancer_ip | default('192.168.1.210') }}"
+    harbor_pass: "{{ harbor_admin_password | default('Harbor12345') }}"
     namespaces_to_configure:
       - default
       - kube-system
@@ -100,10 +99,10 @@
       vars:
         harbor_docker_config:
           auths:
-            "{{ harbor_loadbalancer_ip }}":
+            "{{ harbor_ip }}":
               username: "admin"
-              password: "{{ harbor_admin_password }}"
-              auth: "{{ ('admin:' + harbor_admin_password) | b64encode }}"
+              password: "{{ harbor_pass }}"
+              auth: "{{ ('admin:' + harbor_pass) | b64encode }}"
       loop: "{{ namespaces_to_configure }}"
       ignore_errors: true
 
@@ -126,8 +125,8 @@
       debug:
         msg:
           - "✅ Harbor registry configured for K3s cluster"
-          - "📦 Registry URL: http://{{ harbor_loadbalancer_ip }}"
+          - "📦 Registry URL: http://{{ harbor_ip }}"
           - "🔐 Pull secrets created in {{ namespaces_to_configure | length }} namespaces"
           - ""
           - "🧪 Test with:"
-          - "kubectl run test-harbor --image={{ harbor_loadbalancer_ip }}/library/nginx:latest"
+          - "kubectl run test-harbor --image={{ harbor_ip }}/library/nginx:latest"

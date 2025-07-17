@@ -8,6 +8,52 @@
   delay: 10
   tags: [platform, harbor, helm-repos]
 
+- name: Generate Harbor TLS certificate
+  block:
+    - name: Create Harbor TLS private key
+      community.crypto.openssl_privatekey:
+        path: "/tmp/harbor-key.pem"
+        size: 2048
+      delegate_to: localhost
+      run_once: true
+
+    - name: Generate Harbor certificate signing request
+      community.crypto.openssl_csr:
+        path: "/tmp/harbor.csr"
+        privatekey_path: "/tmp/harbor-key.pem"
+        common_name: "{{ harbor_loadbalancer_ip | default('192.168.1.210') }}"
+        subject_alt_name:
+          - "IP:{{ harbor_loadbalancer_ip | default('192.168.1.210') }}"
+          - "DNS:harbor.local"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Generate Harbor self-signed certificate
+      community.crypto.x509_certificate:
+        path: "/tmp/harbor-cert.pem"
+        privatekey_path: "/tmp/harbor-key.pem"
+        csr_path: "/tmp/harbor.csr"
+        provider: selfsigned
+        selfsigned_not_after: "+365d"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Create Harbor TLS secret
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig_path }}"
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: harbor-tls
+            namespace: "{{ harbor_namespace }}"
+          type: kubernetes.io/tls
+          data:
+            tls.crt: "{{ lookup('file', '/tmp/harbor-cert.pem') | b64encode }}"
+            tls.key: "{{ lookup('file', '/tmp/harbor-key.pem') | b64encode }}"
+  when: harbor_tls_enabled | default(false)
+  tags: [platform, harbor, tls]
+
 - name: Create Harbor namespace
   kubernetes.core.k8s:
     kubeconfig: "{{ kubeconfig_path }}"
@@ -210,7 +256,8 @@
       expose:
         type: loadBalancer
         tls:
-          enabled: false
+          enabled: "{{ harbor_tls_enabled | default(false) }}"
+          secretName: "{{ 'harbor-tls' if harbor_tls_enabled else '' }}"
           auto:
             commonName: "{{ harbor_loadbalancer_ip or '192.168.1.210' }}"
         loadBalancer:
