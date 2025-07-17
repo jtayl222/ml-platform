@@ -1,0 +1,17 @@
+[Unit]
+Description=Harbor Image Synchronization Timer
+Documentation=https://github.com/your-org/ml-platform
+Requires=harbor-sync.service
+
+[Timer]
+# Run every 6 hours for tier1 images
+OnCalendar=00,06,12,18:00:00
+# Run 30 minutes after boot
+OnBootSec=30min
+# If missed (e.g., system was down), run immediately
+Persistent=true
+# Randomize start time by up to 10 minutes to avoid thundering herd
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target

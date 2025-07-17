@@ -73,3 +73,19 @@ harbor_chartmuseum_cpu_request: "200m"
 harbor_chartmuseum_cpu_limit: "500m"
 harbor_chartmuseum_memory_request: "256Mi"
 harbor_chartmuseum_memory_limit: "512Mi"
+
+# Harbor Replication Configuration
+harbor_enable_replication: true
+harbor_enable_automated_sync: true
+harbor_run_initial_sync: false
+harbor_enable_scan_webhooks: true
+harbor_enable_k8s_cronjob: false
+
+# Harbor Sync Configuration
+harbor_sync_retry_count: 3
+harbor_sync_timeout: 300
+harbor_sync_parallel: 4
+
+# Harbor URL Configuration
+harbor_url: "http://{{ harbor_loadbalancer_ip | default('192.168.1.210') }}"
+harbor_admin_user: "admin"

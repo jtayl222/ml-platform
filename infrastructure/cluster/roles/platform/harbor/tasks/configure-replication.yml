@@ -1,0 +1,147 @@
+---
+# Configure Harbor replication policies and automated mirroring
+
+- name: Install required packages for Harbor sync
+  package:
+    name:
+      - jq
+      - yq
+    state: present
+  become: true
+
+- name: Create Harbor sync directory
+  file:
+    path: /opt/harbor-sync
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: Copy Harbor replication configuration
+  copy:
+    src: "{{ playbook_dir }}/../../scripts/harbor-replication-config.yaml"
+    dest: /opt/harbor-sync/harbor-replication-config.yaml
+    mode: '0644'
+  become: true
+
+- name: Copy Harbor sync script
+  copy:
+    src: "{{ playbook_dir }}/../../scripts/harbor-sync.sh"
+    dest: /opt/harbor-sync/harbor-sync.sh
+    mode: '0755'
+  become: true
+
+- name: Create Harbor sync environment file
+  template:
+    src: harbor-sync-env.j2
+    dest: /opt/harbor-sync/.env
+    mode: '0600'
+  become: true
+
+- name: Configure systemd service for Harbor sync
+  template:
+    src: harbor-sync.service.j2
+    dest: /etc/systemd/system/harbor-sync.service
+    mode: '0644'
+  become: true
+  when: harbor_enable_automated_sync | default(true)
+
+- name: Configure systemd timer for Harbor sync
+  template:
+    src: harbor-sync.timer.j2
+    dest: /etc/systemd/system/harbor-sync.timer
+    mode: '0644'
+  become: true
+  when: harbor_enable_automated_sync | default(true)
+
+- name: Enable and start Harbor sync timer
+  systemd:
+    name: harbor-sync.timer
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  become: true
+  when: harbor_enable_automated_sync | default(true)
+
+- name: Run initial Harbor sync for critical images
+  shell: |
+    source /opt/harbor-sync/.env
+    /opt/harbor-sync/harbor-sync.sh --tier tier1 --now
+  become: true
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+  when: harbor_run_initial_sync | default(true)
+
+- name: Configure Harbor webhook for image scan completion
+  uri:
+    url: "{{ harbor_url }}/api/v2.0/projects/library/webhook/policies"
+    method: POST
+    user: "{{ harbor_admin_user }}"
+    password: "{{ harbor_admin_password }}"
+    force_basic_auth: yes
+    body_format: json
+    body:
+      name: "image-scan-notification"
+      description: "Notify on vulnerability scan completion"
+      project_id: 1
+      targets:
+        - type: "http"
+          address: "http://192.168.1.209:9091/metrics/job/harbor_scan"
+      event_types:
+        - "SCANNING_COMPLETED"
+      enabled: true
+  when: harbor_enable_scan_webhooks | default(true)
+
+- name: Create Kubernetes CronJob for Harbor sync
+  k8s:
+    name: harbor-sync
+    namespace: "{{ harbor_namespace }}"
+    definition:
+      apiVersion: batch/v1
+      kind: CronJob
+      metadata:
+        name: harbor-sync
+        labels:
+          app: harbor-sync
+      spec:
+        schedule: "0 */6 * * *"  # Every 6 hours
+        jobTemplate:
+          spec:
+            template:
+              spec:
+                restartPolicy: OnFailure
+                containers:
+                - name: sync
+                  image: "{{ harbor_sync_image | default('alpine:latest') }}"
+                  command:
+                    - /bin/sh
+                    - -c
+                    - |
+                      apk add --no-cache docker-cli curl jq yq bash
+                      /scripts/harbor-sync.sh --tier tier1 --now
+                  env:
+                    - name: HARBOR_URL
+                      value: "{{ harbor_url }}"
+                    - name: HARBOR_USER
+                      valueFrom:
+                        secretKeyRef:
+                          name: harbor-admin-secret
+                          key: username
+                    - name: HARBOR_PASSWORD
+                      valueFrom:
+                        secretKeyRef:
+                          name: harbor-admin-secret
+                          key: password
+                  volumeMounts:
+                    - name: scripts
+                      mountPath: /scripts
+                    - name: docker-sock
+                      mountPath: /var/run/docker.sock
+                volumes:
+                  - name: scripts
+                    configMap:
+                      name: harbor-sync-scripts
+                      defaultMode: 0755
+                  - name: docker-sock
+                    hostPath:
+                      path: /var/run/docker.sock
+  when: harbor_enable_k8s_cronjob | default(false)
