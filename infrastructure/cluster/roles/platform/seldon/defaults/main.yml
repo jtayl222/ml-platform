@@ -4,21 +4,21 @@ seldon_namespace: seldon-system
 seldon_name: seldon-core
 
 seldon_crds_chart_ref: seldon-charts/seldon-core-v2-crds
-seldon_crds_chart_version: "2.9.0"
+seldon_crds_chart_version: "2.9.1"
 
 seldon_runtime_chart_ref: seldon-charts/seldon-core-v2-runtime
-seldon_runtime_chart_version: "2.9.0"
+seldon_runtime_chart_version: "2.9.1"
 
 seldon_servers_chart_ref: seldon-charts/seldon-core-v2-servers
-seldon_servers_chart_version: "2.9.0"
+seldon_servers_chart_version: "2.9.1"
 
 seldon_setup_chart_ref: seldon-charts/seldon-core-v2-setup
-seldon_setup_chart_version: "2.9.0"
+seldon_setup_chart_version: "2.9.1"
 
 
 
 # Operator Configuration
-seldon_operator_image_tag: 2.9.0
+seldon_operator_image_tag: 2.9.1
 seldon_manager_cpu_request: 100m
 seldon_manager_cpu_limit: 500m
 seldon_manager_memory_request: 128Mi
@@ -62,7 +62,8 @@ seldon_custom_images:
     tag: "{{ seldon_operator_image_tag }}"
     pullPolicy: "IfNotPresent"
 
-# PR #6582 - SELDON_SERVER_HOST support
+# Legacy PR #6582 - SELDON_SERVER_HOST support (deprecated in v2.9.1)
+# Note: This workaround is no longer needed with scoped operator pattern
 seldon_server_host:
   enabled: false
   value: "localhost"
@@ -71,8 +72,6 @@ seldon_server_host:
 seldon_agent_env_vars: []
 # Example usage:
 # seldon_agent_env_vars:
-#   - name: "SELDON_SERVER_HOST"
-#     value: "localhost"
 #   - name: "CUSTOM_SETTING"  
 #     value: "custom_value"
 
@@ -80,15 +79,16 @@ seldon_agent_env_vars: []
 seldon_enable_network_policies: true
 seldon_allow_external_telemetry: true
 
-# ML Namespaces that need network policies applied
+# ML Namespaces that need network policies applied (platform-managed only)
 # These namespaces will get network policies that allow:
 # - Communication with seldon-system
 # - Intra-namespace communication  
 # - DNS resolution to kube-system
 # - External HTTPS/HTTP access for model downloads
+# Note: Development teams manage their own namespaces (financial-inference, etc.)
 seldon_ml_namespaces:
   - financial-ml
-  # Add other ML project namespaces here as needed
+  # Add other platform-managed ML namespaces here as needed
   # - iris-demo
   # - another-ml-project
 

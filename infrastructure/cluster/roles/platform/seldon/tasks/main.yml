@@ -126,9 +126,8 @@
         port: 443
       controllerManager:
         webhookPort: 443
-        # Fix for PLAT-2025-07-12-001: Controller manager → scheduler connectivity
-        # Explicitly set scheduler host/port to resolve "Scheduler not ready" gRPC errors
-        # Required for A/B testing and cross-namespace model discovery
+        # v2.9.1 Configuration - Optimized for scoped operator pattern
+        # Controller manager connects to centralized scheduler in seldon-system
         env:
           SELDON_SCHEDULER_HOST: seldon-scheduler
           SELDON_SCHEDULER_PORT: "9004"
@@ -286,23 +285,25 @@
 - name: Display Seldon Core deployment status
   debug:
     msg:
-      - "🎉 Seldon Core deployment completed successfully!"
-      - "🤖 Model Serving Platform Ready!"
+      - "🎉 Seldon Core v2.9.1 deployment completed successfully!"
+      - "🤖 Model Serving Platform Ready (Scoped Operator Pattern)"
       - "📁 Namespace: {{ seldon_namespace }}"
       - "🔧 Operator: seldon-controller-manager"
       - ""
       - "🚀 Supported Model Types:"
-      - "- Scikit-Learn (SKLEARN_SERVER)"
-      - "- MLflow (MLFLOW_SERVER)"
+      - "- MLServer (PyTorch, SKLearn, XGBoost, MLflow)"
+      - "- Triton (TensorFlow, PyTorch, ONNX)"
       - "- Custom Docker Images"
-      - "- TensorFlow, PyTorch, XGBoost"
       - ""
-      - "📖 Sample Deployments Available:"
-      - "- kubectl get configmap seldon-examples -n {{ seldon_namespace }} -o yaml"
+      - "📖 Architecture Pattern:"
+      - "- Centralized scheduler in seldon-system"
+      - "- Development teams deploy SeldonRuntimes in their namespaces"
+      - "- Each namespace can have local schedulers (scoped operator pattern)"
       - ""
       - "💡 Quick Commands:"
-      - "- kubectl get seldondeployments -n {{ seldon_namespace }}"
-      - "- kubectl apply -f <your-model.yaml>"
+      - "- kubectl get seldonruntimes -A"
+      - "- kubectl get models -A"
+      - "- kubectl get serverconfigs -n {{ seldon_namespace }}"
   tags: [platform, seldon, seldon-system, summary]
 
 # Add infrastructure-level registry access
@@ -359,7 +360,7 @@
         apiGroup: rbac.authorization.k8s.io
   tags: [platform, seldon, seldon-system, seldon, rbac]
 
-# Custom Agent Configuration for PR Testing
+# Custom Agent Configuration (Optional - for testing/development)
 - name: Patch ServerConfig with custom agent image
   shell: |
     kubectl patch serverconfig mlserver -n {{ seldon_namespace }} --type='json' -p='[
@@ -368,19 +369,10 @@
     ]'
   environment:
     KUBECONFIG: "{{ kubeconfig_path }}"
-  when: seldon_custom_images.enabled
-  tags: [platform, seldon, seldon-system, seldon-custom]
-
-- name: Add SELDON_SERVER_HOST environment variable if not exists
-  shell: |
-    if ! kubectl get serverconfig mlserver -n {{ seldon_namespace }} -o json | jq -e '.spec.podSpec.containers[1].env[] | select(.name=="SELDON_SERVER_HOST")' > /dev/null; then
-      kubectl patch serverconfig mlserver -n {{ seldon_namespace }} --type='json' -p='[
-        {"op": "add", "path": "/spec/podSpec/containers/1/env/-", "value": {"name": "SELDON_SERVER_HOST", "value": "{{ seldon_server_host.value }}"}}
-      ]'
-    fi
-  environment:
-    KUBECONFIG: "{{ kubeconfig_path }}"
-  when: seldon_custom_images.enabled and seldon_server_host.enabled
+  when: 
+    - seldon_custom_images is defined
+    - seldon_custom_images.enabled | default(false)
+    - seldon_custom_images.agent is defined
   tags: [platform, seldon, seldon-system, seldon-custom]
 
 - name: Restart mlserver StatefulSet to apply custom agent
@@ -393,6 +385,9 @@
     namespace: "{{ seldon_namespace }}"
     wait: true
     wait_timeout: 60
-  when: seldon_custom_images.enabled
+  when: 
+    - seldon_custom_images is defined
+    - seldon_custom_images.enabled | default(false)
+    - seldon_custom_images.agent is defined
   tags: [platform, seldon, seldon-system, seldon-custom]
   failed_when: false
