@@ -98,6 +98,12 @@
             name: foundation/secrets
           tags: [foundation, secrets, credentials]
 
+        # Configure CoreDNS for .test domains
+        - name: Configure CoreDNS for .test domains
+          include_role:
+            name: foundation/coredns-test-domains
+          tags: [foundation, coredns, dns, test-domains]
+
       when: k3s_state is not defined or k3s_state != "absent"
 
 # =============================
