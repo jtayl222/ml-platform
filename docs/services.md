@@ -33,7 +33,7 @@
 | **Prometheus** | *NodePort Only* | [http://192.168.1.85:30090](http://192.168.1.85:30090) | ✅ | **Metrics Collection** ⚠️ *No auth - secure for production* |
 | **Prometheus Pushgateway** | [http://192.168.1.209:9091](http://192.168.1.209:9091) | [http://192.168.1.85:32091](http://192.168.1.85:32091) | ✅ | **A/B Testing Metrics** - Push custom metrics for analysis |
 | **Seldon Core** | [http://192.168.1.202](http://192.168.1.202) | **API/CLI Only** | ✅ | **Model Serving Platform** - Deploy via kubectl |
-| **NGINX Ingress** | [http://192.168.1.249](http://192.168.1.249) | *LoadBalancer Only* | ✅ | **Routes:** ml-api.local → financial-inference services |
+| **NGINX Ingress** | [http://192.168.1.249](http://192.168.1.249) | *LoadBalancer Only* | ✅ | **Routes:** ml-api.test → financial-inference services |
 
 ## 📊 **Prometheus Pushgateway**
 

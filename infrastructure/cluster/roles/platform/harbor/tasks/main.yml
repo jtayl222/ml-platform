@@ -24,7 +24,7 @@
         common_name: "{{ harbor_loadbalancer_ip | default('192.168.1.210') }}"
         subject_alt_name:
           - "IP:{{ harbor_loadbalancer_ip | default('192.168.1.210') }}"
-          - "DNS:harbor.local"
+          - "DNS:harbor.test"
       delegate_to: localhost
       run_once: true
 

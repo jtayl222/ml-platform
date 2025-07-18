@@ -1,0 +1,214 @@
+---
+# Harbor Certificate Management with PVC Persistence
+# This ensures Harbor certificates survive K3s rebuilds
+
+- name: Create Harbor certificate persistence namespace
+  kubernetes.core.k8s:
+    name: harbor-certs
+    api_version: v1
+    kind: Namespace
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+  tags: [harbor-certs, namespace]
+
+- name: Create Harbor certificate PVC
+  kubernetes.core.k8s:
+    name: harbor-certs-pvc
+    namespace: harbor-certs
+    definition:
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: harbor-certs-pvc
+        namespace: harbor-certs
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: "{{ global_storage_class }}"
+        resources:
+          requests:
+            storage: 1Gi
+    kubeconfig: "{{ kubeconfig_path }}"
+  tags: [harbor-certs, storage]
+
+- name: Create Harbor certificate management ConfigMap
+  kubernetes.core.k8s:
+    name: harbor-cert-scripts
+    namespace: harbor-certs
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: harbor-cert-scripts
+        namespace: harbor-certs
+      data:
+        distribute-certs.sh: |
+          #!/bin/bash
+          # Harbor certificate distribution script
+          set -euo pipefail
+          
+          HARBOR_DOMAIN="harbor.test"
+          CERT_SOURCE="/persistent-certs/harbor-ca.crt"
+          
+          # K3s nodes
+          K3S_NODES=(nuc8i5behs nuc10i3fnh nuc10i4fnh nuc10i5fnh nuc10i7fnh)
+          
+          for node in "${K3S_NODES[@]}"; do
+            echo "Configuring containerd on $node..."
+            
+            # Create containerd cert directory
+            ssh "$node" "sudo mkdir -p /var/lib/rancher/k3s/agent/etc/containerd/certs.d/$HARBOR_DOMAIN"
+            
+            # Copy certificate from PVC
+            scp "$CERT_SOURCE" "$node":/tmp/harbor-ca.crt
+            ssh "$node" "sudo mv /tmp/harbor-ca.crt /var/lib/rancher/k3s/agent/etc/containerd/certs.d/$HARBOR_DOMAIN/ca.crt"
+            ssh "$node" "sudo chmod 644 /var/lib/rancher/k3s/agent/etc/containerd/certs.d/$HARBOR_DOMAIN/ca.crt"
+            
+            # Create hosts.toml
+            ssh "$node" "sudo tee /var/lib/rancher/k3s/agent/etc/containerd/certs.d/$HARBOR_DOMAIN/hosts.toml > /dev/null" <<EOF
+          server = "https://$HARBOR_DOMAIN"
+          
+          [host."https://$HARBOR_DOMAIN"]
+            capabilities = ["pull", "resolve"]
+            ca = "/var/lib/rancher/k3s/agent/etc/containerd/certs.d/$HARBOR_DOMAIN/ca.crt"
+            skip_verify = false
+          EOF
+            
+            echo "Certificate configured on $node ✅"
+          done
+        
+        update-external-certs.sh: |
+          #!/bin/bash
+          # Update external client certificates (development machines, CI/CD)
+          set -euo pipefail
+          
+          HARBOR_DOMAIN="harbor.test"
+          CERT_SOURCE="/persistent-certs/harbor-ca.crt"
+          
+          echo "Harbor CA Certificate for External Clients"
+          echo "=========================================="
+          echo "Copy the following certificate to your development machines:"
+          echo ""
+          echo "# For Docker:"
+          echo "sudo mkdir -p /etc/docker/certs.d/$HARBOR_DOMAIN"
+          echo "sudo cp harbor-ca.crt /etc/docker/certs.d/$HARBOR_DOMAIN/ca.crt"
+          echo ""
+          echo "# For containerd:"
+          echo "sudo mkdir -p /etc/containerd/certs.d/$HARBOR_DOMAIN"
+          echo "sudo cp harbor-ca.crt /etc/containerd/certs.d/$HARBOR_DOMAIN/ca.crt"
+          echo ""
+          echo "Certificate content:"
+          cat "$CERT_SOURCE"
+    kubeconfig: "{{ kubeconfig_path }}"
+  tags: [harbor-certs, configmap]
+
+- name: Create Harbor certificate sync DaemonSet
+  kubernetes.core.k8s:
+    name: harbor-cert-sync
+    namespace: harbor-certs
+    definition:
+      apiVersion: apps/v1
+      kind: DaemonSet
+      metadata:
+        name: harbor-cert-sync
+        namespace: harbor-certs
+        labels:
+          app: harbor-cert-sync
+      spec:
+        selector:
+          matchLabels:
+            app: harbor-cert-sync
+        template:
+          metadata:
+            labels:
+              app: harbor-cert-sync
+          spec:
+            hostNetwork: true
+            hostPID: true
+            containers:
+            - name: cert-sync
+              image: alpine:latest
+              command: ["/bin/sh"]
+              args: ["-c", "while true; do sleep 300; done"]
+              volumeMounts:
+              - name: harbor-certs
+                mountPath: /persistent-certs
+              - name: k3s-containerd
+                mountPath: /host-containerd
+              - name: scripts
+                mountPath: /scripts
+              env:
+              - name: NODE_NAME
+                valueFrom:
+                  fieldRef:
+                    fieldPath: spec.nodeName
+              securityContext:
+                privileged: true
+            volumes:
+            - name: harbor-certs
+              persistentVolumeClaim:
+                claimName: harbor-certs-pvc
+            - name: k3s-containerd
+              hostPath:
+                path: /var/lib/rancher/k3s/agent/etc/containerd/certs.d
+            - name: scripts
+              configMap:
+                name: harbor-cert-scripts
+                defaultMode: 0755
+            tolerations:
+            - operator: Exists
+    kubeconfig: "{{ kubeconfig_path }}"
+  tags: [harbor-certs, daemonset]
+
+- name: Create Harbor certificate initialization Job
+  kubernetes.core.k8s:
+    name: harbor-cert-init
+    namespace: harbor-certs
+    definition:
+      apiVersion: batch/v1
+      kind: Job
+      metadata:
+        name: harbor-cert-init
+        namespace: harbor-certs
+      spec:
+        template:
+          spec:
+            containers:
+            - name: cert-init
+              image: bitnami/kubectl:latest
+              command: ["/bin/sh"]
+              args:
+              - "-c"
+              - |
+                # Extract Harbor certificate from secret
+                kubectl get secret harbor-tls -n harbor -o jsonpath='{.data.tls\.crt}' | base64 -d > /persistent-certs/harbor-ca.crt
+                
+                # Save certificate metadata
+                echo "Certificate updated: $(date)" > /persistent-certs/last-update.txt
+                kubectl get secret harbor-tls -n harbor -o jsonpath='{.metadata.resourceVersion}' > /persistent-certs/cert-version.txt
+                
+                echo "Harbor certificate stored in PVC ✅"
+                ls -la /persistent-certs/
+              volumeMounts:
+              - name: harbor-certs
+                mountPath: /persistent-certs
+            volumes:
+            - name: harbor-certs
+              persistentVolumeClaim:
+                claimName: harbor-certs-pvc
+            restartPolicy: OnFailure
+    kubeconfig: "{{ kubeconfig_path }}"
+  tags: [harbor-certs, job]
+
+- name: Wait for Harbor certificate initialization
+  kubernetes.core.k8s_info:
+    api_version: batch/v1
+    kind: Job
+    name: harbor-cert-init
+    namespace: harbor-certs
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait_condition:
+      type: Complete
+      status: "True"
+    wait_timeout: 120
+  tags: [harbor-certs, wait]

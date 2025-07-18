@@ -155,7 +155,7 @@
           nginx.ingress.kubernetes.io/ssl-redirect: "false"
       spec:
         rules:
-        - host: dashboard.local
+        - host: dashboard.test
           http:
             paths:
             - path: /
@@ -205,7 +205,7 @@
       - "📁 Namespace: {{ dashboard_namespace }}"
       - ""
       - "🔐 Security Note: Skip login is enabled for demo purposes"
-      - "🏠 Local Access: https://dashboard.local (if ingress configured)"
+      - "🏠 Local Access: https://dashboard.test (if ingress configured)"
       - ""
       - "💡 Quick Access Commands:"
       - "   kubectl proxy --port=8001"
