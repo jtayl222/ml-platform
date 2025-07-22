@@ -135,6 +135,12 @@
             name: monitoring/prometheus_stack
           tags: [core, monitoring, prometheus]
 
+        # === MESSAGING LAYER ===
+        - name: Deploy Kafka
+          include_role:
+            name: foundation/kafka
+          tags: [core, messaging, kafka]
+
       when: k3s_state is not defined or k3s_state != "absent"
 
 # =============================
