@@ -59,6 +59,7 @@ namespace: $namespace
 resources:
   - ml-platform-sealed-secret.yaml
   - ghcr-sealed-secret.yaml
+  - harbor-sealed-secret.yaml
   - seldon-rclone-sealed-secret.yaml
 EOF
 
@@ -92,9 +93,11 @@ spec:
         # - name: MLFLOW_TRACKING_URI  
         #   value: "http://custom-mlflow.example.com:5000"
       
-      # For pulling private images from GHCR
+      # For pulling private images from registries
       imagePullSecrets:
       - name: ghcr
+      - name: harbor      # GitHub Container Registry
+      - name: harbor    # Harbor registry
 
 ---
 # Alternative: Using individual secret references (if you only need specific vars)
@@ -129,13 +132,14 @@ spec:
       
       imagePullSecrets:
       - name: ghcr
+      - name: harbor
 
 ---
-# If using Kaniko for building images
+# If using Kaniko for building images (push to GHCR)
 apiVersion: v1
 kind: Pod
 metadata:
-  name: kaniko-build
+  name: kaniko-build-ghcr
 spec:
   containers:
   - name: kaniko
@@ -151,6 +155,31 @@ spec:
   - name: docker-config
     secret:
       secretName: ghcr
+      items:
+      - key: .dockerconfigjson
+        path: config.json
+
+---
+# If using Kaniko for building images (push to Harbor)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kaniko-build-harbor
+spec:
+  containers:
+  - name: kaniko
+    image: gcr.io/kaniko-project/executor:latest
+    args:
+    - --dockerfile=Dockerfile
+    - --context=.
+    - --destination=harbor.test/library/your-image:tag
+    volumeMounts:
+    - name: docker-config
+      mountPath: /kaniko/.docker
+  volumes:
+  - name: docker-config
+    secret:
+      secretName: harbor
       items:
       - key: .dockerconfigjson
         path: config.json
@@ -206,7 +235,8 @@ spec:
         - secretRef:
             name: ml-platform  # Simple name!
       imagePullSecrets:
-      - name: ghcr  # Simple name!
+      - name: ghcr
+      - name: harbor  # Simple name!
 \`\`\`
 
 See \`secret-reference-template.yaml\` for more examples.
@@ -227,6 +257,7 @@ for env in "${ENV_ARRAY[@]}"; do
 ### $env/ 
 - \`ml-platform-sealed-secret.yaml\` - Secret name: \`ml-platform\`
 - \`ghcr-sealed-secret.yaml\` - Secret name: \`ghcr\`
+- \`harbor-sealed-secret.yaml\` - Secret name: \`harbor\`
 - \`seldon-rclone-sealed-secret.yaml\` - Secret name: \`seldon-rclone-gs-public\`
 - \`kustomization.yaml\` - Ready-to-apply kustomization
 
