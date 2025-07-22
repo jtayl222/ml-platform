@@ -92,6 +92,13 @@ seldon_ml_namespaces:
   # - iris-demo
   # - another-ml-project
 
+# Namespaces that Seldon controller should watch for resources
+# This is required when clusterwide: false
+seldon_watch_namespaces:
+  - financial-mlops-pytorch
+  - financial-inference
+  # Add other application namespaces that need Seldon resource processing
+
 # Seldon predictor servers configuration
 seldon_predictor_servers:
   MLSERVER:

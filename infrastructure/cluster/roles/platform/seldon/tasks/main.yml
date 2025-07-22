@@ -120,10 +120,16 @@
       # IMPORTANT: Controller configuration belongs in the SETUP chart, not runtime chart
       # The setup chart installs the actual controller deployment
       controller:
-        clusterwide: true  # Enable cluster-wide model watching across all namespaces
+        clusterwide: true  # Enable cluster-wide resource watching
+        # Remove watchNamespaces when using clusterwide mode
       webhook:
         enabled: true
         port: 443
+      scheduler:
+        image:
+          registry: "harbor.test"
+          repository: "library/seldon-scheduler"
+          tag: "{{ seldon_scheduler_tag }}"
       controllerManager:
         webhookPort: 443
         # v2.9.1 Configuration - Optimized for scoped operator pattern
@@ -148,7 +154,7 @@
     kubeconfig: "{{ kubeconfig_path }}"
     api_version: apps/v1
     kind: Deployment
-    name: seldon-controller-manager
+    name: seldon-v2-controller-manager
     namespace: "{{ seldon_namespace }}"
     wait_condition:
       type: Available
