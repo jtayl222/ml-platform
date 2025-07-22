@@ -1,0 +1,95 @@
+# Harbor Replication Configuration
+# This file defines all external images to be mirrored to Harbor
+# Used by harbor-sync.sh script for automated mirroring
+
+# Tier 1: Critical Runtime Dependencies (sync every 6 hours)
+tier1:
+  schedule: "0 */6 * * *"
+  images:
+    # Seldon Core Model Serving
+    - source: docker.io/seldonio/mlserver
+      tags:
+        - "1.6.1"
+        - "1.6.0"
+        - "latest"
+    
+    # NVIDIA Triton Inference Server
+    - source: nvcr.io/nvidia/tritonserver
+      tags:
+        - "24.04-py3"
+        - "24.03-py3"
+    
+    # MinIO Client for storage operations
+    - source: docker.io/minio/mc
+      tags:
+        - "latest"
+        - "RELEASE.2024-11-17T19-35-25Z"
+    
+    # Seldon Agent
+    - source: docker.io/seldonio/seldon-agent
+      tags:
+        - "2.9.1"
+        - "2.9.0"
+        - "latest"
+
+# Tier 2: Platform Services (sync daily)
+tier2:
+  schedule: "0 2 * * *"
+  images:
+    # Networking utilities
+    - source: docker.io/nicolaka/netshoot
+      tags:
+        - "latest"
+        - "v0.11"
+    
+    # Python base images for workflows
+    - source: docker.io/library/python
+      tags:
+        - "3.11-slim"
+        - "3.10-slim"
+        - "3.9-slim"
+    
+    # Busybox for init containers
+    - source: docker.io/library/busybox
+      tags:
+        - "latest"
+        - "1.36"
+
+# Tier 3: Development Tools (sync weekly)
+tier3:
+  schedule: "0 3 * * 0"
+  images:
+    # JupyterHub notebooks
+    - source: docker.io/jupyter/datascience-notebook
+      tags:
+        - "latest"
+        - "python-3.11"
+    
+    - source: docker.io/jupyter/scipy-notebook
+      tags:
+        - "latest"
+        - "python-3.11"
+    
+    - source: docker.io/jupyter/tensorflow-notebook
+      tags:
+        - "latest"
+        - "python-3.11"
+    
+    - source: docker.io/jupyter/pytorch-notebook
+      tags:
+        - "latest"
+        - "python-3.11"
+
+# Configuration for Harbor projects
+projects:
+  - name: library
+    public: true
+    description: "Mirrored public images from Docker Hub and other registries"
+  
+  - name: ml-models
+    public: false
+    description: "Custom ML model images"
+  
+  - name: ml-tools
+    public: false
+    description: "ML development and tooling images"
