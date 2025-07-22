@@ -1,0 +1,158 @@
+---
+- name: Create Kafka namespace
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    name: "{{ kafka_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+  tags: [foundation, kafka, namespace]
+
+- name: Install Strimzi Kafka Operator (using kubectl)
+  shell: |
+    kubectl apply -f 'https://strimzi.io/install/latest?namespace={{ kafka_namespace }}' --kubeconfig {{ kubeconfig_path }}
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+  tags: [foundation, kafka, operator]
+
+- name: Wait for operator deployment to be created
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: apps/v1
+    kind: Deployment
+    name: strimzi-cluster-operator
+    namespace: "{{ kafka_namespace }}"
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 180
+  tags: [foundation, kafka, operator]
+
+- name: Patch Strimzi operator to skip version check
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: apps/v1
+    kind: Deployment
+    name: strimzi-cluster-operator
+    namespace: "{{ kafka_namespace }}"
+    merge_type: strategic-merge
+    definition:
+      spec:
+        template:
+          spec:
+            containers:
+            - name: strimzi-cluster-operator
+              env:
+              - name: STRIMZI_PLATFORM_FEATURES_SKIP_VERSION_CHECK
+                value: "true"
+  tags: [foundation, kafka, operator]
+
+- name: Wait for Strimzi operator to be ready
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: apps/v1
+    kind: Deployment
+    name: strimzi-cluster-operator
+    namespace: "{{ kafka_namespace }}"
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 600
+  tags: [foundation, kafka, operator]
+
+- name: Deploy KafkaNodePool (KRaft mode - modern approach)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: kafka.strimzi.io/v1beta2
+      kind: KafkaNodePool
+      metadata:
+        name: controller
+        namespace: "{{ kafka_namespace }}"
+        labels:
+          strimzi.io/cluster: "{{ kafka_cluster_name }}"
+      spec:
+        replicas: "{{ kafka_replicas }}"
+        roles:
+          - controller
+          - broker
+        storage:
+          type: persistent-claim
+          size: "{{ kafka_storage_size }}"
+          class: "{{ kafka_storage_class }}"
+        resources:
+          requests:
+            cpu: "{{ kafka_cpu_request }}"
+            memory: "{{ kafka_memory_request }}"
+          limits:
+            cpu: "{{ kafka_cpu_limit }}"
+            memory: "{{ kafka_memory_limit }}"
+  tags: [foundation, kafka, nodepool]
+
+- name: Deploy Kafka cluster (KRaft mode with KafkaNodePool)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: kafka.strimzi.io/v1beta2
+      kind: Kafka
+      metadata:
+        name: "{{ kafka_cluster_name }}"
+        namespace: "{{ kafka_namespace }}"
+        annotations:
+          strimzi.io/node-pools: enabled
+          strimzi.io/kraft: enabled
+      spec:
+        kafka:
+          listeners: "{{ kafka_listeners }}"
+          config:
+            offsets.topic.replication.factor: "{{ kafka_default_replication_factor }}"
+            transaction.state.log.replication.factor: "{{ kafka_default_replication_factor }}"
+            transaction.state.log.min.isr: 1
+            default.replication.factor: "{{ kafka_default_replication_factor }}"
+            min.insync.replicas: 1
+    wait: true
+    wait_condition:
+      type: Ready
+      status: "True"
+    wait_timeout: 600
+  tags: [foundation, kafka, cluster]
+
+- name: Create Seldon-specific Kafka topics
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: kafka.strimzi.io/v1beta2
+      kind: KafkaTopic
+      metadata:
+        name: "{{ item }}"
+        namespace: "{{ kafka_namespace }}"
+        labels:
+          strimzi.io/cluster: "{{ kafka_cluster_name }}"
+      spec:
+        partitions: "{{ kafka_default_partitions }}"
+        replicas: "{{ kafka_default_replication_factor }}"
+        config:
+          retention.ms: 7200000
+          segment.ms: 3600000
+  loop:
+    - seldon-model-events
+    - seldon-server-events
+    - seldon-pipeline-events
+  tags: [foundation, kafka, topics]
+
+- name: Display Kafka deployment status
+  debug:
+    msg:
+      - "🎉 Kafka cluster deployed successfully!"
+      - "📊 Cluster: {{ kafka_cluster_name }}"
+      - "📁 Namespace: {{ kafka_namespace }}"
+      - "🔧 Bootstrap server: {{ kafka_cluster_name }}-kafka-bootstrap.{{ kafka_namespace }}:9092"
+      - ""
+      - "📖 Connection details for Seldon:"
+      - "- Bootstrap: {{ kafka_cluster_name }}-kafka-bootstrap.{{ kafka_namespace }}:9092"
+      - "- Topics created: seldon-model-events, seldon-server-events, seldon-pipeline-events"
+      - ""
+      - "💡 Quick verification:"
+      - "- kubectl get kafka -n {{ kafka_namespace }}"
+      - "- kubectl get kafkatopic -n {{ kafka_namespace }}"
+  tags: [foundation, kafka, summary]

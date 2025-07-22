@@ -1,0 +1,43 @@
+---
+# Kafka Configuration for Seldon Core v2.9.1
+kafka_namespace: "kafka"
+kafka_cluster_name: "seldon-kafka"
+
+# Kafka sizing
+kafka_replicas: 1
+kafka_storage_size: "20Gi"
+kafka_memory_request: "512Mi"
+kafka_memory_limit: "1Gi" 
+kafka_cpu_request: "250m"
+kafka_cpu_limit: "500m"
+
+# Zookeeper sizing  
+zookeeper_replicas: 1
+zookeeper_storage_size: "10Gi"
+zookeeper_memory_request: "256Mi"
+zookeeper_memory_limit: "512Mi"
+zookeeper_cpu_request: "100m"
+zookeeper_cpu_limit: "250m"
+
+# Strimzi operator configuration  
+strimzi_version: "0.43.0"
+strimzi_namespace: "{{ kafka_namespace }}"
+
+# Kafka configuration
+kafka_listeners:
+  - name: plain
+    port: 9092
+    type: internal
+    tls: false
+
+# Storage configuration
+kafka_storage_class: "{{ global_storage_class | default('local-path') }}"
+
+# Topics configuration for Seldon
+kafka_default_partitions: 4
+kafka_default_replication_factor: 1
+
+# Helm configuration
+helm_wait_timeout: "600s"
+helm_retries: 3
+helm_retry_delay: 30
