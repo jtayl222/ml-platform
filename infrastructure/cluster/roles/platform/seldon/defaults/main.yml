@@ -24,6 +24,13 @@ seldon_manager_cpu_limit: 500m
 seldon_manager_memory_request: 128Mi
 seldon_manager_memory_limit: 512Mi
 
+# Standard Scoped Operator Configuration
+# Operator watches specific namespaces but ServerConfigs stay in seldon-system
+seldon_watch_namespaces:
+  - fraud-detection
+  - financial-inference
+  - financial-mlops-pytorch
+
 # Feature Configuration
 seldon_usage_metrics: true
 seldon_istio_enabled: true

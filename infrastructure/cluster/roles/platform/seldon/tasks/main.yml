@@ -120,7 +120,8 @@
       # IMPORTANT: Controller configuration belongs in the SETUP chart, not runtime chart
       # The setup chart installs the actual controller deployment
       controller:
-        clusterwide: true  # Enable cluster-wide model watching across all namespaces
+        clusterwide: true  # Must be true for watchNamespaces to work
+        watchNamespaces: "{{ seldon_watch_namespaces | join(',') }}"  # Comma-separated list
       webhook:
         enabled: true
         port: 443
@@ -155,6 +156,45 @@
       status: "True"
     wait_timeout: 300
   tags: [platform, seldon, seldon-system, verify]
+
+- name: Create watched namespaces for Seldon controller
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: v1
+    kind: Namespace
+    name: "{{ item }}"
+    state: present
+    definition:
+      metadata:
+        labels:
+          name: "{{ item }}"
+  loop: "{{ seldon_watch_namespaces }}"
+  tags: [platform, seldon, namespace]
+
+- name: Deploy Seldon Runtime to watched namespaces
+  kubernetes.core.helm:
+    name: "seldon-core-v2-runtime-{{ item }}"
+    chart_ref: "{{ seldon_runtime_chart_ref }}"
+    chart_version: "{{ seldon_runtime_chart_version }}"
+    release_namespace: "{{ item }}"
+    create_namespace: false
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_timeout: "{{ helm_wait_timeout }}"
+    values:
+      # Runtime components for each namespace
+      scheduler:
+        replicas: 1
+      envoy:
+        replicas: 1
+      modelgateway:
+        replicas: 1
+      pipelinegateway:
+        replicas: 1
+      dataflowEngine:
+        replicas: 1
+  loop: "{{ seldon_watch_namespaces }}"
+  tags: [platform, seldon, runtime]
 
 - name: Create Seldon configuration ConfigMap
   kubernetes.core.k8s:
@@ -286,24 +326,24 @@
   debug:
     msg:
       - "🎉 Seldon Core v2.9.1 deployment completed successfully!"
-      - "🤖 Model Serving Platform Ready (Scoped Operator Pattern)"
-      - "📁 Namespace: {{ seldon_namespace }}"
+      - "🤖 Model Serving Platform Ready (Standard Scoped Operator)"
+      - "📁 Control Namespace: {{ seldon_namespace }}"
       - "🔧 Operator: seldon-controller-manager"
+      - ""
+      - "📋 Architecture:"
+      - "- Operator in seldon-system watches: {{ seldon_watch_namespaces | join(', ') }}"
+      - "- Runtime components deployed to each watched namespace"
+      - "- ServerConfigs centralized in seldon-system"
       - ""
       - "🚀 Supported Model Types:"
       - "- MLServer (PyTorch, SKLearn, XGBoost, MLflow)"
       - "- Triton (TensorFlow, PyTorch, ONNX)"
       - "- Custom Docker Images"
       - ""
-      - "📖 Architecture Pattern:"
-      - "- Centralized scheduler in seldon-system"
-      - "- Development teams deploy SeldonRuntimes in their namespaces"
-      - "- Each namespace can have local schedulers (scoped operator pattern)"
-      - ""
       - "💡 Quick Commands:"
-      - "- kubectl get seldonruntimes -A"
-      - "- kubectl get models -A"
       - "- kubectl get serverconfigs -n {{ seldon_namespace }}"
+      - "- kubectl get servers,models -n <watched-namespace>"
+      - "- kubectl get experiments -n <watched-namespace>"
   tags: [platform, seldon, seldon-system, summary]
 
 # Add infrastructure-level registry access
