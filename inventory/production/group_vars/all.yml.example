@@ -46,10 +46,10 @@ nfs_allowed_networks: "192.168.1.0/24"
 minio_namespace: "minio"
 minio_nodeport: 30900
 minio_console_nodeport: 30901
-minio_memory_request: "8Gi"
-minio_memory_limit: "16Gi"
-minio_cpu_request: 4
-minio_cpu_limit: 8
+minio_memory_request: "1Gi"      # Actual usage: 335MB
+minio_memory_limit: "2Gi"        # 2x headroom
+minio_cpu_request: "100m"        # Actual usage: 2 millicores
+minio_cpu_limit: "500m"          # 5x headroom for bursts
 minio_storage_size: "1Ti"
 minio_internal_endpoint: "http://minio.minio.svc.cluster.local:9000"
 
@@ -57,10 +57,10 @@ minio_internal_endpoint: "http://minio.minio.svc.cluster.local:9000"
 grafana_nodeport: 30300
 grafana_admin_user: "admin"
 grafana_admin_password: "admin123"
-grafana_memory_request: "4Gi"
-grafana_memory_limit: "8Gi"
-grafana_cpu_request: 2
-grafana_cpu_limit: 4
+grafana_memory_request: "512Mi"  # Typical Grafana usage
+grafana_memory_limit: "1Gi"      # 2x headroom
+grafana_cpu_request: "100m"      # Light CPU usage
+grafana_cpu_limit: "500m"        # Burst capacity
 grafana_storage_size: "100Gi"
 
 # MLflow - Enhanced ML Experiment Tracking
@@ -68,10 +68,10 @@ mlflow_namespace: "mlflow"
 mlflow_nodeport: 30800
 mlflow_image: "192.168.1.210/library/mlflow-postgresql:3.1.0-4"
 mlflow_storage_size: "500Gi"
-mlflow_memory_request: "8Gi"
-mlflow_memory_limit: "16Gi"
-mlflow_cpu_request: 4
-mlflow_cpu_limit: 8
+mlflow_memory_request: "1Gi"     # Actual usage: 825MB
+mlflow_memory_limit: "2Gi"       # 2x headroom
+mlflow_cpu_request: "100m"       # Actual usage: 1 millicore
+mlflow_cpu_limit: "500m"         # 5x headroom for bursts
 mlflow_s3_bucket: "mlflow-artifacts"
 mlflow_s3_endpoint: "http://minio.minio.svc.cluster.local:9000"
 mlflow_storage_class: "{{ global_storage_class }}"
@@ -89,6 +89,13 @@ mlflow_enable_model_registry: true       # Enable Model Registry features
 
 # Seldon Core - High-Performance Model Serving
 seldon_namespace: "seldon-system"
+
+# Enable custom images
+seldon_use_custom_scheduler: true
+seldon_use_custom_controller: true
+seldon_scheduler_tag: "2.9.1-verbose-logging-kafkafix-650c4f19"
+seldon_controller_full_image: "192.168.1.210/library/seldon-controller:fix-namespace-lookup-v4"
+
 seldon_chart_repo: "https://storage.googleapis.com/seldon-charts"
 seldon_chart_repo_name: "seldon"
 seldon_chart_name: "seldon-core-operator"
@@ -105,14 +112,14 @@ seldon_server_host:
   enabled: true
   value: "localhost"
 
-# Enable custom images for PR testing
-seldon_custom_images:
-  enabled: true
-  registry: "192.168.1.210"
-  agent:
-    repository: "library/seldon-agent"
-    tag: "2.9.0-pr6582-test"
-    pullPolicy: "Always"
+# # Enable custom images for PR testing
+# seldon_custom_images:
+#   enabled: true
+#   registry: "192.168.1.210"
+#   agent:
+#     repository: "library/seldon-agent"
+#     tag: "2.9.0-pr6582-test"
+#     pullPolicy: "Always"
 
 # Additional agent environment variables for PR #6582
 seldon_agent_env_vars:
@@ -220,10 +227,10 @@ prometheus_stack_chart_ref: "prometheus-community/kube-prometheus-stack"
 prometheus_nodeport: 30090
 prometheus_storage_class: "{{ global_storage_class }}"
 prometheus_storage_size: "50Gi"
-prometheus_memory_request: "4Gi"
-prometheus_memory_limit: "8Gi"
-prometheus_cpu_request: 2
-prometheus_cpu_limit: 4
+prometheus_memory_request: "1Gi"   # Default from role
+prometheus_memory_limit: "4Gi"     # Default from role  
+prometheus_cpu_request: "200m"     # Default from role
+prometheus_cpu_limit: "1000m"      # Default from role
 
 # Prometheus Pushgateway Configuration
 pushgateway_nodeport: 32091
@@ -240,7 +247,7 @@ helm_retry_delay: 10
 # Istio Configuration
 istio_gateway_http_nodeport: 31080
 istio_gateway_https_nodeport: 31443
-istio_gateway_loadbalancer_ip: ""  # Leave empty for auto-assignment from MetalLB pool
+istio_gateway_loadbalancer_ip: "192.168.1.240"  # Istio Gateway LoadBalancer IP
 istio_pilot_memory_request: "128Mi"
 istio_pilot_memory_limit: "512Mi" 
 istio_pilot_cpu_request: "100m"

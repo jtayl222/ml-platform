@@ -8,6 +8,15 @@
   delay: 10
   tags: [platform, harbor, helm-repos]
 
+- name: Create Harbor namespace
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    name: "{{ harbor_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+  tags: [platform, harbor, namespace]
+
 - name: Generate Harbor TLS certificate
   block:
     - name: Create Harbor TLS private key
@@ -53,15 +62,6 @@
             tls.key: "{{ lookup('file', '/tmp/harbor-key.pem') | b64encode }}"
   when: harbor_tls_enabled | default(false)
   tags: [platform, harbor, tls]
-
-- name: Create Harbor namespace
-  kubernetes.core.k8s:
-    kubeconfig: "{{ kubeconfig_path }}"
-    name: "{{ harbor_namespace }}"
-    api_version: v1
-    kind: Namespace
-    state: present
-  tags: [platform, harbor, namespace]
 
 - name: Create Harbor persistent volume claims
   kubernetes.core.k8s:
@@ -413,6 +413,16 @@
           auth: "{{ ('admin:' + harbor_admin_password) | b64encode }}"
   tags: [platform, harbor, secrets, docker]
 
+- name: Create Seldon namespace if Harbor integration is enabled
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    name: "{{ seldon_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+  when: harbor_integrate_with_seldon
+  tags: [platform, harbor, namespace, seldon]
+
 - name: Create Harbor Docker registry secret for Seldon namespace
   kubernetes.core.k8s:
     kubeconfig: "{{ kubeconfig_path }}"
@@ -434,6 +444,16 @@
           auth: "{{ ('admin:' + harbor_admin_password) | b64encode }}"
   when: harbor_integrate_with_seldon
   tags: [platform, harbor, secrets, docker, seldon]
+
+- name: Create JupyterHub namespace if Harbor integration is enabled
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    name: "{{ jupyterhub_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+  when: harbor_integrate_with_jupyter
+  tags: [platform, harbor, namespace, jupyter]
 
 - name: Create Harbor Docker registry secret for JupyterHub namespace
   kubernetes.core.k8s:

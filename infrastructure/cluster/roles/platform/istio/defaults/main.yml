@@ -1,0 +1,29 @@
+---
+# Istio Configuration
+istio_namespace: "istio-system"
+istio_gateway_namespace: "istio-gateway"
+
+# Gateway Service Configuration
+istio_gateway_loadbalancer_ip: "192.168.1.240"
+istio_gateway_http_nodeport: 31080
+istio_gateway_https_nodeport: 31443
+
+# Resource Configuration
+istio_pilot_memory_request: "512Mi"
+istio_pilot_memory_limit: "1Gi"
+istio_pilot_cpu_request: "100m"
+istio_pilot_cpu_limit: "500m"
+
+istio_gateway_memory_request: "256Mi"
+istio_gateway_memory_limit: "512Mi"
+istio_gateway_cpu_request: "100m"
+istio_gateway_cpu_limit: "200m"
+
+# Sidecar Injection Configuration
+istio_injection_namespaces:
+  - fraud-detection
+  - financial-inference
+  - financial-mlops-pytorch
+
+# Helm Configuration
+helm_wait_timeout: 600

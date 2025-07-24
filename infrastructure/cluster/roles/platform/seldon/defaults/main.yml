@@ -15,10 +15,21 @@ seldon_servers_chart_version: "2.9.1"
 seldon_setup_chart_ref: seldon-charts/seldon-core-v2-setup
 seldon_setup_chart_version: "2.9.1"
 
-
-
 # Operator Configuration
 seldon_operator_image_tag: 2.9.1
+
+# Custom Image Configuration
+# Set these flags to true and define the full image paths in your inventory to override Helm defaults
+
+# Custom Controller Image (for Scoped Operator Pattern)
+# This fixes the namespace lookup bug in Seldon Core v2.9.1
+seldon_use_custom_controller: false
+# Example: seldon_controller_full_image: "your-registry/your-repo/seldon-controller:your-tag"
+
+# Custom Scheduler Image
+seldon_use_custom_scheduler: false
+# Example: seldon_scheduler_tag: "your-custom-tag"
+
 seldon_manager_cpu_request: 100m
 seldon_manager_cpu_limit: 500m
 seldon_manager_memory_request: 128Mi
@@ -79,18 +90,13 @@ seldon_agent_env_vars: []
 seldon_enable_network_policies: true
 seldon_allow_external_telemetry: true
 
-# ML Namespaces that need network policies applied (platform-managed only)
-# These namespaces will get network policies that allow:
-# - Communication with seldon-system
-# - Intra-namespace communication  
-# - DNS resolution to kube-system
-# - External HTTPS/HTTP access for model downloads
-# Note: Development teams manage their own namespaces (financial-inference, etc.)
-seldon_ml_namespaces:
-  - financial-ml
-  # Add other platform-managed ML namespaces here as needed
-  # - iris-demo
-  # - another-ml-project
+# Namespaces that Seldon controller should watch for resources
+# This is required when clusterwide: false
+seldon_watch_namespaces:
+  - financial-mlops-pytorch
+  - financial-inference
+  - fraud-detection
+  # Add other application namespaces that need Seldon resource processing
 
 # Seldon predictor servers configuration
 seldon_predictor_servers:

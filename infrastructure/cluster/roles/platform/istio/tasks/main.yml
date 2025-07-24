@@ -51,16 +51,30 @@
             cpu: "{{ istio_pilot_cpu_limit }}"
   tags: [istio, istiod]
 
-- name: Install Istio Gateway
-  kubernetes.core.helm:
-    name: istio-gateway
-    chart_ref: istio/gateway
-    release_namespace: istio-gateway
-    create_namespace: true
-    kubeconfig: "{{ kubeconfig_path }}"
-    wait: true
-    wait_timeout: "{{ helm_wait_timeout }}"
-    values:
+- name: Build Istio Gateway values for LoadBalancer service
+  set_fact:
+    istio_gateway_values:
+      service:
+        type: LoadBalancer
+        loadBalancerIP: "{{ istio_gateway_loadbalancer_ip | default('192.168.1.240') }}"
+        ports:
+        - port: 80
+          name: http2
+        - port: 443
+          name: https
+      resources:
+        requests:
+          memory: "{{ istio_gateway_memory_request }}"
+          cpu: "{{ istio_gateway_cpu_request }}"
+        limits:
+          memory: "{{ istio_gateway_memory_limit }}"
+          cpu: "{{ istio_gateway_cpu_limit }}"
+  when: metallb_state | default('absent') == 'present'
+  tags: [istio, istio-gateway]
+
+- name: Build Istio Gateway values for NodePort service
+  set_fact:
+    istio_gateway_values:
       service:
         type: NodePort
         ports:
@@ -77,6 +91,19 @@
         limits:
           memory: "{{ istio_gateway_memory_limit }}"
           cpu: "{{ istio_gateway_cpu_limit }}"
+  when: metallb_state | default('absent') != 'present'
+  tags: [istio, istio-gateway]
+
+- name: Install Istio Gateway
+  kubernetes.core.helm:
+    name: istio-gateway
+    chart_ref: istio/gateway
+    release_namespace: istio-gateway
+    create_namespace: true
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_timeout: "{{ helm_wait_timeout }}"
+    values: "{{ istio_gateway_values }}"
   tags: [istio, istio-gateway]
 
 - name: Wait for Istio components to be ready
@@ -92,3 +119,42 @@
       status: "True"
     wait_timeout: 300
   tags: [istio, wait]
+
+- name: Enable Istio sidecar injection for ML/application namespaces
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    name: "{{ item }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+    definition:
+      metadata:
+        labels:
+          name: "{{ item }}"
+          istio-injection: enabled
+  loop: "{{ istio_injection_namespaces | default(['fraud-detection', 'financial-inference', 'financial-mlops-pytorch']) }}"
+  tags: [istio, namespace, sidecar-injection]
+
+- name: Display Istio deployment summary
+  debug:
+    msg:
+      - "🌐 Istio Service Mesh deployed successfully!"
+      - "📋 Components:"
+      - "  - Istio Base: istio-system namespace"
+      - "  - Istiod (Control Plane): istio-system namespace"
+      - "  - Istio Gateway: istio-gateway namespace"
+      - ""
+      - "🚪 Gateway Configuration:"
+      - "  - Type: {{ 'LoadBalancer' if metallb_state | default('absent') == 'present' else 'NodePort' }}"
+      - "{% if metallb_state | default('absent') == 'present' %}  - LoadBalancer IP: {{ istio_gateway_loadbalancer_ip | default('192.168.1.240') }}{% endif %}"
+      - "{% if metallb_state | default('absent') != 'present' %}  - HTTP NodePort: {{ istio_gateway_http_nodeport }}{% endif %}"
+      - "{% if metallb_state | default('absent') != 'present' %}  - HTTPS NodePort: {{ istio_gateway_https_nodeport }}{% endif %}"
+      - ""
+      - "🔄 Sidecar Injection Enabled:"
+      - "{% for ns in istio_injection_namespaces | default(['fraud-detection', 'financial-inference', 'financial-mlops-pytorch']) %}  - {{ ns }}{% endfor %}"
+      - ""
+      - "💡 Next Steps:"
+      - "  - Create Gateway and VirtualService resources for your applications"
+      - "  - Restart existing deployments to inject sidecars: kubectl rollout restart deployment -n <namespace>"
+      - "  - Configure traffic policies and security rules as needed"
+  tags: [istio, summary]

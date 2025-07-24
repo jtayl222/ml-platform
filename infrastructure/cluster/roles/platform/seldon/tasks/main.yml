@@ -17,6 +17,34 @@
     state: present
   tags: [platform, seldon, seldon-system, namespace]
 
+- name: Create Harbor registry secret for Seldon namespace
+  shell: |
+    kubectl create secret docker-registry harbor-registry-secret \
+      --docker-server=192.168.1.210 \
+      --docker-username=admin \
+      --docker-password="{{ harbor_admin_password | default('Harbor12345') }}" \
+      --docker-email=admin@harbor.local \
+      --namespace="{{ seldon_namespace }}" \
+      --dry-run=client -o yaml | kubectl apply -f -
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+  when: 
+    - seldon_use_custom_controller | default(false) or seldon_use_custom_scheduler | default(false)
+  tags: [platform, seldon, seldon-system, secrets]
+
+- name: Verify Harbor registry secret exists
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_path }}"
+    api_version: v1
+    kind: Secret
+    name: harbor-registry-secret
+    namespace: "{{ seldon_namespace }}"
+  register: harbor_secret_check
+  failed_when: harbor_secret_check.resources | length == 0
+  when: 
+    - seldon_use_custom_controller | default(false) or seldon_use_custom_scheduler | default(false)
+  tags: [platform, seldon, seldon-system, secrets]
+
 - name: Ensure kube-system namespace has required labels for network policies
   kubernetes.core.k8s:
     kubeconfig: "{{ kubeconfig_path }}"
@@ -106,28 +134,32 @@
     wait_timeout: "{{ helm_wait_timeout }}"
   tags: [platform, seldon, seldon-system]
 
-- name: Install Seldon Core V2 setup
-  kubernetes.core.helm:
-    name: seldon-core-v2-setup
-    chart_ref: "{{ seldon_setup_chart_ref }}"
-    chart_version: "{{ seldon_setup_chart_version }}"
-    release_namespace: "{{ seldon_namespace }}"
-    create_namespace: true
+- name: Create watched namespaces for Seldon controller
+  kubernetes.core.k8s:
     kubeconfig: "{{ kubeconfig_path }}"
-    wait: true
-    wait_timeout: "{{ helm_wait_timeout }}"
-    values:
-      # IMPORTANT: Controller configuration belongs in the SETUP chart, not runtime chart
-      # The setup chart installs the actual controller deployment
+    api_version: v1
+    kind: Namespace
+    name: "{{ item }}"
+    state: present
+    definition:
+      metadata:
+        labels:
+          name: "{{ item }}"
+          seldon.io/managed: "true"
+  loop: "{{ seldon_watch_namespaces | default(['financial-mlops-pytorch', 'financial-inference']) }}"
+  tags: [platform, seldon, namespace, scoped-operator]
+
+- name: Build base Seldon setup values
+  set_fact:
+    seldon_base_values:
       controller:
-        clusterwide: true  # Enable cluster-wide model watching across all namespaces
+        clusterwide: false  # Use namespace-scoped watching (Scoped Operator Pattern)
+        watchNamespaces: "{{ seldon_watch_namespaces | default(['financial-mlops-pytorch', 'financial-inference']) }}"
       webhook:
         enabled: true
         port: 443
       controllerManager:
         webhookPort: 443
-        # v2.9.1 Configuration - Optimized for scoped operator pattern
-        # Controller manager connects to centralized scheduler in seldon-system
         env:
           SELDON_SCHEDULER_HOST: seldon-scheduler
           SELDON_SCHEDULER_PORT: "9004"
@@ -138,6 +170,73 @@
           limits:
             cpu: "{{ seldon_manager_cpu_limit }}"
             memory: "{{ seldon_manager_memory_limit }}"
+  tags: [platform, seldon, seldon-system, helm-deploy]
+
+- name: Add custom scheduler image if enabled
+  set_fact:
+    seldon_base_values: >-
+      {{ seldon_base_values | combine({
+        'scheduler': {
+          'image': {
+            'registry': '192.168.1.210',
+            'repository': 'library/seldon-scheduler',
+            'tag': seldon_scheduler_tag
+          }
+        }
+      }, recursive=True) }}
+  when: 
+    - seldon_use_custom_scheduler | default(false)
+    - seldon_scheduler_tag is defined
+  tags: [platform, seldon, seldon-system, helm-deploy]
+
+- name: Parse controller image components
+  set_fact:
+    controller_image_parts: "{{ seldon_controller_full_image.split(':') }}"
+    controller_repo_parts: "{{ seldon_controller_full_image.split(':')[0].split('/') }}"
+  when:
+    - seldon_use_custom_controller | default(false)
+    - seldon_controller_full_image is defined
+  tags: [platform, seldon, seldon-system, helm-deploy]
+
+- name: Add custom controller image if enabled
+  set_fact:
+    seldon_base_values: >-
+      {{ seldon_base_values | combine({
+        'controller': {
+          'image': {
+            'registry': controller_repo_parts[0],
+            'repository': (controller_repo_parts[1:] | join('/')),
+            'tag': controller_image_parts[1]
+          }
+        }
+      }, recursive=True) }}
+  when:
+    - seldon_use_custom_controller | default(false)
+    - seldon_controller_full_image is defined
+  tags: [platform, seldon, seldon-system, helm-deploy]
+
+- name: Add Harbor registry image pull secrets when using custom images
+  set_fact:
+    seldon_base_values: >-
+      {{ seldon_base_values | combine({
+        'imagePullSecrets': [{'name': 'harbor-registry-secret'}]
+      }, recursive=True) }}
+  when: 
+    - seldon_use_custom_controller | default(false) or seldon_use_custom_scheduler | default(false) 
+    - harbor_integrate_with_seldon | default(true)
+  tags: [platform, seldon, seldon-system, helm-deploy]
+
+- name: Install Seldon Core V2 setup
+  kubernetes.core.helm:
+    name: seldon-core-v2-setup
+    chart_ref: "{{ seldon_setup_chart_ref }}"
+    chart_version: "{{ seldon_setup_chart_version }}"
+    release_namespace: "{{ seldon_namespace }}"
+    create_namespace: true
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_timeout: "{{ helm_wait_timeout }}"
+    values: "{{ seldon_base_values }}"
   register: seldon_setup_deployment
   retries: "{{ helm_retries }}"
   delay: "{{ helm_retry_delay }}"
@@ -148,7 +247,7 @@
     kubeconfig: "{{ kubeconfig_path }}"
     api_version: apps/v1
     kind: Deployment
-    name: seldon-controller-manager
+    name: seldon-v2-controller-manager
     namespace: "{{ seldon_namespace }}"
     wait_condition:
       type: Available
@@ -168,48 +267,6 @@
       data:
         predictor_servers: "{{ seldon_predictor_servers | to_nice_json }}"
   tags: [platform, seldon, seldon-system, config]
-
-- name: Create network policy template for ML namespaces
-  template:
-    src: namespace-network-policy.yaml.j2
-    dest: "/tmp/namespace-network-policy-{{ item }}.yaml"
-  vars:
-    namespace: "{{ item }}"
-  loop: "{{ seldon_ml_namespaces | default([]) }}"
-  when: seldon_enable_network_policies | default(true)
-  tags: [platform, seldon, network-policy]
-
-- name: Create ML namespaces
-  kubernetes.core.k8s:
-    kubeconfig: "{{ kubeconfig_path }}"
-    api_version: v1
-    kind: Namespace
-    name: "{{ item }}"
-    state: present
-    definition:
-      metadata:
-        labels:
-          name: "{{ item }}"
-  loop: "{{ seldon_ml_namespaces | default([]) }}"
-  when: seldon_enable_network_policies | default(true)
-  tags: [platform, seldon, network-policy, namespace]
-
-- name: Apply network policies to ML namespaces
-  kubernetes.core.k8s:
-    kubeconfig: "{{ kubeconfig_path }}"
-    state: present
-    src: "/tmp/namespace-network-policy-{{ item }}.yaml"
-  loop: "{{ seldon_ml_namespaces | default([]) }}"
-  when: seldon_enable_network_policies | default(true)
-  tags: [platform, seldon, network-policy]
-
-- name: Clean up network policy templates
-  file:
-    path: "/tmp/namespace-network-policy-{{ item }}.yaml"
-    state: absent
-  loop: "{{ seldon_ml_namespaces | default([]) }}"
-  when: seldon_enable_network_policies | default(true)
-  tags: [platform, seldon, network-policy]
 
 # FIXED: Remove the conflicting NodePort service creation
 # The Seldon operator will create its own services
@@ -287,23 +344,27 @@
     msg:
       - "🎉 Seldon Core v2.9.1 deployment completed successfully!"
       - "🤖 Model Serving Platform Ready (Scoped Operator Pattern)"
-      - "📁 Namespace: {{ seldon_namespace }}"
-      - "🔧 Operator: seldon-controller-manager"
+      - "📁 Control Namespace: {{ seldon_namespace }}"
+      - "🔧 Controller: seldon-v2-controller-manager"
+      - "{% if seldon_use_custom_controller | default(false) and seldon_controller_full_image is defined %}🐳 Custom Controller: {{ seldon_controller_full_image }}{% endif %}"
+      - "{% if seldon_use_custom_scheduler | default(false) and seldon_scheduler_full_image is defined %}📅 Custom Scheduler: {{ seldon_scheduler_full_image }}{% endif %}"
+      - "👀 Watched Namespaces: {{ seldon_watch_namespaces | default(['financial-mlops-pytorch', 'financial-inference']) | join(', ') }}"
       - ""
       - "🚀 Supported Model Types:"
       - "- MLServer (PyTorch, SKLearn, XGBoost, MLflow)"
       - "- Triton (TensorFlow, PyTorch, ONNX)"
       - "- Custom Docker Images"
       - ""
-      - "📖 Architecture Pattern:"
-      - "- Centralized scheduler in seldon-system"
-      - "- Development teams deploy SeldonRuntimes in their namespaces"
-      - "- Each namespace can have local schedulers (scoped operator pattern)"
+      - "📖 Scoped Operator Pattern:"
+      - "- Controller watches specific namespaces only"
+      - "- Multi-tenant isolation with namespace boundaries"
+      - "- Teams deploy ServerConfig and Models in their own namespaces"
+      - "- Centralized scheduler coordination in seldon-system"
       - ""
       - "💡 Quick Commands:"
-      - "- kubectl get seldonruntimes -A"
-      - "- kubectl get models -A"
       - "- kubectl get serverconfigs -n {{ seldon_namespace }}"
+      - "- kubectl get servers,models -A"
+      - "- kubectl get experiments -A"
   tags: [platform, seldon, seldon-system, summary]
 
 # Add infrastructure-level registry access
