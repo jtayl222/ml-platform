@@ -1,27 +1,35 @@
-# MLflow Role
+# MLflow Tracking Server Role
 
-This Ansible role deploys MLflow tracking server on Kubernetes with S3-compatible storage backend (MinIO) and sealed secrets for secure credential management.
+This Ansible role deploys MLflow tracking server with **PostgreSQL backend** and **Harbor registry integration** for production ML lifecycle management.
 
 ## Overview
 
-MLflow is an open-source platform for managing the ML lifecycle, including experimentation, reproducibility, deployment, and a central model registry. This role deploys MLflow as a containerized service in your Kubernetes cluster.
+MLflow is an open-source platform for managing the ML lifecycle, including experimentation, reproducibility, deployment, and a central model registry. This role deploys a production-ready MLflow instance with external PostgreSQL backend and high-resource allocation.
 
 ## Architecture
 
 ```
-🏗️ MLflow Deployment Architecture
-├── 📦 MLflow Server (Deployment)
+🏗️ MLflow Production Architecture
+├── 📦 MLflow Server (Harbor Image)
+│   ├── 192.168.1.210/library/mlflow-postgresql:3.1.0-4
 │   ├── Experiment Tracking API
 │   ├── Model Registry
-│   └── Artifact Store (S3/MinIO)
+│   └── Basic Authentication
 ├── 🗄️ Storage Layer
-│   ├── SQLite Database (PVC)
-│   └── S3 Artifacts (MinIO)
+│   ├── 🐘 External PostgreSQL Database (Primary)
+│   │   ├── Backend Store: postgresql://192.168.1.100:5432
+│   │   ├── Experiments & Runs metadata
+│   │   └── Model Registry data
+│   └── 📦 S3 Artifacts (MinIO)
+│       └── Model artifacts & files
 ├── 🔐 Security
-│   ├── Sealed Secrets (S3 credentials)
+│   ├── Harbor Registry Authentication
+│   ├── Basic Auth (username/password)
+│   ├── Sealed Secrets (DB + S3 credentials)
 │   └── Namespace isolation
-└── 🌐 Service (NodePort)
-    └── External access on port 30800
+└── 🌐 Service Access
+    ├── NodePort: 30800
+    └── LoadBalancer: 192.168.1.201:5000 (MetalLB)
 ```
 
 ## Features
@@ -30,7 +38,7 @@ MLflow is an open-source platform for managing the ML lifecycle, including exper
 - ✅ **Model Registry** - Version and manage ML models
 - ✅ **S3 Backend** - Secure artifact storage via MinIO
 - ✅ **Sealed Secrets** - GitOps-ready credential management
-- ✅ **Persistent Storage** - SQLite database on PVC
+- ✅ **PostgreSQL Backend** - External PostgreSQL database
 - ✅ **External Access** - NodePort service for web UI
 - ✅ **Production Ready** - Resource limits and health checks
 
@@ -47,10 +55,17 @@ MLflow is an open-source platform for managing the ML lifecycle, including exper
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `mlflow_namespace` | `mlflow` | Kubernetes namespace |
-| `mlflow_memory_request` | `512Mi` | Memory request |
-| `mlflow_memory_limit` | `1Gi` | Memory limit |
-| `mlflow_cpu_request` | `100m` | CPU request |
-| `mlflow_cpu_limit` | `500m` | CPU limit |
+| `mlflow_image` | `192.168.1.210/library/mlflow-postgresql:3.1.0-4` | Harbor registry image |
+| `mlflow_memory_request` | `8Gi` | Memory request |
+| `mlflow_memory_limit` | `16Gi` | Memory limit |
+| `mlflow_cpu_request` | `2` | CPU request |
+| `mlflow_cpu_limit` | `4` | CPU limit |
+| `mlflow_db_host` | `192.168.1.100` | PostgreSQL server host |
+| `mlflow_db_port` | `5432` | PostgreSQL server port |
+| `mlflow_db_name` | `mlflow` | PostgreSQL database name |
+| `mlflow_authdb_name` | `mlflow_auth` | Authentication database |
+| `mlflow_s3_bucket` | `mlflow-artifacts` | S3 bucket for artifacts |
+| `mlflow_s3_endpoint` | `http://minio.minio.svc.cluster.local:9000` | MinIO endpoint URL |
 | `kubeconfig_path` | - | Path to kubeconfig file |
 
 ## Deployment
@@ -81,24 +96,32 @@ kubectl get all -n mlflow
 kubectl logs -n mlflow deployment/mlflow
 
 # Test connectivity
-curl http://192.168.1.85:30800/health
+curl http://192.168.1.201:5000/health
 ```
 
 ## Usage
 
 ### Web Interface
-- **URL**: `http://192.168.1.85:30800`
+- **URL**: `http://192.168.1.201:5000` (LoadBalancer) or `http://192.168.1.85:30800` (NodePort)
 - **Features**: View experiments, runs, models, artifacts
-- **Authentication**: None (open access)
+- **Authentication**: Basic auth (username/password via sealed secrets)
 
 ### Python API
 
 #### External Access (from outside cluster)
 ```python
 import mlflow
+import os
 
-# Set tracking URI
-mlflow.set_tracking_uri("http://192.168.1.85:30800")
+# Set authentication credentials
+os.environ['MLFLOW_TRACKING_USERNAME'] = 'your-username'
+os.environ['MLFLOW_TRACKING_PASSWORD'] = 'your-password'
+
+# Set tracking URI (LoadBalancer endpoint)
+mlflow.set_tracking_uri("http://192.168.1.201:5000")
+
+# Alternative: NodePort endpoint
+# mlflow.set_tracking_uri("http://192.168.1.85:30800")
 
 # Verify connection
 print(f"MLflow Tracking URI: {mlflow.get_tracking_uri()}")
@@ -116,13 +139,18 @@ mlflow.set_tracking_uri("http://mlflow.mlflow.svc.cluster.local:5000")
 ```python
 import mlflow
 import mlflow.sklearn
+import os
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 
+# Set authentication credentials
+os.environ['MLFLOW_TRACKING_USERNAME'] = 'your-username'
+os.environ['MLFLOW_TRACKING_PASSWORD'] = 'your-password'
+
 # Set tracking URI
-mlflow.set_tracking_uri("http://192.168.1.85:30800")
+mlflow.set_tracking_uri("http://192.168.1.201:5000")
 
 # Create experiment
 mlflow.set_experiment("iris-classification")
@@ -160,10 +188,10 @@ with mlflow.start_run():
 ## Configuration
 
 ### Sealed Secrets
-MLflow uses sealed secrets for S3 credentials:
+MLflow uses multiple sealed secrets for secure credential management:
 
 ```yaml
-# Generated by scripts/create-all-sealed-secret.sh
+# S3/MinIO credentials
 apiVersion: bitnami.com/v1alpha1
 kind: SealedSecret
 metadata:
@@ -173,18 +201,47 @@ spec:
   encryptedData:
     AWS_ACCESS_KEY_ID: AgBy3i4OJSWK+PiTySYZZA9rO5QtQFe...
     AWS_SECRET_ACCESS_KEY: AgAKAoiRBcKSadhajwGzA9rQ5QtQeL...
-    MLFLOW_S3_ENDPOINT_URL: AgCT7gVdP3xJ2YHxB4tN8vCf2Q...
+
+# Basic authentication credentials
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: mlflow-basic-auth
+  namespace: mlflow
+spec:
+  encryptedData:
+    MLFLOW_TRACKING_USERNAME: AgCT7gVdP3xJ2YHxB4tN8vCf2Q...
+    MLFLOW_TRACKING_PASSWORD: AgCT7gVdP3xJ2YHxB4tN8vCf2Q...
+    MLFLOW_FLASK_SERVER_SECRET_KEY: AgCT7gVdP3xJ2YHxB4tN8vCf2Q...
+
+# PostgreSQL database credentials
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: mlflow-db-credentials
+  namespace: mlflow
+spec:
+  encryptedData:
+    username: AgCT7gVdP3xJ2YHxB4tN8vCf2Q...
+    password: AgCT7gVdP3xJ2YHxB4tN8vCf2Q...
 ```
 
 ### Environment Variables
 The deployment uses these environment variables:
 - `MLFLOW_S3_ENDPOINT_URL`: MinIO endpoint URL
-- `AWS_ACCESS_KEY_ID`: S3 access key
-- `AWS_SECRET_ACCESS_KEY`: S3 secret key
+- `AWS_ACCESS_KEY_ID`: S3 access key (from sealed secret)
+- `AWS_SECRET_ACCESS_KEY`: S3 secret key (from sealed secret)
+- `MLFLOW_TRACKING_USERNAME`: Basic auth username (from sealed secret)
+- `MLFLOW_TRACKING_PASSWORD`: Basic auth password (from sealed secret)
+- `MLFLOW_DB_USERNAME`: PostgreSQL username (from sealed secret)
+- `MLFLOW_DB_PASSWORD`: PostgreSQL password (from sealed secret)
+- `MLFLOW_FLASK_SERVER_SECRET_KEY`: Flask session encryption key
 
 ### Storage
-- **Database**: SQLite on persistent volume (`/mlflow/mlflow.db`)
+- **Database**: External PostgreSQL at `192.168.1.100:5432/mlflow`
+- **Authentication Database**: PostgreSQL at `192.168.1.100:5432/mlflow_auth`
 - **Artifacts**: S3-compatible storage (MinIO bucket: `mlflow-artifacts`)
+- **Credentials**: Managed via sealed secrets
 
 ## File Structure
 
@@ -238,10 +295,10 @@ kubectl get pods -n kube-system | grep coredns
 kubectl get all -n mlflow
 
 # Test API endpoint
-curl http://192.168.1.85:30800/api/2.0/mlflow/experiments/search
+curl -u username:password http://192.168.1.201:5000/api/2.0/mlflow/experiments/search
 
-# Check storage
-kubectl exec -n mlflow deployment/mlflow -- ls -la /mlflow/
+# Check auth configuration
+kubectl exec -n mlflow deployment/mlflow -- cat /tmp/auth_config_resolved.ini
 ```
 
 ## Integration
@@ -281,9 +338,9 @@ MLflow integrates with the platform monitoring stack:
 
 ### Database Backup
 ```bash
-# Backup SQLite database
-kubectl exec -n mlflow deployment/mlflow -- cp /mlflow/mlflow.db /tmp/backup.db
-kubectl cp mlflow/mlflow-pod:/tmp/backup.db ./mlflow-backup.db
+# Backup PostgreSQL database
+pg_dump -h 192.168.1.100 -U mlflow_user -d mlflow > mlflow-backup.sql
+pg_dump -h 192.168.1.100 -U mlflow_user -d mlflow_auth > mlflow-auth-backup.sql
 ```
 
 ### Artifact Backup
@@ -301,7 +358,7 @@ ansible-playbook site.yml --tags="mlflow,deployment"
 
 ### Scale MLflow
 ```bash
-# Scale replicas (not recommended for SQLite backend)
+# Scale replicas (supported with PostgreSQL backend)
 kubectl scale deployment mlflow -n mlflow --replicas=2
 ```
 

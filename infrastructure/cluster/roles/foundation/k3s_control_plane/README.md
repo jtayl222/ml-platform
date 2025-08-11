@@ -39,6 +39,10 @@ k3s_state: present          # present|absent - default: present
 # K3s configuration (defined in your inventory)
 k3s_version: v1.33.1+k3s1   # K3s version to install
 k3s_channel: stable         # Release channel
+
+# CNI Configuration
+cilium_enabled: true         # Use Cilium CNI (default)
+calico_enabled: false        # Use Calico CNI (legacy fallback)
 ```
 
 ### Auto-Generated Variables
@@ -86,6 +90,10 @@ k3s_token: "{{ node_token.stdout }}"  # Generated during installation
 
 - `k3s` - All K3s related tasks
 - `control_plane` - Control plane specific tasks
+- `cilium` - Cilium CNI deployment
+- `cni` - Container networking interface
+- `networking` - Network configuration
+- `calico` - Calico CNI deployment (legacy)
 - `always` - Debug and status messages
 - `debug` - Detailed debugging information
 
@@ -99,12 +107,19 @@ k3s_token: "{{ node_token.stdout }}"  # Generated during installation
 - **Service Management** - Configures systemd service with auto-start
 - **Health Checks** - Waits for API server to be ready on port 6443
 
-### ✅ Calico CNI Integration
+### ✅ Cilium CNI Integration (Default)
 - **Flannel Replacement** - Automatically disables built-in Flannel CNI
-- **Tigera Operator** - Deploys Calico using the official Tigera operator
-- **Intra-Pod Networking** - Enables proper localhost connectivity for multi-container pods
-- **Advanced NetworkPolicies** - Supports enterprise-grade network security policies
-- **BGP Routing** - Enables efficient Layer 3 networking where possible
+- **eBPF Dataplane** - High-performance networking with eBPF technology
+- **Advanced NetworkPolicies** - Layer 3/4/7 network security policies
+- **Service Mesh Ready** - Native support for Istio and service mesh
+- **Observability** - Built-in network observability and monitoring
+- **Hubble** - Network visibility and troubleshooting
+
+### ✅ Calico CNI Integration (Legacy Fallback)
+- **BGP Routing** - Traditional Layer 3 networking with BGP
+- **Tigera Operator** - Enterprise-grade network policies
+- **Felix Agent** - High-performance dataplane
+- **Configurable** - Set `calico_enabled: true` and `cilium_enabled: false`
 
 ### ✅ Token Management
 - **Extraction** - Retrieves node token from control plane
@@ -133,15 +148,28 @@ k3s_token: "{{ node_token.stdout }}"  # Generated during installation
 # Control Plane Ports
 6443/tcp    # Kubernetes API server
 10250/tcp   # Kubelet API
+
+# Cilium CNI (default)
+4240/tcp    # Cilium health checks
+4244/tcp    # Cilium Hubble relay
+4245/tcp    # Cilium Hubble UI
+8472/udp    # Cilium VXLAN overlay
+51871/udp   # Cilium WireGuard encryption (optional)
+
+# Calico CNI (legacy fallback)
 179/tcp     # Calico BGP routing
 4789/udp    # Calico VXLAN overlay
 5473/tcp    # Calico Typha (if enabled)
-9100/tcp    # Node exporter (monitoring)
+
+# Monitoring
+9100/tcp    # Node exporter
+9962/tcp    # Cilium metrics
+9963/tcp    # Cilium operator metrics
 
 # Service Access
 30000-32767/tcp  # NodePort range
 
-# Internal Networks (Calico)
+# Internal Networks
 10.244.0.0/16    # Pod network CIDR
 10.96.0.0/12     # Service network CIDR
 ```
@@ -159,8 +187,25 @@ k3s_token: "{{ node_token.stdout }}"  # Generated during installation
 
 ### K3s Configuration
 ```yaml
-# Control plane setup
-INSTALL_K3S_EXEC: --datastore-endpoint='sqlite:///var/lib/rancher/k3s/server.db'
+# Control plane setup with CNI disabled (CNI managed separately)
+INSTALL_K3S_EXEC: --flannel-backend=none --disable-network-policy
+```
+
+### CNI Evolution
+The platform has evolved through multiple CNI implementations:
+1. **Flannel** (K3s default) → Basic overlay networking
+2. **Calico** (2024) → Added network policies and BGP routing  
+3. **Cilium** (Current) → eBPF-based high performance with observability
+
+**Current Configuration:**
+```yaml
+# Default: Cilium CNI with eBPF dataplane
+cilium_enabled: true
+calico_enabled: false
+
+# Legacy: Calico CNI with traditional networking
+cilium_enabled: false  
+calico_enabled: true
 ```
 
 ### File Locations
@@ -183,9 +228,11 @@ INSTALL_K3S_EXEC: --datastore-endpoint='sqlite:///var/lib/rancher/k3s/server.db'
 ### Network Ports
 - **6443** - Kubernetes API server
 - **10250** - Kubelet API (internal)
-- **179** - Calico BGP routing protocol
-- **4789** - Calico VXLAN overlay networking
-- **5473** - Calico Typha scaling component
+- **4240** - Cilium health checks (default CNI)
+- **4244** - Cilium Hubble relay (observability)
+- **8472** - Cilium VXLAN overlay networking
+- **179** - Calico BGP routing (legacy fallback)
+- **4789** - Calico VXLAN overlay (legacy fallback)
 
 ## Integration with Homelab
 
@@ -208,8 +255,14 @@ control_plane_ip: "{{ hostvars[groups['k3s_control_plane'][0]]['ansible_host'] }
 ## Command Line Usage
 
 ```bash
-# Deploy control plane
+# Deploy control plane with Cilium CNI (default)
 ansible-playbook site.yml --tags="k3s,control_plane"
+
+# Deploy with Calico CNI (legacy)
+ansible-playbook site.yml --tags="k3s,control_plane" -e "cilium_enabled=false" -e "calico_enabled=true"
+
+# Deploy only CNI components
+ansible-playbook site.yml --tags="cni,networking"
 
 # Debug deployment
 ansible-playbook site.yml --tags="k3s" -v
@@ -252,10 +305,39 @@ sudo ufw status
 sudo cat /var/lib/rancher/k3s/server/node-token
 ```
 
+**CNI Issues:**
+```bash
+# Check Cilium status (default CNI)
+kubectl get pods -n kube-system | grep cilium
+kubectl exec -n kube-system cilium-xxx -- cilium status
+
+# Check Calico status (legacy CNI)
+kubectl get pods -n calico-system
+kubectl exec -n calico-system calico-node-xxx -- calicoctl node status
+
+# Network connectivity debugging
+kubectl get nodes -o wide
+kubectl get pods --all-namespaces -o wide
+```
+
+**Pod networking failures:**
+```bash
+# Test pod-to-pod connectivity
+kubectl run test-pod --image=busybox --rm -it -- /bin/sh
+# Inside pod: ping <other-pod-ip>
+
+# Check CNI configuration
+ls -la /opt/cni/bin/
+cat /etc/cni/net.d/*
+```
+
 ### Debug Mode
 ```bash
 # Run with maximum verbosity
 ansible-playbook site.yml --tags="k3s,debug" -vvv
+
+# Debug CNI deployment specifically
+ansible-playbook site.yml --tags="cni,networking" -vvv
 ```
 
 ## Dependencies

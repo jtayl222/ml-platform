@@ -1,184 +1,164 @@
-# ArgoCD Platform Role
+# Argo CD Role
 
-**GitOps continuous deployment platform for Kubernetes applications**
+Ansible role for deploying Argo CD GitOps platform on K3s clusters with minimal configuration.
 
-## 🎯 **Overview**
+## Overview
 
-This Ansible role deploys ArgoCD on your K3s cluster, providing enterprise-grade GitOps capabilities for continuous deployment. ArgoCD enables declarative configuration management, automated synchronization, and complete visibility into your application deployments.
+Argo CD provides **GitOps continuous deployment** for Kubernetes applications. This role:
+- **Deploys Argo CD** - Minimal installation via Helm
+- **NodePort Access** - External access via port 30080
+- **LoadBalancer Support** - Optional MetalLB integration
+- **Basic Configuration** - Simple deployment without complex authentication
 
-## 🏗️ **What This Role Deploys**
+## Architecture
 
-### **Core ArgoCD Components**
-- **ArgoCD Server** - Web UI and API server
-- **ArgoCD Repository Server** - Git repository management
-- **ArgoCD Application Controller** - Application lifecycle management
-- **ArgoCD DEX Server** - Authentication and SSO integration
-- **ArgoCD Redis** - Caching and session storage
+```
+📱 Argo CD Minimal Deployment
+├── 🎛️ Argo CD Server
+│   ├── Web UI on port 8080
+│   ├── REST API for CLI access
+│   ├── Git repository synchronization
+│   └── Application lifecycle management
+├── 🗄️ Argo CD Repository Server
+│   ├── Git repository cloning
+│   ├── Manifest generation
+│   └── Helm chart processing
+├── 🎯 Argo CD Application Controller
+│   ├── Application monitoring
+│   ├── Sync status tracking
+│   └── Resource deployment
+├── 🔐 Argo CD DEX Server
+│   └── Basic authentication
+└── 💾 Argo CD Redis
+    └── Caching and sessions
+```
 
-### **Access & Networking**
-- **NodePort Service** (port 30080) for web UI access
-- **HTTPS/TLS** enabled by default
-- **Admin user** with auto-generated password
-- **RBAC** configured for secure access
+## Features
 
-## 📋 **Prerequisites**
+- ✅ **GitOps Deployment** - Declarative application management
+- ✅ **Web UI** - Graphical interface for managing applications
+- ✅ **CLI Access** - Command-line interface for automation
+- ✅ **NodePort Service** - External access without ingress
+- ✅ **LoadBalancer Support** - MetalLB integration for stable IPs
+- ✅ **Helm Integration** - Deploy and manage Helm charts
+- ✅ **Multi-Source Apps** - Support for multiple Git repositories
 
-- ✅ **K3s cluster** running and accessible
-- ✅ **kubectl** configured with cluster access
-- ✅ **Helm 3.x** installed
-- ✅ **Storage class** available for persistent volumes
-- ✅ **Network access** to Helm repositories
+## Requirements
 
-## ⚙️ **Configuration Variables**
+### Dependencies
+- K3s cluster with Helm support
+- `kubeconfig_path` variable pointing to valid kubeconfig
+- Internet connectivity for downloading Helm charts
+- Ansible collections:
+  - `kubernetes.core`
 
-### **Required Variables (set in group_vars/all.yml)**
+### Minimum Versions
+- **Kubernetes**: 1.19+
+- **Argo CD**: 2.0+
+- **Helm**: 3.0+
+
+## Role Variables
+
+### Required Variables
 ```yaml
-# ArgoCD Configuration
-argocd_namespace: "argocd"                    # Kubernetes namespace
-argocd_nodeport: 30080                        # External access port
-argocd_admin_password: "your-secure-password" # Initial admin password
+kubeconfig_path: /path/to/kubeconfig  # Path to cluster kubeconfig
 ```
 
-### **Optional Variables (with defaults)**
+### Default Variables
 ```yaml
-# Helm Configuration
-argocd_chart_repo: "https://argoproj.github.io/argo-helm"
-argocd_chart_name: "argo-cd"
-argocd_chart_version: "latest"
-
-# Resource Allocation
-argocd_server_memory_request: "256Mi"
-argocd_server_memory_limit: "512Mi"
-argocd_server_cpu_request: "250m"
-argocd_server_cpu_limit: "500m"
-
-# Storage
-argocd_storage_size: "10Gi"
-argocd_storage_class: "nfs-shared"
-
-# Security
-argocd_enable_insecure: false                 # Use HTTPS by default
-argocd_enable_anonymous_access: false         # Require authentication
+# Deployment Configuration
+argocd_namespace: argocd              # Kubernetes namespace
+argocd_name: argocd                   # Helm release name
+argocd_chart_ref: argo/argo-cd        # Helm chart reference
+argocd_nodeport: 30080                # NodePort for external access
+helm_wait_timeout: 600s              # Helm deployment timeout
 ```
 
-### **Advanced Configuration**
+### MetalLB Configuration
 ```yaml
-# High-Availability Setup
-argocd_ha_enabled: false                      # Enable HA mode
-argocd_redis_ha_enabled: false               # Enable Redis HA
-
-# Authentication
-argocd_dex_enabled: true                      # Enable DEX for SSO
-argocd_oidc_config: {}                        # OIDC configuration
-
-# Git Repository Access
-argocd_private_repos: []                      # Private repository credentials
-argocd_ssh_known_hosts: []                    # SSH known hosts
-
-# Notifications
-argocd_notifications_enabled: false          # Enable notifications
-argocd_slack_webhook: ""                      # Slack webhook URL
+# LoadBalancer IP (when MetalLB is enabled)
+metallb_state: present               # Enable LoadBalancer services
+# Fixed IP: 192.168.1.204 (configured in role)
 ```
 
-## 🚀 **Deployment**
+## Deployment
 
-### **Basic Deployment**
+### 1. Basic Deployment
 ```bash
-# Deploy ArgoCD with default configuration
-ansible-playbook -i inventory/production/hosts.yml infrastructure/cluster/site.yml --tags argocd
-
-# Deploy only ArgoCD (skip other components)
-ansible-playbook -i inventory/production/hosts.yml infrastructure/cluster/site.yml --tags platform --limit argocd
+# Deploy Argo CD with default configuration
+ansible-playbook -i inventory/production/hosts infrastructure/cluster/site.yml --tags="argocd"
 ```
 
-### **Custom Configuration Deployment**
+### 2. Platform Deployment
 ```bash
-# Deploy with custom values
-ansible-playbook -i inventory/production/hosts.yml infrastructure/cluster/site.yml \
-  --tags argocd \
-  --extra-vars "argocd_admin_password=my-secure-password argocd_nodeport=31080"
+# Deploy as part of platform stack
+ansible-playbook site.yml --tags="platform"
 ```
 
-### **High-Availability Deployment**
+### 3. Custom Port
 ```bash
-# Enable HA mode for production
-ansible-playbook -i inventory/production/hosts.yml infrastructure/cluster/site.yml \
-  --tags argocd \
-  --extra-vars "argocd_ha_enabled=true argocd_redis_ha_enabled=true"
+# Deploy with custom NodePort
+ansible-playbook site.yml --tags="argocd" -e "argocd_nodeport=31080"
 ```
 
-## 🔐 **Access & Authentication**
-
-### **Web UI Access**
+### 4. With MetalLB
 ```bash
-# Access ArgoCD Web UI
-URL: https://your-cluster-ip:30080
-Username: admin
-Password: [see password retrieval below]
+# Deploy with LoadBalancer service
+ansible-playbook site.yml --tags="argocd" -e "metallb_state=present"
 ```
 
-### **Password Retrieval**
-```bash
-# Get the auto-generated admin password
-kubectl -n argocd get secret argocd-initial-admin-secret \
-  -o jsonpath="{.data.password}" | base64 -d && echo
+## Available Tags
 
-# Reset password to custom value
-kubectl -n argocd patch secret argocd-secret \
-  -p '{"stringData": {"admin.password": "$2a$10$rRyBsGSHK6.uc8fntPwVIuLVHgsAhAX7TcdrqW/RADU0ufHuBa3G2"}}'
-# This sets password to: admin123
+- `argocd` - All Argo CD related tasks
+- `platform` - Platform component deployment
+- `helm-repos` - Helm repository management
+- `loadbalancer` - LoadBalancer service creation
+- `summary` - Deployment status display
+
+## Access
+
+### Web UI Access
+```bash
+# NodePort Access (default)
+URL: http://192.168.1.85:30080
+
+# LoadBalancer Access (with MetalLB)
+URL: http://192.168.1.204
+
+# Get admin password
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
 ```
 
-### **CLI Access**
+### CLI Access
 ```bash
-# Install ArgoCD CLI
+# Install Argo CD CLI
 curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
 sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
 
 # Login via CLI
-argocd login your-cluster-ip:30080 --username admin --password $(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d)
+argocd login 192.168.1.85:30080
+
+# Alternative: LoadBalancer
+argocd login 192.168.1.204
 ```
 
-## 📊 **Verification & Health Checks**
+## Basic Usage
 
-### **Deployment Verification**
+### Create Application
 ```bash
-# Check ArgoCD pod status
-kubectl get pods -n argocd
+# Via CLI
+argocd app create guestbook \
+  --repo https://github.com/argoproj/argocd-example-apps.git \
+  --path guestbook \
+  --dest-server https://kubernetes.default.svc \
+  --dest-namespace default
 
-# Expected output:
-# NAME                                  READY   STATUS    RESTARTS   AGE
-# argocd-application-controller-xxx     1/1     Running   0          5m
-# argocd-dex-server-xxx                 1/1     Running   0          5m
-# argocd-redis-xxx                      1/1     Running   0          5m
-# argocd-repo-server-xxx                1/1     Running   0          5m
-# argocd-server-xxx                     1/1     Running   0          5m
-
-# Check service status
-kubectl get svc -n argocd
-
-# Check ingress/nodeport access
-curl -k https://your-cluster-ip:30080/api/version
+# Sync application
+argocd app sync guestbook
 ```
 
-### **Health Status**
-```bash
-# Check ArgoCD health via CLI
-argocd cluster list
-argocd app list
-
-# Check application controller logs
-kubectl logs -n argocd deployment/argocd-application-controller
-
-# Check server logs
-kubectl logs -n argocd deployment/argocd-server
-```
-
-## 🎮 **Usage Examples**
-
-### **Deploy Your First Application**
+### Application YAML
 ```yaml
-# Create application via YAML
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -199,293 +179,235 @@ spec:
       selfHeal: true
 ```
 
-```bash
-# Apply the application
-kubectl apply -f application.yaml
+## Network Configuration
 
-# Or create via CLI
-argocd app create guestbook \
-  --repo https://github.com/argoproj/argocd-example-apps.git \
-  --path guestbook \
-  --dest-server https://kubernetes.default.svc \
-  --dest-namespace default \
-  --sync-policy automated
+### Service Ports
+```bash
+# Argo CD Services
+8080/tcp     # Argo CD server (internal)
+30080/tcp    # NodePort external access
+80/tcp       # LoadBalancer HTTP (MetalLB)
+443/tcp      # LoadBalancer HTTPS (MetalLB)
+
+# Internal Services
+8081/tcp     # Argo CD metrics
+8082/tcp     # Argo CD application controller metrics
+8083/tcp     # Argo CD repository server metrics
 ```
 
-### **Managing Applications**
+### Firewall Configuration
 ```bash
-# List applications
-argocd app list
+# Allow NodePort access
+sudo ufw allow 30080/tcp comment 'Argo CD NodePort'
 
-# Get application details
-argocd app get guestbook
-
-# Sync application manually
-argocd app sync guestbook
-
-# Delete application
-argocd app delete guestbook
+# For LoadBalancer (MetalLB handles external access)
+# No additional firewall rules needed
 ```
 
-### **Repository Management**
-```bash
-# Add private repository
-argocd repo add https://github.com/your-org/private-repo.git \
-  --username your-username \
-  --password your-token
+## Integration
 
-# Add SSH repository
-argocd repo add git@github.com:your-org/private-repo.git \
-  --ssh-private-key-path ~/.ssh/id_rsa
-```
-
-## 🔧 **Integration with MLOps Platform**
-
-### **MLflow Integration**
+### MLOps Platform
 ```yaml
-# Deploy MLflow via ArgoCD
+# Argo CD manages ML applications
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: mlflow
   namespace: argocd
 spec:
-  project: default
   source:
-    repoURL: https://github.com/your-org/mlops-manifests.git
-    targetRevision: HEAD
-    path: mlflow
+    repoURL: https://github.com/your-org/ml-platform.git
+    path: applications/mlflow
+    targetRevision: main
   destination:
     server: https://kubernetes.default.svc
     namespace: mlflow
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
 ```
 
-### **Seldon Core Integration**
+### Seldon Core Integration
 ```yaml
-# Deploy Seldon models via ArgoCD
+# Deploy ML models via GitOps
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: model-serving
+  name: fraud-detection-model
   namespace: argocd
 spec:
-  project: default
   source:
-    repoURL: https://github.com/your-org/model-manifests.git
-    targetRevision: HEAD
-    path: production/models
+    repoURL: https://github.com/your-org/ml-models.git
+    path: fraud-detection
+    targetRevision: main
   destination:
     server: https://kubernetes.default.svc
-    namespace: seldon-system
+    namespace: fraud-detection
 ```
 
-## 🔒 **Security Considerations**
-
-### **Production Security Setup**
-```bash
-# 1. Change default admin password
-kubectl -n argocd patch secret argocd-secret \
-  -p '{"stringData": {"admin.password": "your-bcrypt-hashed-password"}}'
-
-# 2. Enable RBAC and create specific users
-kubectl apply -f rbac-config.yaml
-
-# 3. Configure TLS certificates
-kubectl create secret tls argocd-server-tls \
-  --cert=server.crt \
-  --key=server.key \
-  -n argocd
-
-# 4. Enable network policies
-kubectl apply -f network-policies.yaml
+### Harbor Registry Integration
+```yaml
+# Use Harbor for private repositories
+apiVersion: v1
+kind: Secret
+metadata:
+  name: harbor-repo-secret
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+type: Opaque
+stringData:
+  type: git
+  url: https://harbor.local/project/repo.git
+  username: robot$argocd
+  password: token-from-harbor
 ```
 
-### **Repository Access Security**
+## Troubleshooting
+
+### Common Issues
+
+#### 1. Argo CD Server Not Accessible
 ```bash
-# Use SSH keys for private repositories
-kubectl create secret generic private-repo-ssh \
-  --from-file=ssh-privatekey=~/.ssh/id_rsa \
-  -n argocd
+# Check service status
+kubectl get svc -n argocd
 
-# Use tokens for HTTPS repositories
-kubectl create secret generic private-repo-https \
-  --from-literal=username=your-username \
-  --from-literal=password=your-token \
-  -n argocd
-```
-
-## 🐛 **Troubleshooting**
-
-### **Common Issues**
-
-#### **ArgoCD Server Not Starting**
-```bash
-# Check pod logs
+# Check pod status
+kubectl get pods -n argocd
 kubectl logs -n argocd deployment/argocd-server
 
-# Common causes:
-# 1. Insufficient resources
-# 2. Storage issues
-# 3. Network policies blocking traffic
-
-# Solutions:
-kubectl describe pod -n argocd argocd-server-xxx
-kubectl get events -n argocd --sort-by='.lastTimestamp'
+# Test NodePort connectivity
+curl -k http://192.168.1.85:30080
 ```
 
-#### **Application Sync Failures**
+#### 2. LoadBalancer Not Working
+```bash
+# Check MetalLB status
+kubectl get pods -n metallb-system
+
+# Verify LoadBalancer service
+kubectl get svc -n argocd argocd-server
+kubectl describe svc -n argocd argocd-server
+
+# Check IP assignment
+ping 192.168.1.204
+```
+
+#### 3. Application Sync Issues
 ```bash
 # Check application status
-argocd app get your-app-name
+argocd app get <app-name>
+argocd app logs <app-name>
 
 # Check repository access
-argocd repo list
+kubectl logs -n argocd deployment/argocd-repo-server
 
-# Common solutions:
-# 1. Verify repository credentials
-# 2. Check network connectivity
-# 3. Validate YAML syntax in repository
+# Verify Git repository connectivity
+kubectl exec -n argocd deployment/argocd-repo-server -- git ls-remote <repo-url>
 ```
 
-#### **Authentication Issues**
+#### 4. Authentication Problems
 ```bash
+# Get admin password
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+
 # Reset admin password
-kubectl -n argocd delete secret argocd-initial-admin-secret
-kubectl -n argocd rollout restart deployment argocd-server
+argocd account update-password --account admin --current-password <current> --new-password <new>
 
-# Check DEX server logs
-kubectl logs -n argocd deployment/argocd-dex-server
+# Check user accounts
+argocd account list
 ```
 
-### **Performance Tuning**
+### Health Checks
 ```bash
-# Monitor resource usage
-kubectl top pods -n argocd
+# Check all Argo CD components
+kubectl get all -n argocd
 
-# Scale components for high load
-kubectl scale deployment argocd-repo-server --replicas=3 -n argocd
-kubectl scale deployment argocd-application-controller --replicas=2 -n argocd
+# Verify server health
+curl -k http://192.168.1.85:30080/healthz
+
+# Check application status
+argocd app list
+argocd app get <app-name>
+
+# Monitor sync status
+argocd app wait <app-name> --health
 ```
 
-## 📈 **Monitoring & Observability**
+## File Structure
 
-### **Metrics & Monitoring**
 ```bash
-# ArgoCD exposes Prometheus metrics on:
-# - argocd-application-controller: :8082/metrics
-# - argocd-repo-server: :8084/metrics  
-# - argocd-server: :8083/metrics
-
-# Add ServiceMonitor for Prometheus
-kubectl apply -f monitoring/service-monitor.yaml
+infrastructure/cluster/roles/platform/argo_cd/
+├── defaults/
+│   └── main.yml                    # Default variables
+├── tasks/
+│   └── main.yml                    # Main deployment tasks
+└── README.md                       # This file
 ```
 
-### **Health Checks**
+## Security Considerations
+
+### ✅ Security Features
+- **RBAC** - Role-based access control enabled by default
+- **TLS** - HTTPS encryption for web UI
+- **Service Account** - Dedicated service accounts for components
+- **Network Policies** - Optional network isolation
+
+### ⚠️ Security Considerations
+- **Default Admin** - Change default admin password
+- **Repository Access** - Secure Git repository credentials
+- **Cluster Permissions** - Argo CD has cluster-admin by default
+- **External Access** - NodePort exposes service externally
+
+### 🔐 Best Practices
 ```bash
-# Application health endpoint
-curl -k https://your-cluster-ip:30080/api/v1/applications/your-app/health
+# Change admin password
+argocd account update-password
 
-# Cluster connectivity
-argocd cluster list
+# Create application-specific projects
+argocd proj create myproject
 
-# Repository connectivity  
-argocd repo list
+# Use least-privilege RBAC
+argocd account create readonly
+argocd account add-policy readonly --policy-file readonly-policy.csv
 ```
 
-## 🎓 **Best Practices**
+## Updates and Maintenance
 
-### **Application Organization**
-1. **Use Projects** - Organize applications by team/environment
-2. **Implement App-of-Apps** - Manage multiple applications declaratively
-3. **Use Helm/Kustomize** - Leverage templating for configuration management
-4. **Sync Policies** - Use automated sync for non-production, manual for production
-
-### **GitOps Workflow**
-1. **Branch Strategy** - Use branches for environment promotion
-2. **Pull Requests** - Require reviews for production changes
-3. **Rollback Strategy** - Maintain previous versions for quick rollback
-4. **Secrets Management** - Use sealed secrets or external secret operators
-
-### **Security Best Practices**
-1. **Least Privilege** - Grant minimal required permissions
-2. **Network Segmentation** - Use network policies to restrict traffic
-3. **Audit Logging** - Enable audit logs for compliance
-4. **Regular Updates** - Keep ArgoCD updated to latest secure version
-
-## 🔄 **Maintenance**
-
-### **Updates & Upgrades**
+### Update Argo CD
 ```bash
-# Update ArgoCD to latest version
-helm repo update
-ansible-playbook -i inventory/production/hosts.yml infrastructure/cluster/site.yml --tags argocd
+# Update Helm chart
+ansible-playbook site.yml --tags="argocd"
 
-# Backup ArgoCD configuration
-kubectl get applications -n argocd -o yaml > argocd-apps-backup.yaml
-kubectl get secrets -n argocd -o yaml > argocd-secrets-backup.yaml
+# Check version
+argocd version
 ```
 
-### **Backup & Recovery**
+### Backup Configuration
 ```bash
 # Export applications
 argocd app list -o yaml > applications-backup.yaml
 
-# Export repositories
-argocd repo list -o yaml > repositories-backup.yaml
+# Export projects
+argocd proj list -o yaml > projects-backup.yaml
 
-# Restore from backup
-kubectl apply -f applications-backup.yaml
+# Backup secrets
+kubectl get secrets -n argocd -o yaml > argocd-secrets-backup.yaml
 ```
 
-## 🔗 **Integration Examples**
-
-### **CI/CD Pipeline Integration**
-```yaml
-# GitHub Actions example
-name: Deploy to ArgoCD
-on:
-  push:
-    branches: [main]
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Update manifest
-        run: |
-          # Update image tag in manifest repository
-          # ArgoCD will automatically sync the changes
-```
-
-### **Webhook Configuration**
+### Restore Configuration
 ```bash
-# Configure webhook for automated sync
-curl -X POST https://your-cluster-ip:30080/api/webhook \
-  -H "Content-Type: application/json" \
-  -d '{"repository": {"url": "https://github.com/your-org/your-repo.git"}}'
+# Restore applications
+kubectl apply -f applications-backup.yaml
+
+# Restore projects
+kubectl apply -f projects-backup.yaml
 ```
+
+## Links
+
+- [Argo CD Documentation](https://argo-cd.readthedocs.io/)
+- [Argo CD Helm Chart](https://github.com/argoproj/argo-helm/tree/main/charts/argo-cd)
+- [GitOps Principles](https://www.gitops.tech/)
+- [Argo CD CLI Reference](https://argo-cd.readthedocs.io/en/stable/cli_installation/)
 
 ---
 
-## 📚 **Additional Resources**
-
-- **ArgoCD Documentation**: https://argo-cd.readthedocs.io/
-- **Helm Chart**: https://github.com/argoproj/argo-helm
-- **Best Practices**: https://argo-cd.readthedocs.io/en/stable/user-guide/best_practices/
-- **Security**: https://argo-cd.readthedocs.io/en/stable/operator-manual/security/
-
-## 🏆 **Platform Value**
-
-**This ArgoCD deployment provides:**
-- ✅ **Enterprise GitOps** capabilities
-- ✅ **Automated deployment** pipelines  
-- ✅ **Configuration drift** detection and remediation
-- ✅ **Multi-environment** management
-- ✅ **Audit trail** for all deployments
-- ✅ **Rollback capabilities** for quick recovery
-- ✅ **Integration** with existing MLOps tools
-
-**Perfect for demonstrating modern DevOps practices and GitOps methodologies in your homelab MLOps platform!** 🚀
+**Part of the K3s Homelab MLOps Platform** | [Main Documentation](../../README.md)

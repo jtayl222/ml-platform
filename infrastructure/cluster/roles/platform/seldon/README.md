@@ -1,36 +1,66 @@
-# Seldon Core Platform Role
+# Seldon Core v2 Model Serving Role
 
-Deploy Seldon Core v2 for ML model serving with custom image support.
+Deploy Seldon Core v2.9.1 for production ML model serving using the **Standard Scoped Operator** pattern.
 
 ## Features
 
-- **Model Serving**: Deploy ML models as microservices
-- **Multi-framework Support**: Scikit-Learn, MLflow, TensorFlow, PyTorch
-- **Auto-scaling**: Kubernetes-native scaling (when KEDA enabled)
-- **A/B Testing**: Advanced deployment strategies
-- **Monitoring**: Prometheus metrics integration
-- **Network Security**: Automatic network policies for ML namespaces
+- **Standard Scoped Operator**: Officially supported multi-tenant pattern
+- **Multi-framework Support**: MLServer, Triton, Custom containers
+- **A/B Testing**: Built-in experimentation framework
+- **Auto-scaling**: Kubernetes HPA integration
+- **Istio Integration**: Service mesh for advanced traffic management
+- **Network Security**: Automatic network policies for multi-tenancy
 
-## Overview
+## Architecture: Standard Scoped Operator Pattern
 
-This role deploys Seldon Core v2 with support for:
-- Production model serving with Istio integration
-- Custom agent images for testing unreleased features
-- MetalLB LoadBalancer integration
-- PR testing capabilities (e.g., PR #6582)
+```
+seldon-system namespace:
+├── seldon-controller-manager (watches specific namespaces)
+├── ServerConfig resources (centralized)
+└── Core CRDs and operators
 
-## Variables
+fraud-detection namespace:
+├── seldon-scheduler
+├── seldon-envoy (mesh proxy)
+├── seldon-modelgateway
+├── Server resources (reference ServerConfigs in seldon-system)
+├── Model resources
+└── Experiment resources
+```
 
-### Required Variables
-- `seldon_namespace`: Kubernetes namespace (default: "seldon-system")  
-- `seldon_operator_image_tag`: Seldon Core version (default: "2.9.0")
+**Key Characteristics**:
+- Controller in `seldon-system` with `clusterwide=true` and `watchNamespaces`
+- Runtime components deployed to each watched namespace
+- ServerConfigs centralized in `seldon-system` for consistency
 
-### Optional Variables
-- `seldon_usage_metrics`: Enable usage metrics (default: true)
-- `seldon_istio_enabled`: Enable Istio integration (default: true)
-- `seldon_enable_loadbalancer`: Enable MetalLB LoadBalancer service (default: true)
-- `seldon_enable_network_policies`: Apply network policies to ML namespaces (default: true)
-- `seldon_ml_namespaces`: List of ML namespaces to secure (default: ["financial-ml"])
+## Configuration
+
+### Key Variables
+
+```yaml
+# Core configuration
+seldon_namespace: "seldon-system"
+seldon_operator_image_tag: "2.9.1"
+
+# Standard Scoped Operator - Watched namespaces
+seldon_watch_namespaces:
+  - fraud-detection
+  - financial-inference
+  - financial-mlops-pytorch
+
+# Resource limits
+seldon_manager_cpu_request: "100m"
+seldon_manager_memory_request: "128Mi"
+
+# Features
+seldon_usage_metrics: true
+seldon_istio_enabled: true
+seldon_enable_network_policies: true
+```
+
+### Network Policy Variables
+- `seldon_ml_namespaces`: Namespaces that get platform-managed network policies
+- `seldon_watch_namespaces`: Namespaces the controller watches for resources
 
 ### Custom Image Variables
 
