@@ -1,0 +1,90 @@
+---
+# MLOps Platform Smoke Tests
+# Industry best practice: Automated validation after deployment
+
+- name: MLOps Platform Verification
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  tasks:
+    - name: Run Platform Verification Tests
+      include_role:
+        name: tests
+      tags: [test, verification]
+
+    - name: Additional Integration Tests
+      block:
+        # Test Harbor registry
+        - name: Test Harbor registry health
+          uri:
+            url: "http://192.168.1.210/api/v2.0/health"
+            method: GET
+            status_code: 200
+            timeout: 10
+          ignore_errors: true
+          register: harbor_health
+
+        # Test Grafana dashboards
+        - name: Test Grafana API
+          uri:
+            url: "http://192.168.1.207:3000/api/health"
+            method: GET
+            timeout: 10
+          ignore_errors: true
+          register: grafana_health
+
+        # Test Kiali service mesh observability
+        - name: Test Kiali API
+          uri:
+            url: "http://192.168.1.211:20001/kiali/api/status"
+            method: GET
+            timeout: 10
+          ignore_errors: true
+          register: kiali_health
+
+        - name: Display integration test results
+          debug:
+            msg:
+              - "🔗 Integration Test Results:"
+              - "- Harbor: {{ 'HEALTHY' if not harbor_health.failed else 'UNHEALTHY' }}"
+              - "- Grafana: {{ 'HEALTHY' if not grafana_health.failed else 'UNHEALTHY' }}"
+              - "- Kiali: {{ 'HEALTHY' if not kiali_health.failed else 'UNHEALTHY' }}"
+
+      tags: [test, integration]
+
+    - name: Performance Baseline Tests
+      block:
+        - name: Get cluster resource usage
+          kubernetes.core.k8s_info:
+            api_version: v1
+            kind: Node
+            kubeconfig: "{{ kubeconfig_path }}"
+          register: node_metrics
+
+        - name: Check system resource usage
+          shell: |
+            kubectl top nodes --no-headers | awk '
+            BEGIN { cpu_total=0; mem_total=0; count=0 }
+            { 
+              cpu_total += $3; 
+              mem_total += $5; 
+              count++ 
+            }
+            END { 
+              print "Average CPU: " (cpu_total/count) "%"
+              print "Average Memory: " (mem_total/count) "%"
+            }'
+          register: resource_usage
+          ignore_errors: true
+
+        - name: Display performance baseline
+          debug:
+            msg:
+              - "📊 Performance Baseline:"
+              - "- Cluster Nodes: {{ node_metrics.resources | length }}"
+              - "- Resource Usage: {{ resource_usage.stdout_lines if not resource_usage.failed else 'Metrics not available' }}"
+
+      tags: [test, performance]
+
+  vars:
+    kubeconfig_path: "/tmp/k3s-kubeconfig.yaml"
