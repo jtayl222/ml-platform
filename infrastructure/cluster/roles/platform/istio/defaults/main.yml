@@ -1,0 +1,75 @@
+---
+# Istio Configuration Defaults
+
+# Platform detection
+platform_type: "{{ kubernetes_platform | default('k3s') }}"
+
+# Istio version and download settings
+istio_version: "1.24.2"
+istio_download_url: "https://github.com/istio/istio/releases/download/{{ istio_version }}/istio-{{ istio_version }}-linux-amd64.tar.gz"
+istio_install_dir: "/opt/istio"
+istioctl_binary: "{{ istio_install_dir }}/bin/istioctl"
+
+# Istio profiles per platform
+istio_profiles:
+  k3s: "default"
+  kubeadm: "default" 
+  eks: "ambient"
+
+istio_profile: "{{ istio_profiles[platform_type] | default('default') }}"
+
+# Namespace configuration
+istio_namespace: "istio-system"
+istio_gateway_namespace: "istio-gateway"
+
+# Kiali configuration
+kiali_enabled: true
+kiali_namespace: "{{ istio_namespace }}"
+kiali_version: "v1.89"
+
+# Service type configuration based on MetalLB availability
+istio_gateway_service_type: "{{ 'LoadBalancer' if (metallb_state | default('absent')) == 'present' else 'NodePort' }}"
+
+# NodePort configuration (when MetalLB is not available)
+istio_gateway_http_nodeport: 31080
+istio_gateway_https_nodeport: 31443
+
+# LoadBalancer configuration (when MetalLB is available)
+istio_gateway_loadbalancer_ip: "192.168.1.203"
+
+# Resource limits
+istio_pilot_memory_request: "512Mi"
+istio_pilot_cpu_request: "250m"
+istio_pilot_memory_limit: "1Gi"
+istio_pilot_cpu_limit: "500m"
+
+istio_gateway_memory_request: "256Mi"
+istio_gateway_cpu_request: "100m"
+istio_gateway_memory_limit: "512Mi"
+istio_gateway_cpu_limit: "200m"
+
+# Kiali resource limits
+kiali_memory_request: "256Mi"
+kiali_cpu_request: "50m"
+kiali_memory_limit: "512Mi"
+kiali_cpu_limit: "200m"
+
+# Istio operator configuration
+istio_operator_enabled: true
+istio_enable_telemetry: true
+istio_enable_tracing: false
+
+# Platform-specific configurations
+platform_configs:
+  k3s:
+    cni_enabled: false
+    ambient_enabled: false
+  kubeadm:
+    cni_enabled: true
+    ambient_enabled: false
+  eks:
+    cni_enabled: true
+    ambient_enabled: true
+
+# Helm wait timeout
+helm_wait_timeout: 600

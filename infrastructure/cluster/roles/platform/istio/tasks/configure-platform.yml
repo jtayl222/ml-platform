@@ -1,0 +1,133 @@
+---
+- name: Apply platform-specific Istio configurations
+  block:
+    - name: Configure Istio for k3s
+      when: platform_type == 'k3s'
+      block:
+        - name: Patch Istio for k3s Traefik compatibility
+          kubernetes.core.k8s:
+            state: present
+            api_version: v1
+            kind: ConfigMap
+            name: istio
+            namespace: "{{ istio_namespace }}"
+            kubeconfig: "{{ kubeconfig_path }}"
+            definition:
+              data:
+                mesh: |
+                  defaultConfig:
+                    proxyStatsMatcher:
+                      inclusionRegexps:
+                      - ".*outlier_detection.*"
+                      - ".*circuit_breakers.*"
+                      - ".*upstream_rq_retry.*"
+                      - ".*upstream_rq_pending.*"
+                      - ".*upstream_rq_timeout.*"
+                      - ".*downstream_rq_timeout.*"
+                    holdApplicationUntilProxyStarts: true
+                  defaultProviders:
+                    metrics:
+                    - prometheus
+                  extensionProviders:
+                  - name: prometheus
+                    prometheus:
+                      service: prometheus-server.monitoring.svc.cluster.local
+                      port: 9090
+
+    - name: Configure Istio for kubeadm clusters
+      when: platform_type == 'kubeadm'
+      block:
+        - name: Enable Istio CNI for kubeadm
+          kubernetes.core.k8s:
+            state: present
+            definition:
+              apiVersion: install.istio.io/v1alpha1
+              kind: IstioOperator
+              metadata:
+                name: istio-control-plane
+                namespace: "{{ istio_namespace }}"
+              spec:
+                components:
+                  cni:
+                    enabled: true
+                values:
+                  cni:
+                    cniBinDir: /opt/cni/bin
+                    cniConfDir: /etc/cni/net.d
+            kubeconfig: "{{ kubeconfig_path }}"
+
+    - name: Configure Istio for EKS
+      when: platform_type == 'eks'
+      block:
+        - name: Configure Istio for EKS networking
+          kubernetes.core.k8s:
+            state: present
+            api_version: v1
+            kind: ConfigMap
+            name: istio
+            namespace: "{{ istio_namespace }}"
+            kubeconfig: "{{ kubeconfig_path }}"
+            definition:
+              data:
+                mesh: |
+                  defaultConfig:
+                    proxyStatsMatcher:
+                      inclusionRegexps:
+                      - ".*outlier_detection.*"
+                      - ".*circuit_breakers.*"
+                    gatewayTopology:
+                      numTrustedProxies: 2
+                  trustDomain: cluster.local
+                  defaultProviders:
+                    metrics:
+                    - prometheus
+                  extensionProviders:
+                  - name: prometheus
+                    prometheus:
+                      service: prometheus-server.monitoring.svc.cluster.local
+                      port: 9090
+
+        - name: Configure AWS-specific annotations
+          kubernetes.core.k8s:
+            state: present
+            api_version: v1
+            kind: Service
+            name: istio-gateway
+            namespace: "{{ istio_gateway_namespace }}"
+            kubeconfig: "{{ kubeconfig_path }}"
+            definition:
+              metadata:
+                annotations:
+                  service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+                  service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+
+- name: Apply common Istio configurations
+  block:
+    - name: Create PeerAuthentication for strict mTLS
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: security.istio.io/v1beta1
+          kind: PeerAuthentication
+          metadata:
+            name: default
+            namespace: "{{ istio_namespace }}"
+          spec:
+            mtls:
+              mode: STRICT
+        kubeconfig: "{{ kubeconfig_path }}"
+
+    - name: Configure telemetry v2
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: telemetry.istio.io/v1alpha1
+          kind: Telemetry
+          metadata:
+            name: default-metrics
+            namespace: "{{ istio_namespace }}"
+          spec:
+            metrics:
+            - providers:
+              - name: prometheus
+        kubeconfig: "{{ kubeconfig_path }}"

@@ -1,0 +1,148 @@
+---
+- name: Create Istio namespaces
+  kubernetes.core.k8s:
+    name: "{{ item }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+  loop:
+    - "{{ istio_namespace }}"
+    - "{{ istio_gateway_namespace }}"
+  tags: [istio, namespace]
+
+- name: Check if Istio is already installed
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: istiod
+    namespace: "{{ istio_namespace }}"
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: istio_deployment
+  failed_when: false
+
+- name: Generate Istio operator configuration
+  template:
+    src: istio-operator.yaml.j2
+    dest: "/tmp/istio-operator-{{ platform_type }}.yaml"
+  delegate_to: "{{ control_plane_host }}"
+  become: true
+
+- name: Precheck Istio installation
+  shell: |
+    export KUBECONFIG=/etc/kubernetes/admin.conf
+    {{ istioctl_binary }} x precheck
+  delegate_to: "{{ control_plane_host }}"
+  register: istio_precheck
+  failed_when: false
+  changed_when: false
+  become: true
+
+- name: Display precheck results
+  debug:
+    msg: "{{ istio_precheck.stdout_lines }}"
+  when: istio_precheck.stdout_lines is defined
+
+- name: Install Istio using operator
+  shell: |
+    export KUBECONFIG=/etc/kubernetes/admin.conf
+    {{ istioctl_binary }} install \
+      --set values.pilot.env.PILOT_ENABLE_WORKLOAD_ENTRY_AUTOREGISTRATION=true \
+      --set values.pilot.env.PILOT_ENABLE_CROSS_CLUSTER_WORKLOAD_ENTRY=true \
+      -f /tmp/istio-operator-{{ platform_type }}.yaml \
+      -y
+  delegate_to: "{{ control_plane_host }}"
+  when: istio_deployment.resources | length == 0
+  become: true
+
+- name: Check Istio control plane status
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: istiod
+    namespace: "{{ istio_namespace }}"
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: istio_status_check
+  tags: [istio, wait]
+
+- name: Debug Istio deployment status
+  debug:
+    msg: |
+      Istio deployment status:
+      {% if istio_status_check.resources %}
+      - Replicas: {{ istio_status_check.resources[0].status.replicas | default('unknown') }}
+      - Ready replicas: {{ istio_status_check.resources[0].status.readyReplicas | default('0') }}
+      - Unavailable replicas: {{ istio_status_check.resources[0].status.unavailableReplicas | default('0') }}
+      {% else %}
+      - No Istio deployment found
+      {% endif %}
+  tags: [istio, debug]
+
+- name: Wait for Istio control plane to be ready (with fallback)
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: istiod
+    namespace: "{{ istio_namespace }}"
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 180
+  ignore_errors: true
+  register: istio_wait_result
+  tags: [istio, wait]
+
+- name: Continue if Istio pods are running (even if not fully ready)
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Pod
+    namespace: "{{ istio_namespace }}"
+    label_selectors:
+      - app=istiod
+    kubeconfig: "{{ kubeconfig_path }}"
+  register: istio_pods
+  when: istio_wait_result is failed
+  tags: [istio, fallback]
+
+- name: Display fallback status
+  debug:
+    msg: |
+      Istio wait timed out, but continuing if pods are running:
+      Running pods: {{ (istio_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length) if istio_pods is defined else 'unknown' }}
+  when: istio_wait_result is failed
+  tags: [istio, fallback]
+
+- name: Deploy Istio gateway based on service type
+  kubernetes.core.k8s:
+    state: present
+    definition: "{{ lookup('template', 'istio-gateway.yaml.j2') | from_yaml_all | list }}"
+    kubeconfig: "{{ kubeconfig_path }}"
+  tags: [istio, gateway]
+
+- name: Label default namespace for automatic sidecar injection
+  kubernetes.core.k8s:
+    state: present
+    api_version: v1
+    kind: Namespace
+    name: default
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      metadata:
+        labels:
+          istio-injection: enabled
+  tags: [istio, injection]
+
+- name: Verify Istio installation
+  shell: |
+    export KUBECONFIG=/etc/kubernetes/admin.conf
+    {{ istioctl_binary }} verify-install
+  delegate_to: "{{ control_plane_host }}"
+  register: istio_verify
+  changed_when: false
+  become: true
+
+- name: Display Istio installation status
+  debug:
+    msg: "{{ istio_verify.stdout_lines }}"
