@@ -3,7 +3,21 @@
 # Supports: k3s, kubeadm, EKS
 
 # =============================
-# PHASE 0: PLATFORM DETECTION
+# PHASE 0: PLATFORM PREREQUISITES
+# =============================
+
+- name: Install Platform Prerequisites
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Install Essential Platform Tools
+      include_role:
+        name: foundation/prerequisites
+      tags: [prerequisites, foundation, tools]
+
+# =============================
+# PHASE 1: PLATFORM DETECTION
 # =============================
 
 - name: Detect and Configure Platform
@@ -210,7 +224,7 @@
         name: platform/istio
       when: 
         - kubernetes_state != "absent"
-        - enable_istio | default(false) or 'istio' in ansible_run_tags
+        - enable_istio | default(true) or 'istio' in ansible_run_tags
       tags: [istio, service-mesh, kiali]
 
 # =============================

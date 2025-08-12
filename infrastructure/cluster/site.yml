@@ -2,6 +2,21 @@
 # Professional MLOps Platform Deployment
 
 # =============================
+# PHASE 0: PLATFORM PREREQUISITES
+# =============================
+
+# Play 0: Platform Prerequisites
+- name: Install Platform Prerequisites
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Install Essential Platform Tools
+      include_role:
+        name: foundation/prerequisites
+      tags: [prerequisites, foundation, tools]
+
+# =============================
 # PHASE 1: INFRASTRUCTURE SETUP
 # =============================
 
@@ -153,7 +168,7 @@
         name: platform/istio
       when: 
         - k3s_state is not defined or k3s_state != "absent"
-        - enable_istio | default(false) or 'istio' in ansible_run_tags
+        - enable_istio | default(true) or 'istio' in ansible_run_tags
       tags: [istio, service-mesh]
 
 # =============================
@@ -263,7 +278,7 @@
         - name: Deploy KServe ML Serving Platform
           include_role:
             name: mlops/kserve
-          when: enable_istio | default(false)
+          when: enable_istio | default(true)
           tags: [mlops, kserve]
 
       when: k3s_state is not defined or k3s_state != "absent"
