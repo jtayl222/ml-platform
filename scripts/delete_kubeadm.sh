@@ -4,7 +4,7 @@ echo "🗑️  Removing kubeadm cluster and cleaning up storage..."
 
 # Remove kubeadm cluster and cleanup storage in one command
 ansible-playbook -i inventory/production/hosts-kubeadm infrastructure/cluster/site-multiplatform.yml \
-  --extra-vars="kubeadm_state=absent"
+  --extra-vars="kubernetes_state=absent kubeadm_state=absent"
 
 # Clean up local kubeconfig
 echo "🧹 Cleaning up local kubeconfig..."
@@ -18,16 +18,21 @@ else
   echo "NFS server not reachable, skipping verification"
 fi
 
-# Clean up any remaining container images on nodes
-echo "🐳 Cleaning up container images on cluster nodes..."
+# Additional cleanup for container images and network rules
+echo "🧹 Final cleanup of container images and network rules..."
 ansible kubeadm_control_plane,kubeadm_workers -i inventory/production/hosts-kubeadm -m shell -a "
-  sudo crictl rmi --prune 2>/dev/null || true;
-  sudo systemctl stop containerd kubelet 2>/dev/null || true;
+  # Stop containerd to kill remaining containers
+  sudo systemctl stop containerd 2>/dev/null || true;
+  
+  # Remove remaining container images and snapshots
+  sudo crictl rmi --all 2>/dev/null || true;
   sudo rm -rf /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/* 2>/dev/null || true;
-  sudo rm -rf /var/lib/kubelet/* 2>/dev/null || true;
-  sudo rm -rf /etc/kubernetes/* 2>/dev/null || true;
+  
+  # Clean up CNI and network interfaces
   sudo rm -rf /etc/cni/net.d/* 2>/dev/null || true;
-  sudo systemctl start containerd 2>/dev/null || true
+  sudo ip link delete cilium_host 2>/dev/null || true;
+  sudo ip link delete cilium_net 2>/dev/null || true;
+  sudo ip link delete cilium_vxlan 2>/dev/null || true
 " --become
 
 echo "✅ kubeadm cluster cleanup complete!"

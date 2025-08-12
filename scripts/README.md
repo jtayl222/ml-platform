@@ -35,6 +35,17 @@ Completely removes K3s cluster and cleans up storage.
 ### delete_kubeadm.sh
 Completely removes kubeadm cluster and cleans up nodes.
 
+**What it does:**
+- Removes kubeadm cluster using Ansible (all control plane and worker nodes)
+- Stops containerd to ensure all containers are terminated
+- Removes all container images and snapshots
+- Cleans up CNI configurations and Cilium network interfaces
+- Removes Kubernetes packages from nodes
+- Cleans up local kubeconfig files
+
+**Note:** This performs a complete cleanup. Containerd will be left stopped.
+Run bootstrap-kubeadm.sh to redeploy.
+
 ```bash
 ./scripts/delete_kubeadm.sh
 ```
