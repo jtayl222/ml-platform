@@ -1,0 +1,55 @@
+---
+- name: Reset kubeadm cluster
+  command: kubeadm reset --force
+  become: true
+  ignore_errors: yes
+
+- name: Remove Kubernetes configuration
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/kubernetes
+    - "{{ ansible_env.HOME }}/.kube"
+    - /var/lib/etcd
+    - /var/lib/kubelet
+  become: true
+
+- name: Stop and disable services
+  systemd:
+    name: "{{ item }}"
+    state: stopped
+    enabled: no
+  loop:
+    - kubelet
+    - containerd
+  become: true
+  ignore_errors: yes
+
+- name: Unhold Kubernetes packages (Debian/Ubuntu)
+  when: ansible_os_family == "Debian"
+  dpkg_selections:
+    name: "{{ item }}"
+    selection: install
+  loop:
+    - kubelet
+    - kubeadm
+    - kubectl
+  become: true
+  ignore_errors: yes
+
+- name: Remove Kubernetes packages
+  package:
+    name: "{{ kubernetes_packages }}"
+    state: absent
+  become: true
+
+- name: Clean up iptables rules
+  command: "{{ item }}"
+  loop:
+    - iptables -F
+    - iptables -t nat -F
+    - iptables -t mangle -F
+    - iptables -X
+  become: true
+  ignore_errors: yes

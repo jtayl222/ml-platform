@@ -1,0 +1,96 @@
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: {{ ansible_default_ipv4.address }}
+  bindPort: 6443
+nodeRegistration:
+  criSocket: unix:///run/containerd/containerd.sock
+  kubeletExtraArgs:
+  - name: cgroup-driver
+    value: "systemd"
+  - name: container-runtime-endpoint
+    value: "unix:///run/containerd/containerd.sock"
+---
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: ClusterConfiguration
+kubernetesVersion: v{{ kubernetes_version }}
+clusterName: {{ cluster_name }}
+controlPlaneEndpoint: "{{ control_plane_endpoint }}"
+networking:
+  serviceSubnet: {{ service_cidr }}
+  podSubnet: {{ pod_network_cidr }}
+  dnsDomain: cluster.local
+apiServer:
+  certSANs:
+{% for san in api_server_cert_extra_sans %}
+  - "{{ san }}"
+{% endfor %}
+{% if audit_log_enabled %}
+  extraArgs:
+  - name: audit-log-maxage
+    value: "{{ audit_log_maxage }}"
+  - name: audit-log-maxbackup
+    value: "{{ audit_log_maxbackup }}"
+  - name: audit-log-maxsize
+    value: "{{ audit_log_maxsize }}"
+  - name: audit-log-path
+    value: "{{ audit_log_path }}"
+  - name: audit-policy-file
+    value: "{{ audit_policy_file }}"
+  extraVolumes:
+  - name: audit-policy
+    hostPath: "{{ audit_policy_file }}"
+    mountPath: "{{ audit_policy_file }}"
+    readOnly: true
+  - name: audit-logs
+    hostPath: "/var/log/kubernetes"
+    mountPath: "/var/log/kubernetes"
+{% endif %}
+controllerManager:
+  extraArgs:
+  - name: bind-address
+    value: "0.0.0.0"
+scheduler:
+  extraArgs:
+  - name: bind-address
+    value: "0.0.0.0"
+etcd:
+  local:
+    dataDir: /var/lib/etcd
+{% if enable_ha and control_plane_count | int > 1 %}
+    serverCertSANs:
+{% for host in groups['kubeadm_control_plane'] %}
+    - "{{ hostvars[host]['ansible_default_ipv4']['address'] }}"
+    - "{{ host }}"
+{% endfor %}
+    peerCertSANs:
+{% for host in groups['kubeadm_control_plane'] %}
+    - "{{ hostvars[host]['ansible_default_ipv4']['address'] }}"
+    - "{{ host }}"
+{% endfor %}
+{% endif %}
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+cgroupDriver: systemd
+containerRuntimeEndpoint: unix:///var/run/containerd/containerd.sock
+authentication:
+  anonymous:
+    enabled: false
+  webhook:
+    enabled: true
+authorization:
+  mode: Webhook
+serverTLSBootstrap: true
+{% if kube_reserved is defined %}
+kubeReserved:
+{% for key, value in kube_reserved.items() %}
+  {{ key }}: "{{ value }}"
+{% endfor %}
+{% endif %}
+{% if system_reserved is defined %}
+systemReserved:
+{% for key, value in system_reserved.items() %}
+  {{ key }}: "{{ value }}"
+{% endfor %}
+{% endif %}

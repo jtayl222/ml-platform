@@ -1,0 +1,65 @@
+---
+- name: Check if control plane node is already joined
+  stat:
+    path: /etc/kubernetes/admin.conf
+  register: admin_conf
+
+- name: Join additional control plane node
+  when: not admin_conf.stat.exists
+  block:
+    - name: Get certificate key from first control plane (run once only)
+      shell: |
+        export KUBECONFIG=/etc/kubernetes/admin.conf
+        kubeadm init phase upload-certs --upload-certs
+      register: cert_key_result
+      delegate_to: "{{ groups['kubeadm_control_plane'][0] }}"
+      become: true
+      run_once: true
+
+    - name: Debug - Show certificate upload output
+      debug:
+        msg: "Certificate upload output: {{ cert_key_result.stdout_lines }}"
+
+    - name: Extract certificate key
+      set_fact:
+        certificate_key: "{{ cert_key_result.stdout_lines[-1] }}"
+
+    - name: Debug - Show extracted certificate key
+      debug:
+        msg: "Extracted certificate key: {{ certificate_key }}"
+
+    - name: Get join command for control plane
+      command: kubeadm token create --print-join-command
+      register: cp_join_command
+      delegate_to: "{{ groups['kubeadm_control_plane'][0] }}"
+      become: true
+
+    - name: Join control plane node
+      command: "{{ cp_join_command.stdout }} --control-plane --certificate-key {{ certificate_key }}"
+      become: true
+      register: join_cp_result
+
+    - name: Display join result
+      debug:
+        msg: "{{ join_cp_result.stdout }}"
+
+    - name: Create .kube directory
+      file:
+        path: "{{ ansible_env.HOME }}/.kube"
+        state: directory
+        mode: '0755'
+
+    - name: Fix admin.conf with correct RBAC group
+      shell: |
+        kubeadm kubeconfig user --client-name=kubernetes-admin --org=system:masters > /etc/kubernetes/admin.conf.fixed
+        mv /etc/kubernetes/admin.conf.fixed /etc/kubernetes/admin.conf
+      become: true
+
+    - name: Copy admin.conf to user's kube config
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: "{{ ansible_env.HOME }}/.kube/config"
+        remote_src: yes
+        owner: "{{ ansible_user }}"
+        mode: '0600'
+      become: true

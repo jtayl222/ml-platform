@@ -1,0 +1,63 @@
+---
+# Kubeadm cluster configuration
+
+# Kubernetes version
+kubernetes_version: "1.33.1"
+kubeadm_version: "{{ kubernetes_version }}"
+kubelet_version: "{{ kubernetes_version }}"
+kubectl_version: "{{ kubernetes_version }}"
+
+# Cluster configuration
+cluster_name: "mlops-platform"
+control_plane_endpoint: "{{ hostvars[groups['kubeadm_control_plane'][0]]['ansible_host'] }}:6443"
+
+# Network configuration
+pod_network_cidr: "10.244.0.0/16"
+service_cidr: "10.96.0.0/12"
+cluster_dns: "10.96.0.10"
+
+# CNI plugin (Cilium for kubeadm)
+cni_plugin: "cilium"
+cilium_version: "1.18.0"
+
+# Container runtime
+container_runtime: "containerd"
+containerd_version: "1.7.11"
+
+# Control plane configuration
+control_plane_count: "{{ groups['kubeadm_control_plane'] | length }}"
+api_server_cert_extra_sans:
+  - "{{ control_plane_endpoint.split(':')[0] }}"
+  - "kubernetes"
+  - "kubernetes.default"
+  - "kubernetes.default.svc"
+  - "kubernetes.default.svc.cluster.local"
+
+# etcd configuration (for HA control plane)
+etcd_initial_cluster: >-
+  {%- set etcd_members = [] -%}
+  {%- for host in groups['kubeadm_control_plane'] -%}
+    {%- set _ = etcd_members.append(host + '=https://' + hostvars[host]['ansible_host'] + ':2380') -%}
+  {%- endfor -%}
+  {{ etcd_members | join(',') }}
+
+# Feature gates
+feature_gates:
+  - "RotateKubeletServerCertificate=true"
+
+# Audit logging
+audit_log_enabled: false
+audit_log_maxage: 30
+audit_log_maxbackup: 10
+audit_log_maxsize: 100
+
+# Resource reservations
+kube_reserved:
+  cpu: "200m"
+  memory: "500Mi"
+system_reserved:
+  cpu: "200m"
+  memory: "500Mi"
+
+# Image repository (use local mirror if needed)
+image_repository: "registry.k8s.io"

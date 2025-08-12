@@ -1,0 +1,90 @@
+---
+- name: Install Cilium CNI
+  when: cni_plugin == 'cilium'
+  block:
+    - name: Check if cilium CLI is installed
+      command: which cilium
+      register: cilium_cli_check
+      failed_when: false
+      changed_when: false
+
+    - name: Install Cilium CLI
+      when: cilium_cli_check.rc != 0
+      block:
+        - name: Download Cilium CLI
+          get_url:
+            url: "https://github.com/cilium/cilium-cli/releases/download/v0.16.21/cilium-linux-amd64.tar.gz"
+            dest: /tmp/cilium-cli.tar.gz
+
+        - name: Extract Cilium CLI
+          unarchive:
+            src: /tmp/cilium-cli.tar.gz
+            dest: /tmp
+            remote_src: yes
+
+        - name: Install Cilium CLI
+          copy:
+            src: /tmp/cilium
+            dest: /usr/local/bin/cilium
+            mode: '0755'
+            remote_src: yes
+          become: true
+
+    - name: Install Cilium using CLI
+      command: >
+        cilium install
+        --version {{ cilium_version }}
+        --set ipam.mode=kubernetes
+        --set kubeProxyReplacement=false
+      environment:
+        KUBECONFIG: "{{ ansible_env.HOME }}/.kube/config"
+      register: cilium_install
+      
+    - name: Wait for Cilium DaemonSet to be ready
+      shell: |
+        kubectl get daemonset cilium -n kube-system -o jsonpath='{.status.numberReady}/{.status.desiredNumberScheduled}'
+      environment:
+        KUBECONFIG: "{{ ansible_env.HOME }}/.kube/config"
+      register: cilium_ds_status
+      until: cilium_ds_status.stdout | regex_replace('/.*', '') == cilium_ds_status.stdout | regex_replace('.*/','')
+      retries: 30
+      delay: 10
+      
+    - name: Wait for Cilium operator to be ready
+      shell: |
+        kubectl get deployment cilium-operator -n kube-system -o jsonpath='{.status.readyReplicas}/{.spec.replicas}'
+      environment:
+        KUBECONFIG: "{{ ansible_env.HOME }}/.kube/config"
+      register: cilium_op_status
+      until: cilium_op_status.stdout | regex_replace('/.*', '') == cilium_op_status.stdout | regex_replace('.*/','')
+      retries: 30
+      delay: 10
+
+- name: Install Calico CNI (fallback)
+  when: cni_plugin == 'calico'
+  block:
+    - name: Download Calico manifest
+      get_url:
+        url: "https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/calico.yaml"
+        dest: /tmp/calico.yaml
+
+    - name: Apply Calico CNI
+      kubernetes.core.k8s:
+        state: present
+        src: /tmp/calico.yaml
+        kubeconfig: "{{ ansible_env.HOME }}/.kube/config"
+
+    - name: Wait for Calico pods to be ready
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: kube-system
+        label_selectors:
+          - k8s-app=calico-node
+        kubeconfig: "{{ ansible_env.HOME }}/.kube/config"
+      register: calico_pods
+      until: 
+        - calico_pods.resources | length > 0
+        - calico_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length == (calico_pods.resources | length)
+      retries: 30
+      delay: 10

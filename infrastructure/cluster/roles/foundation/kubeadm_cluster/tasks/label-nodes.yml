@@ -1,0 +1,17 @@
+---
+- name: Label control plane nodes with kubectl
+  shell: |
+    export KUBECONFIG=/etc/kubernetes/admin.conf
+    kubectl label node {{ item }} node-role.kubernetes.io/control-plane="" node.kubernetes.io/exclude-from-external-load-balancers="" --overwrite
+  loop: "{{ groups['kubeadm_control_plane'] }}"
+  become: true
+  ignore_errors: true
+
+- name: Label worker nodes with kubectl
+  shell: |
+    export KUBECONFIG=/etc/kubernetes/admin.conf
+    kubectl label node {{ item }} node-role.kubernetes.io/worker="" --overwrite
+  loop: "{{ groups['kubeadm_workers'] }}"
+  when: groups['kubeadm_workers'] is defined
+  become: true
+  ignore_errors: true

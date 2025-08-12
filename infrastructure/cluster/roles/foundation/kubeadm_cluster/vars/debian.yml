@@ -1,0 +1,31 @@
+---
+# Debian/Ubuntu specific variables for kubeadm
+
+# Package names
+kubernetes_packages:
+  - "kubelet={{ kubelet_version }}-*"
+  - "kubeadm={{ kubeadm_version }}-*" 
+  - "kubectl={{ kubectl_version }}-*"
+
+containerd_package: containerd
+
+# Repository configuration (using new official Kubernetes repository)
+kubernetes_apt_repository: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.33/deb/ /"
+kubernetes_apt_gpg_key: "https://pkgs.k8s.io/core:/stable:/v1.33/deb/Release.key"
+
+# Service names
+containerd_service: containerd
+kubelet_service: kubelet
+
+# System configuration
+sysctl_config_file: /etc/sysctl.d/99-kubernetes-cri.conf
+modules_load_file: /etc/modules-load.d/containerd.conf
+
+# Prerequisite packages
+prerequisite_packages:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - gnupg
+  - lsb-release
+  - software-properties-common

@@ -1,0 +1,30 @@
+---
+- name: Check if node is already joined
+  stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: kubelet_conf
+
+- name: Join worker node to cluster
+  when: not kubelet_conf.stat.exists
+  block:
+    - name: Copy join command from control plane
+      slurp:
+        src: /tmp/kubeadm_join_command.sh
+      register: join_command_content
+      delegate_to: "{{ groups['kubeadm_control_plane'][0] }}"
+
+    - name: Execute join command
+      shell: "{{ join_command_content.content | b64decode | trim }}"
+      become: true
+      register: join_result
+
+    - name: Display join result
+      debug:
+        msg: "{{ join_result.stdout }}"
+
+- name: Wait for kubelet to be ready
+  systemd:
+    name: kubelet
+    state: started
+    enabled: yes
+  become: true
