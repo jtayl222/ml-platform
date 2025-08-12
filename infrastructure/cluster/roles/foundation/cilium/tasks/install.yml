@@ -52,6 +52,10 @@
       # Network policies (required for Seldon Core v2)
       policyEnforcementMode: "default"
       
+      # CNI configuration (for Istio compatibility)
+      cni:
+        exclusive: "{{ cilium_cni_exclusive }}"
+      
       # Observability
       hubble:
         enabled: "{{ cilium_enable_hubble }}"

@@ -38,3 +38,6 @@ cilium_enable_bgp: false
 # Security features
 cilium_enable_wireguard: false
 cilium_enable_encryption: false
+
+# CNI configuration (for Istio compatibility)
+cilium_cni_exclusive: false  # Allow other CNI plugins (e.g., Istio CNI)
