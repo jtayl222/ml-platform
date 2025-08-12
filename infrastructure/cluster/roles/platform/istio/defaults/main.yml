@@ -1,0 +1,135 @@
+---
+# Istio Service Mesh Configuration
+# Version 1.27.x with Kiali observability
+
+# Istio version configuration
+istio_version: "1.27.0"
+istio_chart_version: "1.27.0"
+
+# Helm configuration
+helm_wait_timeout: "600s"
+
+# Platform-specific kubeconfig paths
+kubeconfig_paths:
+  k3s: "/etc/rancher/k3s/k3s.yaml"
+  kubeadm: "/etc/kubernetes/admin.conf"
+  eks: "~/.kube/config"
+
+control_plane_kubeconfig: "{{ kubeconfig_paths[platform_type] | default('/etc/kubernetes/admin.conf') }}"
+
+# Istio Gateway Configuration
+istio_gateway_http_nodeport: 30080
+istio_gateway_https_nodeport: 30444
+istio_gateway_loadbalancer_ip: "192.168.1.213"  # MetalLB IP for Istio Gateway
+
+# Istio Control Plane (Pilot) Resource Configuration
+istio_pilot_memory_request: "128Mi"
+istio_pilot_memory_limit: "1Gi"
+istio_pilot_cpu_request: "100m"
+istio_pilot_cpu_limit: "1000m"
+
+# Istio Gateway Resource Configuration
+istio_gateway_memory_request: "64Mi"
+istio_gateway_memory_limit: "512Mi"
+istio_gateway_cpu_request: "50m"
+istio_gateway_cpu_limit: "500m"
+
+# Istio Features Configuration
+istio_tracing_enabled: true
+istio_telemetry_v2_enabled: true
+istio_cni_enabled: false  # Use istio-proxy init container instead of CNI
+
+# Kiali Configuration
+kiali_enabled: true
+kiali_version: "v1.85"
+kiali_namespace: "istio-system"
+kiali_nodeport: 32001
+kiali_loadbalancer_ip: "192.168.1.214"  # MetalLB IP for Kiali
+
+# Kiali Authentication
+# WARNING: Set to 'token' or 'openid' for production environments
+kiali_auth_strategy: "anonymous"  # Options: anonymous, token, header, openshift, openid
+kiali_admin_user: "admin"
+kiali_admin_password: "kiali123"  # Change in production
+
+# Kiali Dashboard Configuration
+kiali_web_root: "/"
+kiali_web_fqdn: "kiali.test"
+kiali_web_schema: "http"
+
+# Kiali External Services URLs (for integration)
+kiali_external_services:
+  prometheus:
+    url: "http://prometheus.monitoring.svc.cluster.local:9090"
+  grafana:
+    url: "http://grafana.monitoring.svc.cluster.local:3000"
+    in_cluster_url: "http://grafana.monitoring.svc.cluster.local:3000"
+    dashboards:
+      - name: "Istio Service Dashboard"
+        variables:
+          namespace: "var-namespace"
+          service: "var-service"
+      - name: "Istio Workload Dashboard"
+        variables:
+          namespace: "var-namespace" 
+          workload: "var-workload"
+  jaeger:
+    url: "http://jaeger-query.istio-system.svc.cluster.local:16686"
+    in_cluster_url: "http://jaeger-query.istio-system.svc.cluster.local:16686"
+
+# Jaeger Tracing Configuration
+jaeger_enabled: true
+jaeger_namespace: "istio-system"
+
+# MetalLB Integration
+metallb_enabled: "{{ metallb_state is defined and metallb_state == 'present' }}"
+
+# Multi-platform Support
+platform_profiles:
+  k3s:
+    pilot_env:
+      EXTERNAL_ISTIOD: false
+    cni:
+      enabled: false
+    values:
+      gateways:
+        istio-ingressgateway:
+          type: LoadBalancer
+  kubeadm:
+    pilot_env:
+      EXTERNAL_ISTIOD: false
+    cni:
+      enabled: false
+    values:
+      gateways:
+        istio-ingressgateway:
+          type: LoadBalancer
+  eks:
+    pilot_env:
+      EXTERNAL_ISTIOD: false
+    cni:
+      enabled: true  # Use Istio CNI on EKS
+    values:
+      gateways:
+        istio-ingressgateway:
+          type: LoadBalancer
+          annotations:
+            service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+
+# Current platform profile
+current_platform_profile: "{{ platform_profiles[platform_type] | default(platform_profiles.kubeadm) }}"
+
+# Istio Injection Labels
+istio_injection_label: "istio-injection=enabled"
+
+# Security Configuration
+istio_security:
+  mtls_mode: "PERMISSIVE"  # Options: STRICT, PERMISSIVE
+  enable_authorization_policies: true
+  
+# Observability Configuration  
+istio_observability:
+  access_log_enabled: true
+  telemetry_v2_enabled: true
+  default_metrics_enabled: true
+  prometheus_metrics_enabled: true

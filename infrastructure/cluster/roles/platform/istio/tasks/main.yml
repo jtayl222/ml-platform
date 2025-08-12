@@ -1,94 +1,370 @@
 ---
-- name: Add Istio Helm repository
-  kubernetes.core.helm_repository:
-    name: istio
-    repo_url: https://istio-release.storage.googleapis.com/charts
-  tags: [istio, helm-repo]
+- name: Deploy Istio Service Mesh v1.27.x
+  block:
+    - name: Add Istio Helm repository
+      kubernetes.core.helm_repository:
+        name: istio
+        repo_url: https://istio-release.storage.googleapis.com/charts
+      delegate_to: localhost
+      run_once: true
+      check_mode: false
+      tags: [istio, helm-repo]
 
-- name: Create Istio system namespace
-  kubernetes.core.k8s:
-    name: istio-system
-    api_version: v1
-    kind: Namespace
-    state: present
-    kubeconfig: "{{ kubeconfig_path }}"
-  tags: [istio, namespace]
+    - name: Add Kiali Helm repository
+      kubernetes.core.helm_repository:
+        name: kiali
+        repo_url: https://kiali.org/helm-charts
+      delegate_to: localhost
+      run_once: true
+      check_mode: false
+      when: kiali_enabled | default(true)
+      tags: [istio, kiali, helm-repo]
 
-- name: Install Istio Base
-  kubernetes.core.helm:
-    name: istio-base
-    chart_ref: istio/base
-    release_namespace: istio-system
-    create_namespace: false
-    kubeconfig: "{{ kubeconfig_path }}"
-    wait: true
-    wait_timeout: "{{ helm_wait_timeout }}"
-    values:
-      defaultRevision: default
-  tags: [istio, istio-base]
+    - name: Add Jaeger Helm repository
+      kubernetes.core.helm_repository:
+        name: jaegertracing
+        repo_url: https://jaegertracing.github.io/helm-charts
+      delegate_to: localhost
+      run_once: true
+      check_mode: false
+      tags: [istio, jaeger, helm-repo]
 
-- name: Install Istiod (Control Plane)
-  kubernetes.core.helm:
-    name: istiod
-    chart_ref: istio/istiod
-    release_namespace: istio-system
-    create_namespace: false
-    kubeconfig: "{{ kubeconfig_path }}"
-    wait: true
-    wait_timeout: "{{ helm_wait_timeout }}"
-    values:
-      meshConfig:
-        defaultConfig:
-          gatewayTopology:
-            numTrustedProxies: 1
-      pilot:
-        resources:
-          requests:
-            memory: "{{ istio_pilot_memory_request }}"
-            cpu: "{{ istio_pilot_cpu_request }}"
-          limits:
-            memory: "{{ istio_pilot_memory_limit }}"
-            cpu: "{{ istio_pilot_cpu_limit }}"
-  tags: [istio, istiod]
+    - name: Update Helm repositories
+      ansible.builtin.shell: helm repo update
+      delegate_to: localhost
+      run_once: true
+      changed_when: false
+      check_mode: false
+      tags: [istio, helm-repo]
 
-- name: Install Istio Gateway
-  kubernetes.core.helm:
-    name: istio-gateway
-    chart_ref: istio/gateway
-    release_namespace: istio-gateway
-    create_namespace: true
-    kubeconfig: "{{ kubeconfig_path }}"
-    wait: true
-    wait_timeout: "{{ helm_wait_timeout }}"
-    values:
-      service:
-        type: NodePort
-        ports:
-        - port: 80
-          nodePort: "{{ istio_gateway_http_nodeport }}"
-          name: http2
-        - port: 443
-          nodePort: "{{ istio_gateway_https_nodeport }}"
-          name: https
-      resources:
-        requests:
-          memory: "{{ istio_gateway_memory_request }}"
-          cpu: "{{ istio_gateway_cpu_request }}"
-        limits:
-          memory: "{{ istio_gateway_memory_limit }}"
-          cpu: "{{ istio_gateway_cpu_limit }}"
-  tags: [istio, istio-gateway]
+    - name: Create Istio system namespace
+      kubernetes.core.k8s:
+        name: istio-system
+        api_version: v1
+        kind: Namespace
+        state: present
+        kubeconfig: "{{ kubeconfig_path | default('/etc/kubernetes/admin.conf') }}"
+        definition:
+          metadata:
+            name: istio-system
+            labels:
+              name: istio-system
+      tags: [istio, namespace]
 
-- name: Wait for Istio components to be ready
-  kubernetes.core.k8s_info:
-    api_version: apps/v1
-    kind: Deployment
-    name: istiod
-    namespace: istio-system
-    kubeconfig: "{{ kubeconfig_path }}"
-    wait: true
-    wait_condition:
-      type: Available
-      status: "True"
-    wait_timeout: 300
-  tags: [istio, wait]
+    - name: Install Istio Base (CRDs and Configuration)
+      kubernetes.core.helm:
+        name: istio-base
+        chart_ref: istio/base
+        release_namespace: istio-system
+        create_namespace: false
+        kubeconfig: "{{ kubeconfig_path | default('/etc/kubernetes/admin.conf') }}"
+        wait: true
+        wait_timeout: "{{ helm_wait_timeout }}"
+        values:
+          defaultRevision: default
+          validationURL: ""
+          pilot:
+            env:
+              EXTERNAL_ISTIOD: false
+      tags: [istio, istio-base]
+
+    - name: Install Istiod (Istio Control Plane)
+      kubernetes.core.helm:
+        name: istiod
+        chart_ref: istio/istiod
+        release_namespace: istio-system
+        create_namespace: false
+        kubeconfig: "{{ kubeconfig_path | default('/etc/kubernetes/admin.conf') }}"
+        wait: true
+        wait_timeout: "{{ helm_wait_timeout }}"
+        values:
+          global:
+            meshID: mesh1
+            multiCluster:
+              clusterName: "{{ ansible_hostname | default('cluster1') }}"
+            network: network1
+          meshConfig:
+            defaultConfig:
+              gatewayTopology:
+                numTrustedProxies: 1
+              proxyStatsMatcher:
+                inclusionRegexps:
+                - ".*outlier_detection.*"
+                - ".*circuit_breakers.*"
+                - ".*upstream_rq_retry.*"
+                - ".*_cx_.*"
+            extensionProviders:
+            - name: jaeger
+              envoyOtelAls:
+                service: jaeger-collector.istio-system.svc.cluster.local
+                port: 14268
+          pilot:
+            traceSampling: "{{ istio_tracing_enabled | default(true) | ternary(1.0, 0.0) }}"
+            resources:
+              requests:
+                memory: "{{ istio_pilot_memory_request }}"
+                cpu: "{{ istio_pilot_cpu_request }}"
+              limits:
+                memory: "{{ istio_pilot_memory_limit }}"
+                cpu: "{{ istio_pilot_cpu_limit }}"
+            env:
+              EXTERNAL_ISTIOD: false
+              PILOT_ENABLE_CROSS_CLUSTER_WORKLOAD_ENTRY: true
+              PILOT_ENABLE_NETWORK_POLICY: true
+          telemetry:
+            v2:
+              enabled: "{{ istio_telemetry_v2_enabled | default(true) }}"
+      tags: [istio, istiod]
+
+    - name: Install Istio Gateway (NodePort)
+      kubernetes.core.helm:
+        name: istio-gateway
+        chart_ref: istio/gateway
+        release_namespace: istio-gateway
+        create_namespace: true
+        kubeconfig: "{{ kubeconfig_path | default('/etc/kubernetes/admin.conf') }}"
+        wait: true
+        wait_timeout: "{{ helm_wait_timeout }}"
+        values:
+          service:
+            type: NodePort
+            ports:
+            - port: 80
+              nodePort: "{{ istio_gateway_http_nodeport }}"
+              name: http2
+            - port: 443
+              nodePort: "{{ istio_gateway_https_nodeport }}"
+              name: https
+          resources:
+            requests:
+              memory: "{{ istio_gateway_memory_request }}"
+              cpu: "{{ istio_gateway_cpu_request }}"
+            limits:
+              memory: "{{ istio_gateway_memory_limit }}"
+              cpu: "{{ istio_gateway_cpu_limit }}"
+      when: not (metallb_enabled | default(false))
+      tags: [istio, istio-gateway, nodeport]
+
+    - name: Install Istio Gateway (LoadBalancer with MetalLB)
+      kubernetes.core.helm:
+        name: istio-gateway
+        chart_ref: istio/gateway
+        release_namespace: istio-gateway
+        create_namespace: true
+        kubeconfig: "{{ kubeconfig_path | default('/etc/kubernetes/admin.conf') }}"
+        wait: true
+        wait_timeout: "{{ helm_wait_timeout }}"
+        values:
+          service:
+            type: LoadBalancer
+            loadBalancerIP: "{{ istio_gateway_loadbalancer_ip }}"
+            ports:
+            - port: 80
+              name: http2
+            - port: 443
+              name: https
+            annotations:
+              metallb.universe.tf/allow-shared-ip: "istio-gateway"
+          resources:
+            requests:
+              memory: "{{ istio_gateway_memory_request }}"
+              cpu: "{{ istio_gateway_cpu_request }}"
+            limits:
+              memory: "{{ istio_gateway_memory_limit }}"
+              cpu: "{{ istio_gateway_cpu_limit }}"
+      when: metallb_enabled | default(false)
+      tags: [istio, istio-gateway, loadbalancer]
+
+    - name: Wait for Istio control plane to be ready
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        name: istiod
+        namespace: istio-system
+        kubeconfig: "{{ kubeconfig_path | default('/etc/kubernetes/admin.conf') }}"
+        wait: true
+        wait_condition:
+          type: Available
+          status: "True"
+        wait_timeout: 300
+      tags: [istio, wait]
+
+    - name: Install Jaeger for distributed tracing
+      kubernetes.core.helm:
+        name: jaeger
+        chart_ref: jaegertracing/jaeger
+        release_namespace: istio-system
+        create_namespace: false
+        kubeconfig: "{{ kubeconfig_path | default('/etc/kubernetes/admin.conf') }}"
+        wait: true
+        wait_timeout: "{{ helm_wait_timeout }}"
+        values:
+          provisionDataStore:
+            cassandra: false
+            elasticsearch: false
+          storage:
+            type: memory
+          agent:
+            enabled: false
+          collector:
+            service:
+              zipkin:
+                port: 9411
+          query:
+            service:
+              type: ClusterIP
+              port: 16686
+      when: jaeger_enabled | default(true)
+      tags: [istio, jaeger, tracing]
+
+    - name: Install Kiali for service mesh observability (NodePort)
+      kubernetes.core.helm:
+        name: kiali-server
+        chart_ref: kiali/kiali-server
+        release_namespace: "{{ kiali_namespace }}"
+        create_namespace: false
+        kubeconfig: "{{ kubeconfig_path | default('/etc/kubernetes/admin.conf') }}"
+        wait: true
+        wait_timeout: "{{ helm_wait_timeout }}"
+        values:
+          auth:
+            strategy: "{{ kiali_auth_strategy }}"
+          deployment:
+            namespace: "{{ kiali_namespace }}"
+            web_fqdn: "{{ kiali_web_fqdn }}"
+            web_root: "{{ kiali_web_root }}"
+            web_schema: "{{ kiali_web_schema }}"
+          server:
+            web_port: 20001
+            service:
+              type: NodePort
+              nodePort: "{{ kiali_nodeport }}"
+          external_services:
+            prometheus:
+              url: "{{ kiali_external_services.prometheus.url }}"
+            grafana:
+              enabled: true
+              url: "{{ kiali_external_services.grafana.url }}"
+              in_cluster_url: "{{ kiali_external_services.grafana.in_cluster_url }}"
+              dashboards: "{{ kiali_external_services.grafana.dashboards }}"
+            jaeger:
+              enabled: true
+              url: "{{ kiali_external_services.jaeger.url }}"
+              in_cluster_url: "{{ kiali_external_services.jaeger.in_cluster_url }}"
+          istio_namespace: istio-system
+      when: kiali_enabled | default(true) and not (metallb_enabled | default(false))
+      tags: [istio, kiali, observability, nodeport]
+
+    - name: Install Kiali for service mesh observability (LoadBalancer with MetalLB)
+      kubernetes.core.helm:
+        name: kiali-server
+        chart_ref: kiali/kiali-server
+        release_namespace: "{{ kiali_namespace }}"
+        create_namespace: false
+        kubeconfig: "{{ kubeconfig_path | default('/etc/kubernetes/admin.conf') }}"
+        wait: true
+        wait_timeout: "{{ helm_wait_timeout }}"
+        values:
+          auth:
+            strategy: "{{ kiali_auth_strategy }}"
+          deployment:
+            namespace: "{{ kiali_namespace }}"
+            web_fqdn: "{{ kiali_web_fqdn }}"
+            web_root: "{{ kiali_web_root }}"
+            web_schema: "{{ kiali_web_schema }}"
+          server:
+            web_port: 20001
+            service:
+              type: LoadBalancer
+              loadBalancerIP: "{{ kiali_loadbalancer_ip }}"
+              annotations:
+                metallb.universe.tf/allow-shared-ip: "kiali"
+          external_services:
+            prometheus:
+              url: "{{ kiali_external_services.prometheus.url }}"
+            grafana:
+              enabled: true
+              url: "{{ kiali_external_services.grafana.url }}"
+              in_cluster_url: "{{ kiali_external_services.grafana.in_cluster_url }}"
+              dashboards: "{{ kiali_external_services.grafana.dashboards }}"
+            jaeger:
+              enabled: true
+              url: "{{ kiali_external_services.jaeger.url }}"
+              in_cluster_url: "{{ kiali_external_services.jaeger.in_cluster_url }}"
+          istio_namespace: istio-system
+      when: kiali_enabled | default(true) and metallb_enabled | default(false)
+      tags: [istio, kiali, observability, loadbalancer]
+
+    - name: Create default Istio Gateway resource
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig_path | default('/etc/kubernetes/admin.conf') }}"
+        definition:
+          apiVersion: networking.istio.io/v1beta1
+          kind: Gateway
+          metadata:
+            name: default-gateway
+            namespace: istio-system
+          spec:
+            selector:
+              istio: ingressgateway
+            servers:
+            - port:
+                number: 80
+                name: http
+                protocol: HTTP
+              hosts:
+              - "*"
+            - port:
+                number: 443
+                name: https
+                protocol: HTTPS
+              hosts:
+              - "*"
+              tls:
+                mode: SIMPLE
+                credentialName: default-tls-secret
+      tags: [istio, gateway-resource]
+
+    - name: Display Istio deployment status
+      debug:
+        msg:
+        - "🎉 Istio Service Mesh v{{ istio_version }} deployed successfully!"
+        - "🌐 Service Mesh Control Plane Ready"
+        - "📊 Kiali Dashboard: {{ kiali_enabled | default(true) | ternary('Enabled', 'Disabled') }}"
+        - "🔍 Jaeger Tracing: {{ jaeger_enabled | default(true) | ternary('Enabled', 'Disabled') }}"
+        - ""
+        - "🔗 Access URLs:"
+        - "- Kiali (NodePort): http://<cluster-ip>:{{ kiali_nodeport }}"
+        - "- Kiali (LoadBalancer): http://{{ kiali_loadbalancer_ip }}:20001"
+        - "- Istio Gateway (HTTP): http://<cluster-ip>:{{ istio_gateway_http_nodeport }}"
+        - "- Istio Gateway (HTTPS): https://<cluster-ip>:{{ istio_gateway_https_nodeport }}"
+        - ""
+        - "💡 Next Steps:"
+        - "- Label namespaces for injection: kubectl label namespace <ns> istio-injection=enabled"
+        - "- Deploy applications to the mesh"
+        - "- Configure VirtualServices and DestinationRules"
+        - "- Monitor traffic in Kiali dashboard"
+      tags: [istio, status]
+
+  rescue:
+    - name: Handle Istio deployment failure
+      debug:
+        msg:
+        - "❌ Istio deployment failed"
+        - "🔍 Common issues:"
+        - "- Insufficient cluster resources"
+        - "- Network connectivity problems"
+        - "- Conflicting CNI configuration"
+        - "- Previous Istio installation conflicts"
+        - ""
+        - "🛠️ Troubleshooting commands:"
+        - "- kubectl get pods -n istio-system"
+        - "- kubectl logs -n istio-system deployment/istiod"
+        - "- kubectl describe pods -n istio-system"
+
+    - name: Fail with helpful message
+      fail:
+        msg: "Istio service mesh deployment failed. Check the error messages above and cluster status."
+
+  when: k3s_state is not defined or k3s_state != "absent"
+  tags: [istio]
