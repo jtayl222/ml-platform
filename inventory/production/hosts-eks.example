@@ -1,0 +1,43 @@
+# EKS cluster inventory example
+# Copy this file to hosts-eks and customize for your environment
+# Note: EKS is managed service, so we only need localhost for API operations
+
+[all]
+localhost ansible_connection=local
+
+[all:vars]
+kubernetes_platform=eks
+
+# EKS doesn't have traditional control plane nodes
+# This group is used for compatibility with platform detection
+[eks_control_plane]
+localhost
+
+# EKS worker nodes are managed by AWS
+# This group exists for consistency but is not used
+[eks_workers]
+# Managed by AWS EKS node groups
+
+# Ansible controller
+[ansible_controller]
+localhost
+
+# For EKS, we'll use EFS for shared storage instead of NFS
+[nfs_server]
+# Not applicable for EKS - using EFS
+
+[nfs_clients]
+# Not applicable for EKS - using EFS
+
+# Platform group - required for platform detection
+[eks:children]
+eks_control_plane
+
+# EKS-specific variables
+[eks:vars]
+# AWS region and credentials should be configured via:
+# - AWS CLI: aws configure
+# - Environment variables: AWS_PROFILE, AWS_REGION
+# - IAM instance roles (if running from EC2)
+aws_region=us-west-2
+cluster_name=ml-platform-eks

@@ -1,0 +1,37 @@
+# K3S cluster inventory example
+# Copy this file to hosts-k3s and customize for your environment
+
+[all]
+control-node    ansible_host=10.0.1.10  ansible_user=your_user
+worker-1        ansible_host=10.0.1.11  ansible_user=your_user
+worker-2        ansible_host=10.0.1.12  ansible_user=your_user
+worker-3        ansible_host=10.0.1.13  ansible_user=your_user
+nfs-server      ansible_host=10.0.1.20  ansible_user=your_user
+localhost       ansible_connection=local
+
+# Development SSH settings - bypass host key checking for development
+# REMOVE THIS IN PRODUCTION - configure proper SSH keys instead
+[all:vars]
+ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+
+# Define which node(s) will run the Kubernetes control-plane (server)
+[k3s_control_plane]
+control-node
+
+# Define which nodes will be workers
+[k3s_workers]
+worker-1
+worker-2
+worker-3
+
+[ansible_controller]
+localhost
+
+[nfs_server]
+nfs-server
+
+[nfs_clients]
+control-node
+worker-1
+worker-2
+worker-3

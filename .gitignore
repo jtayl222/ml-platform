@@ -27,7 +27,9 @@ infrastructure/fetched_tokens/*
 inventory/production/group_vars/all.yml
 inventory/staging/group_vars/all.yml
 inventory/*/host_vars/*
-inventory/production/hosts-*
+inventory/production/hosts-k3s
+inventory/production/hosts-kubeadm
+inventory/production/hosts-eks
 **/vault_pass.txt
 .vault_pass*
 ansible_vault_*
