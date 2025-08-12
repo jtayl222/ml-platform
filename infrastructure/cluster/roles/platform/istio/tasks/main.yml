@@ -1,26 +1,94 @@
 ---
-- name: Create Istio installation directory
-  file:
-    path: "{{ istio_install_dir }}"
-    state: directory
-    mode: '0755'
-  delegate_to: "{{ control_plane_host }}"
-  become: true
-  tags: [istio, istioctl]
+- name: Add Istio Helm repository
+  kubernetes.core.helm_repository:
+    name: istio
+    repo_url: https://istio-release.storage.googleapis.com/charts
+  tags: [istio, helm-repo]
 
-- name: Install istioctl
-  include_tasks: install-istioctl.yml
-  tags: [istio, istioctl]
+- name: Create Istio system namespace
+  kubernetes.core.k8s:
+    name: istio-system
+    api_version: v1
+    kind: Namespace
+    state: present
+    kubeconfig: "{{ kubeconfig_path }}"
+  tags: [istio, namespace]
 
-- name: Deploy Istio using istioctl
-  include_tasks: deploy-istio.yml
-  tags: [istio, deploy]
+- name: Install Istio Base
+  kubernetes.core.helm:
+    name: istio-base
+    chart_ref: istio/base
+    release_namespace: istio-system
+    create_namespace: false
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_timeout: "{{ helm_wait_timeout }}"
+    values:
+      defaultRevision: default
+  tags: [istio, istio-base]
 
-- name: Deploy Kiali for Istio observability
-  include_tasks: deploy-kiali.yml
-  when: kiali_enabled
-  tags: [istio, kiali]
+- name: Install Istiod (Control Plane)
+  kubernetes.core.helm:
+    name: istiod
+    chart_ref: istio/istiod
+    release_namespace: istio-system
+    create_namespace: false
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_timeout: "{{ helm_wait_timeout }}"
+    values:
+      meshConfig:
+        defaultConfig:
+          gatewayTopology:
+            numTrustedProxies: 1
+      pilot:
+        resources:
+          requests:
+            memory: "{{ istio_pilot_memory_request }}"
+            cpu: "{{ istio_pilot_cpu_request }}"
+          limits:
+            memory: "{{ istio_pilot_memory_limit }}"
+            cpu: "{{ istio_pilot_cpu_limit }}"
+  tags: [istio, istiod]
 
-- name: Configure platform-specific settings
-  include_tasks: configure-platform.yml
-  tags: [istio, platform]
+- name: Install Istio Gateway
+  kubernetes.core.helm:
+    name: istio-gateway
+    chart_ref: istio/gateway
+    release_namespace: istio-gateway
+    create_namespace: true
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_timeout: "{{ helm_wait_timeout }}"
+    values:
+      service:
+        type: NodePort
+        ports:
+        - port: 80
+          nodePort: "{{ istio_gateway_http_nodeport }}"
+          name: http2
+        - port: 443
+          nodePort: "{{ istio_gateway_https_nodeport }}"
+          name: https
+      resources:
+        requests:
+          memory: "{{ istio_gateway_memory_request }}"
+          cpu: "{{ istio_gateway_cpu_request }}"
+        limits:
+          memory: "{{ istio_gateway_memory_limit }}"
+          cpu: "{{ istio_gateway_cpu_limit }}"
+  tags: [istio, istio-gateway]
+
+- name: Wait for Istio components to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: istiod
+    namespace: istio-system
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait: true
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 300
+  tags: [istio, wait]
