@@ -27,13 +27,16 @@
 # Prerequisites
 - name: Install prerequisites
   include_tasks: prerequisites.yml
-  when: not kubeadm_cluster_exists
+  when: 
+    - kubeadm_state | default('present') != 'absent'
+    - not kubeadm_cluster_exists
   tags: [kubeadm, prerequisites]
 
 # Initialize first control plane node
 - name: Initialize control plane
   include_tasks: init-control-plane.yml
   when:
+    - kubeadm_state | default('present') != 'absent'
     - not kubeadm_cluster_exists
     - inventory_hostname == groups['kubeadm_control_plane'][0]
   tags: [kubeadm, control-plane]
@@ -42,7 +45,7 @@
 - name: Join additional control plane nodes
   include_tasks: join-control-plane.yml
   when:
-    - not kubeadm_cluster_exists
+    - kubeadm_state | default('present') != 'absent'
     - inventory_hostname in groups['kubeadm_control_plane']
     - inventory_hostname != groups['kubeadm_control_plane'][0]
     - control_plane_count | int > 1
@@ -52,6 +55,7 @@
 - name: Install CNI plugin
   include_tasks: install-cni.yml
   when:
+    - kubeadm_state | default('present') != 'absent'
     - not kubeadm_cluster_exists
     - inventory_hostname == groups['kubeadm_control_plane'][0]
   tags: [kubeadm, cni]
@@ -60,23 +64,27 @@
 - name: Get join command
   include_tasks: get-join-command.yml
   when:
+    - kubeadm_state | default('present') != 'absent'
     - inventory_hostname == groups['kubeadm_control_plane'][0]
   tags: [kubeadm, workers]
 
 - name: Join worker nodes
   include_tasks: join-workers.yml
   when:
+    - kubeadm_state | default('present') != 'absent'
     - inventory_hostname in groups['kubeadm_workers']
   tags: [kubeadm, workers]
 
 # Post-installation tasks
 - name: Configure kubectl access
   include_tasks: configure-kubectl.yml
+  when: kubeadm_state | default('present') != 'absent'
   tags: [kubeadm, kubectl]
 
 - name: Label nodes
   include_tasks: label-nodes.yml
   when:
+    - kubeadm_state | default('present') != 'absent'
     - inventory_hostname == groups['kubeadm_control_plane'][0]
   tags: [kubeadm, labels]
 
