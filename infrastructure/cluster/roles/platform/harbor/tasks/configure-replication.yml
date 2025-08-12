@@ -5,9 +5,10 @@
   package:
     name:
       - jq
-      - yq
     state: present
   become: true
+  
+  # Note: yq v4 is installed by foundation/prerequisites role
 
 - name: Create Harbor sync directory
   file:
@@ -73,11 +74,12 @@
 
 - name: Configure Harbor webhook for image scan completion
   uri:
-    url: "{{ harbor_url }}/api/v2.0/projects/library/webhook/policies"
+    url: "{{ harbor_url | regex_replace('^http:', 'https:') }}/api/v2.0/projects/library/webhook/policies"
     method: POST
     user: "{{ harbor_admin_user }}"
     password: "{{ harbor_admin_password }}"
     force_basic_auth: yes
+    validate_certs: false  # Harbor uses self-signed certificates
     body_format: json
     body:
       name: "image-scan-notification"
@@ -89,7 +91,9 @@
       event_types:
         - "SCANNING_COMPLETED"
       enabled: true
+    status_code: [200, 201, 409]  # 409 if webhook already exists
   when: harbor_enable_scan_webhooks | default(true)
+  ignore_errors: true  # Non-critical for core platform functionality
 
 - name: Create Kubernetes CronJob for Harbor sync
   k8s:
