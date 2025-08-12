@@ -1,4 +1,31 @@
 ---
+- name: Move static pod manifests (prevents restart)
+  shell: |
+    mkdir -p /root/k8s-manifests-backup
+    mv /etc/kubernetes/manifests/* /root/k8s-manifests-backup/ 2>/dev/null || true
+  become: true
+  ignore_errors: yes
+
+- name: Stop kubelet (stops managing static pods)
+  systemd:
+    name: kubelet
+    state: stopped
+    enabled: no
+  become: true
+  ignore_errors: yes
+
+- name: Stop container runtime (kills static pod containers and zombie processes)
+  systemd:
+    name: containerd
+    state: stopped
+  become: true
+  ignore_errors: yes
+
+- name: Wait for all containers to be killed
+  wait_for:
+    timeout: 5
+  delegate_to: localhost
+
 - name: Reset kubeadm cluster
   command: kubeadm reset --force
   become: true
@@ -14,17 +41,6 @@
     - /var/lib/etcd
     - /var/lib/kubelet
   become: true
-
-- name: Stop and disable services
-  systemd:
-    name: "{{ item }}"
-    state: stopped
-    enabled: no
-  loop:
-    - kubelet
-    - containerd
-  become: true
-  ignore_errors: yes
 
 - name: Unhold Kubernetes packages (Debian/Ubuntu)
   when: ansible_os_family == "Debian"
