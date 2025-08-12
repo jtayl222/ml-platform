@@ -1,0 +1,95 @@
+---
+- name: Check if AWS credentials are configured
+  command: "{{ aws_cli_path }} sts get-caller-identity"
+  register: aws_check
+  failed_when: false
+  changed_when: false
+  tags: [eks, aws-check]
+
+- name: Fail if AWS credentials not configured
+  fail:
+    msg: "AWS credentials not configured. Please run 'aws configure' or set AWS environment variables."
+  when: aws_check.rc != 0
+  tags: [eks, aws-check]
+
+- name: Install eksctl
+  include_tasks: install-eksctl.yml
+  tags: [eks, eksctl]
+
+- name: Check if EKS cluster exists
+  command: >
+    {{ aws_cli_path }} eks describe-cluster
+    --name {{ eks_cluster_name }}
+    --region {{ eks_region }}
+  register: cluster_check
+  failed_when: false
+  changed_when: false
+  tags: [eks, check]
+
+- name: Set cluster exists fact
+  set_fact:
+    eks_cluster_exists: "{{ cluster_check.rc == 0 }}"
+  tags: [eks, check]
+
+# Create cluster
+- name: Create EKS cluster
+  include_tasks: create-cluster.yml
+  when:
+    - not eks_cluster_exists
+    - eks_state | default('present') == 'present'
+  tags: [eks, create]
+
+# Configure cluster
+- name: Configure EKS cluster
+  include_tasks: configure-cluster.yml
+  when:
+    - eks_cluster_exists or not eks_cluster_exists
+    - eks_state | default('present') == 'present'
+  tags: [eks, configure]
+
+# Install add-ons
+- name: Install EKS add-ons
+  include_tasks: install-addons.yml
+  when:
+    - eks_state | default('present') == 'present'
+  tags: [eks, addons]
+
+# Configure IRSA (IAM Roles for Service Accounts)
+- name: Configure IRSA
+  include_tasks: configure-irsa.yml
+  when:
+    - eks_enable_irsa
+    - eks_state | default('present') == 'present'
+  tags: [eks, irsa]
+
+# Create node groups
+- name: Manage node groups
+  include_tasks: manage-node-groups.yml
+  when:
+    - eks_state | default('present') == 'present'
+  tags: [eks, nodes]
+
+# Configure kubectl
+- name: Update kubeconfig
+  command: >
+    {{ aws_cli_path }} eks update-kubeconfig
+    --name {{ eks_cluster_name }}
+    --region {{ eks_region }}
+    --kubeconfig {{ kubeconfig_path }}
+  when:
+    - eks_state | default('present') == 'present'
+  tags: [eks, kubeconfig]
+
+# Install AWS Load Balancer Controller
+- name: Install AWS Load Balancer Controller
+  include_tasks: install-alb-controller.yml
+  when:
+    - eks_state | default('present') == 'present'
+  tags: [eks, alb-controller]
+
+# Delete cluster
+- name: Delete EKS cluster
+  include_tasks: delete-cluster.yml
+  when:
+    - eks_state | default('present') == 'absent'
+  tags: [eks, delete]
