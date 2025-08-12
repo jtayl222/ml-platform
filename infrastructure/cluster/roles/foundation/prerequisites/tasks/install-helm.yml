@@ -1,0 +1,75 @@
+---
+# Install Helm v3 package manager for Kubernetes
+
+- name: Check if Helm v3 is already installed
+  shell: |
+    if command -v helm >/dev/null 2>&1; then
+      version=$(helm version --short 2>/dev/null | head -1)
+      case "$version" in
+        *"v3."*)
+          echo "Helm v3 already installed: $version"
+          exit 0
+          ;;
+        *)
+          echo "Wrong Helm version found: $version"
+          exit 1
+          ;;
+      esac
+    else
+      echo "Helm not found"
+      exit 1
+    fi
+  register: helm_check
+  failed_when: false
+  changed_when: false
+  delegate_to: localhost
+  run_once: true
+
+- name: Install Helm v3
+  block:
+    - name: Download Helm installer script
+      get_url:
+        url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+        dest: "{{ prerequisites_temp_path }}/get-helm-3.sh"
+        mode: '0755'
+        timeout: 30
+      delegate_to: localhost
+      run_once: true
+
+    - name: Install Helm v3 via installer script
+      shell: |
+        cd {{ prerequisites_temp_path }}
+        DESIRED_VERSION="{{ prerequisites_helm_version }}" ./get-helm-3.sh
+      become: true
+      delegate_to: localhost
+      run_once: true
+
+  when: helm_check.rc != 0
+
+- name: Verify Helm installation
+  shell: |
+    if command -v helm >/dev/null 2>&1; then
+      version=$(helm version --short 2>/dev/null | head -1)
+      case "$version" in
+        *"v3."*)
+          echo "✅ Helm v3 successfully installed: $version"
+          exit 0
+          ;;
+        *)
+          echo "❌ Wrong Helm version: $version"
+          exit 1
+          ;;
+      esac
+    else
+      echo "❌ Helm not found in PATH"
+      exit 1
+    fi
+  register: helm_verify
+  delegate_to: localhost
+  run_once: true
+
+- name: Display Helm installation result
+  debug:
+    msg: "{{ helm_verify.stdout_lines }}"
+  delegate_to: localhost
+  run_once: true

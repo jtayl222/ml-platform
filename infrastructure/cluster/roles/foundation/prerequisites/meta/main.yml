@@ -1,0 +1,35 @@
+---
+dependencies: []
+
+galaxy_info:
+  role_name: prerequisites
+  namespace: foundation
+  author: Platform Team
+  description: Install and configure essential platform prerequisites
+  company: MLOps Platform
+  license: MIT
+  min_ansible_version: "2.10"
+  
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+    - name: EL
+      versions:
+        - 8
+        - 9
+
+  galaxy_tags:
+    - kubernetes
+    - mlops
+    - platform
+    - prerequisites
+    - tools
+    - yq
+    - helm
+    - kubectl

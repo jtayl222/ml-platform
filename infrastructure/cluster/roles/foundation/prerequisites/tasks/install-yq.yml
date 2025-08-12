@@ -1,0 +1,171 @@
+---
+# Install yq v4 (Go-based YAML processor)
+# Critical for sealed secrets and other platform components
+
+- name: Create prerequisites temp directory
+  file:
+    path: "{{ prerequisites_temp_path }}"
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+  run_once: true
+
+- name: Check if yq v4 is already installed correctly
+  shell: |
+    if command -v yq >/dev/null 2>&1; then
+      version=$(yq --version 2>/dev/null | head -1)
+      if [[ "$version" == *"v4."* ]] && [[ "$version" == *"mikefarah/yq"* ]]; then
+        echo "yq v4 already installed: $version"
+        exit 0
+      else
+        echo "Wrong yq version found: $version"
+        exit 1
+      fi
+    else
+      echo "yq not found"
+      exit 1
+    fi
+  register: yq_check
+  failed_when: false
+  changed_when: false
+  delegate_to: localhost
+  run_once: true
+
+- name: Remove existing yq installations if wrong version
+  block:
+    - name: Remove snap yq if wrong version
+      snap:
+        name: yq
+        state: absent
+      become: true
+      failed_when: false
+      delegate_to: localhost
+      run_once: true
+
+    - name: Remove binary yq if wrong version
+      file:
+        path: "{{ prerequisites_tools_path }}/yq"
+        state: absent
+      become: true
+      delegate_to: localhost
+      run_once: true
+
+  when: yq_check.rc != 0
+
+- name: Install yq v4 via binary download (recommended)
+  block:
+    - name: Download yq v4 binary
+      get_url:
+        url: "https://github.com/mikefarah/yq/releases/download/{{ prerequisites_yq_version }}/yq_linux_amd64"
+        dest: "{{ prerequisites_temp_path }}/yq"
+        mode: '0755'
+        timeout: 30
+      delegate_to: localhost
+      run_once: true
+
+    - name: Install yq v4 binary to system path
+      copy:
+        src: "{{ prerequisites_temp_path }}/yq"
+        dest: "{{ prerequisites_tools_path }}/yq"
+        mode: '0755'
+        remote_src: true
+      become: true
+      delegate_to: localhost
+      run_once: true
+
+    - name: Create yq symlink for compatibility
+      file:
+        src: "{{ prerequisites_tools_path }}/yq"
+        dest: "/usr/bin/yq"
+        state: link
+        force: true
+      become: true
+      delegate_to: localhost
+      run_once: true
+      ignore_errors: true  # Might not have permissions
+
+  when: 
+    - yq_check.rc != 0
+    - prerequisites_yq_install_method == "binary"
+
+- name: Install yq v4 via snap (alternative method)
+  snap:
+    name: yq
+    state: present
+  become: true
+  delegate_to: localhost
+  run_once: true
+  when: 
+    - yq_check.rc != 0
+    - prerequisites_yq_install_method == "snap"
+
+- name: Verify yq v4 installation
+  shell: |
+    # Use POSIX-compliant shell syntax
+    # Check multiple possible yq locations
+    YQ_CMD=""
+    for yq_path in yq /usr/local/bin/yq /snap/bin/yq /usr/bin/yq; do
+      if command -v "$yq_path" >/dev/null 2>&1; then
+        YQ_CMD="$yq_path"
+        break
+      fi
+    done
+    
+    if [ -z "$YQ_CMD" ]; then
+      echo "❌ yq not found in any standard location"
+      exit 1
+    fi
+    
+    # Check version using POSIX-compliant syntax
+    version=$($YQ_CMD --version 2>/dev/null | head -1)
+    # Check for both "mikefarah/yq" and "v4." in the version string
+    case "$version" in
+      *"mikefarah/yq"*)
+        case "$version" in
+          *"version v4."*)
+            echo "✅ yq v4 successfully installed: $version"
+            # Test basic functionality
+            echo "test: value" | $YQ_CMD '.test' >/dev/null 2>&1 && echo "✅ yq functionality verified"
+            echo "YQ_PATH=$YQ_CMD"  # Export the working path
+            exit 0
+            ;;
+          *)
+            echo "❌ Wrong yq version (not v4): $version"
+            echo "Expected: mikefarah/yq v4.x"
+            exit 1
+            ;;
+        esac
+        ;;
+      *)
+        echo "❌ Wrong yq source (not mikefarah): $version"
+        echo "Expected: mikefarah/yq v4.x"
+        exit 1
+        ;;
+    esac
+  register: yq_verify
+  delegate_to: localhost
+  run_once: true
+
+- name: Extract yq path for other roles
+  set_fact:
+    platform_yq_path: "{{ yq_verify.stdout_lines | select('match', '^YQ_PATH=') | first | regex_replace('^YQ_PATH=', '') }}"
+  when: 
+    - yq_verify.rc == 0
+    - yq_verify.stdout_lines | select('match', '^YQ_PATH=') | list | length > 0
+  delegate_to: localhost
+  run_once: true
+
+- name: Display yq installation result
+  debug:
+    msg: "{{ yq_verify.stdout_lines }}"
+  delegate_to: localhost
+  run_once: true
+
+- name: Set yq path as global fact for all hosts
+  set_fact:
+    platform_yq_path: "{{ platform_yq_path | default('/snap/bin/yq') }}"
+  delegate_to: "{{ item }}"
+  delegate_facts: true
+  loop: "{{ groups['all'] }}"
+  when: platform_yq_path is defined
+  run_once: true

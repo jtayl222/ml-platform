@@ -1,0 +1,93 @@
+---
+# Platform Prerequisites Installation
+# Ensures all essential tools are properly installed before platform deployment
+
+- name: Platform Prerequisites Setup
+  block:
+    # ===== SYSTEM CLEANUP =====
+    - name: Remove conflicting packages
+      package:
+        name: "{{ prerequisites_remove_conflicting_packages }}"
+        state: absent
+      become: true
+      ignore_errors: true  # Package might not be installed
+      tags: [prerequisites, cleanup]
+
+    # ===== SYSTEM PACKAGES =====
+    - name: Install essential system packages
+      package:
+        name: "{{ prerequisites_system_packages }}"
+        state: present
+        update_cache: true
+      become: true
+      tags: [prerequisites, packages]
+
+    # ===== YQ v4 INSTALLATION =====
+    - name: Install yq v4 (YAML processor)
+      include_tasks: install-yq.yml
+      when: prerequisites_install_yq | default(true)
+      tags: [prerequisites, yq]
+
+    # ===== HELM INSTALLATION =====
+    - name: Install Helm v3
+      include_tasks: install-helm.yml
+      when: prerequisites_install_helm | default(true)
+      tags: [prerequisites, helm]
+
+    # ===== KUBECTL INSTALLATION =====
+    - name: Install kubectl
+      include_tasks: install-kubectl.yml
+      when: prerequisites_install_kubectl | default(true)
+      tags: [prerequisites, kubectl]
+
+    # ===== PYTHON DEPENDENCIES =====
+    - name: Install Python packages for Ansible (system packages)
+      package:
+        name:
+          - python3-kubernetes
+          - python3-yaml
+          - python3-requests
+        state: present
+      become: true
+      delegate_to: localhost
+      run_once: true
+      ignore_errors: true  # Some distributions might not have these packages
+      tags: [prerequisites, python]
+
+    - name: Install Python packages via pip (fallback with break-system-packages)
+      pip:
+        name: "{{ prerequisites_python_packages }}"
+        state: present
+        extra_args: "--user --break-system-packages"
+      delegate_to: localhost
+      run_once: true
+      when: ansible_facts.python.version.major >= 3 and ansible_facts.python.version.minor >= 11
+      ignore_errors: true  # Fallback option
+      tags: [prerequisites, python]
+
+    # ===== VERIFICATION =====
+    - name: Verify essential tools installation
+      include_tasks: verify-tools.yml
+      tags: [prerequisites, verify]
+
+  rescue:
+    - name: Handle prerequisites installation failure
+      debug:
+        msg:
+          - "❌ Platform prerequisites installation failed"
+          - "🔍 Common issues:"
+          - "- Network connectivity problems"
+          - "- Package manager conflicts"
+          - "- Permission issues"
+          - "- Conflicting tool versions"
+          - ""
+          - "🛠️ Troubleshooting:"
+          - "- Check internet connectivity"
+          - "- Verify sudo permissions"
+          - "- Review package manager logs"
+
+    - name: Fail with helpful message
+      fail:
+        msg: "Platform prerequisites installation failed. Platform deployment cannot continue without essential tools."
+
+  tags: [prerequisites, foundation]
