@@ -90,6 +90,7 @@
             - minio
             - mlflow
             - monitoring
+            - harbor
           register: namespace_creation
 
         - name: Display created namespaces
