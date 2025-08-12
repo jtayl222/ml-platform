@@ -1,0 +1,171 @@
+---
+# MLOps Platform Verification Tests
+# Industry standard: Comprehensive automated testing
+
+- name: Platform Verification Tests
+  block:
+    # === CLUSTER HEALTH ===
+    - name: Verify cluster nodes are ready
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Node
+        kubeconfig: "{{ kubeconfig_path }}"
+      register: cluster_nodes
+      tags: [test, cluster]
+
+    - name: Check node readiness
+      assert:
+        that:
+          - cluster_nodes.resources | length >= resource_thresholds.min_nodes
+          - cluster_nodes.resources | selectattr('status.conditions', 'defined') | selectattr('status.conditions', 'selectattr', 'type', 'equalto', 'Ready') | selectattr('status.conditions', 'selectattr', 'status', 'equalto', 'True') | list | length == cluster_nodes.resources | length
+        fail_msg: "Cluster nodes are not all ready"
+        success_msg: "All {{ cluster_nodes.resources | length }} cluster nodes are ready"
+      tags: [test, cluster]
+
+    # === CRITICAL SERVICES ===
+    - name: Verify critical namespace pods
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: "{{ item }}"
+        kubeconfig: "{{ kubeconfig_path }}"
+        field_selectors:
+          - status.phase=Running
+      register: namespace_pods
+      loop: "{{ critical_namespaces }}"
+      tags: [test, services]
+
+    - name: Check critical service health
+      assert:
+        that:
+          - namespace_pods.results[index].resources | length > 0
+        fail_msg: "No running pods in critical namespace: {{ item }}"
+        success_msg: "{{ namespace_pods.results[index].resources | length }} pods running in {{ item }}"
+      loop: "{{ critical_namespaces }}"
+      loop_control:
+        index_var: index
+      tags: [test, services]
+
+    # === SERVICE ENDPOINTS ===
+    - name: Test service endpoints
+      uri:
+        url: "{{ item.value.url }}{{ item.value.health_path | default('') }}"
+        method: GET
+        status_code: "{{ item.value.expected_status }}"
+        timeout: 10
+      register: endpoint_tests
+      loop: "{{ test_endpoints | dict2items }}"
+      ignore_errors: true
+      tags: [test, endpoints]
+
+    - name: Test fallback endpoints for failed services
+      uri:
+        url: "{{ item.item.value.fallback }}{{ item.item.value.health_path | default('') }}"
+        method: GET
+        status_code: "{{ item.item.value.expected_status }}"
+        timeout: 10
+      loop: "{{ endpoint_tests.results }}"
+      when: item.failed | default(false)
+      ignore_errors: true
+      tags: [test, endpoints]
+
+    # === STORAGE VERIFICATION ===
+    - name: Verify persistent volumes
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: PersistentVolume
+        kubeconfig: "{{ kubeconfig_path }}"
+      register: persistent_volumes
+      tags: [test, storage]
+
+    - name: Check storage availability
+      assert:
+        that:
+          - persistent_volumes.resources | length > 0
+          - persistent_volumes.resources | selectattr('status.phase', 'equalto', 'Available') | list | length >= 0
+        fail_msg: "Insufficient storage available"
+        success_msg: "{{ persistent_volumes.resources | length }} PVs available"
+      tags: [test, storage]
+
+    # === ML WORKFLOW TEST ===
+    - name: Test MLflow API connectivity
+      uri:
+        url: "{{ test_endpoints.mlflow.url }}/api/2.0/mlflow/experiments/list"
+        method: GET
+        status_code: 200
+        timeout: 15
+      register: mlflow_api_test
+      ignore_errors: true
+      tags: [test, mlops]
+
+    - name: Create test MLflow experiment
+      uri:
+        url: "{{ test_endpoints.mlflow.url }}/api/2.0/mlflow/experiments/create"
+        method: POST
+        body_format: json
+        body:
+          name: "platform-verification-test-{{ ansible_date_time.epoch }}"
+        status_code: 200
+        timeout: 15
+      when: not mlflow_api_test.failed | default(false)
+      ignore_errors: true
+      tags: [test, mlops]
+
+    # === GENERATE REPORT ===
+    - name: Generate test report
+      debug:
+        msg:
+          - "🎯 MLOps Platform Verification Report"
+          - "====================================="
+          - ""
+          - "✅ Cluster Health:"
+          - "   - Nodes: {{ cluster_nodes.resources | length }} ready"
+          - "   - Total Pods: {{ ansible_play_hosts | length }} hosts"
+          - ""
+          - "✅ Critical Services:"
+          - "{% for ns in critical_namespaces %}"
+          - "   - {{ ns }}: {{ namespace_pods.results[loop.index0].resources | length }} pods running"
+          - "{% endfor %}"
+          - ""
+          - "🌐 Service Endpoints:"
+          - "{% for endpoint in endpoint_tests.results %}"
+          - "   - {{ endpoint.item.key }}: {{ 'PASS' if not endpoint.failed else 'FAIL' }}"
+          - "{% endfor %}"
+          - ""
+          - "🗄️ Storage:"
+          - "   - Persistent Volumes: {{ persistent_volumes.resources | length }}"
+          - ""
+          - "🤖 MLOps Workflow:"
+          - "   - MLflow API: {{ 'PASS' if not mlflow_api_test.failed else 'FAIL' }}"
+          - ""
+          - "🎉 Platform Status: {{ 'HEALTHY ✅' if (cluster_nodes.resources | length >= resource_thresholds.min_nodes and not mlflow_api_test.failed) else 'NEEDS ATTENTION ⚠️' }}"
+      tags: [test, report]
+
+  rescue:
+    - name: Handle test failures
+      debug:
+        msg:
+          - "❌ Platform verification failed"
+          - "🔍 Check the following:"
+          - "- kubectl get pods --all-namespaces"
+          - "- kubectl get nodes"
+          - "- kubectl get pv,pvc"
+          - "- Service logs: kubectl logs -n <namespace> <pod-name>"
+
+    - name: Fail with test results
+      fail:
+        msg: "Platform verification tests failed. Check logs above for details."
+
+  always:
+    - name: Cleanup test resources
+      kubernetes.core.k8s:
+        state: absent
+        api_version: v1
+        kind: ConfigMap
+        name: "platform-test-{{ ansible_date_time.epoch }}"
+        namespace: default
+        kubeconfig: "{{ kubeconfig_path }}"
+      ignore_errors: true
+      tags: [test, cleanup]
+
+  tags: [test, verification]

@@ -1,0 +1,47 @@
+# Kubeadm cluster inventory example  
+# Copy this file to hosts-kubeadm and customize for your environment
+
+[all]
+master-1        ansible_host=10.0.1.10  ansible_user=your_user
+master-2        ansible_host=10.0.1.11  ansible_user=your_user  
+master-3        ansible_host=10.0.1.12  ansible_user=your_user
+worker-1        ansible_host=10.0.1.20  ansible_user=your_user
+worker-2        ansible_host=10.0.1.21  ansible_user=your_user
+nfs-server      ansible_host=10.0.1.30  ansible_user=your_user
+localhost       ansible_connection=local
+
+[all:vars]
+kubernetes_platform=kubeadm
+# REMOVE THIS IN PRODUCTION - configure proper SSH keys instead
+ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+
+# Define control plane nodes (HA setup with 3 masters)
+[kubeadm_control_plane]
+master-1
+master-2
+master-3
+
+# Define worker nodes
+[kubeadm_workers]
+worker-1
+worker-2
+
+# Ansible controller
+[ansible_controller]
+localhost
+
+[nfs_server]
+nfs-server
+
+# NFS clients (all nodes that need shared storage)
+[nfs_clients]
+master-1
+master-2
+master-3
+worker-1
+worker-2
+
+# Platform group - required for platform detection
+[kubeadm:children]
+kubeadm_control_plane
+kubeadm_workers

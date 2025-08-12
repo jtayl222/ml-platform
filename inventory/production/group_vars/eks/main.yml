@@ -1,0 +1,72 @@
+---
+# EKS-specific configuration
+
+# Platform identifier
+cluster_platform: "eks"
+
+# AWS configuration
+aws_region: "us-west-2"
+aws_profile: "{{ lookup('env', 'AWS_PROFILE') | default('default') }}"
+
+# EKS cluster configuration
+eks_cluster_name: "mlops-platform-eks"
+eks_cluster_version: "1.31"
+
+# Network configuration (EKS manages these)
+pod_network_cidr: "auto"  # Managed by AWS VPC CNI
+service_cidr: "auto"  # Managed by EKS
+
+# Control plane access (for compatibility with other roles)
+control_plane_host: "eks-api-endpoint"  # Will be replaced with actual endpoint
+control_plane_ip: "eks"  # Placeholder - actual endpoint is DNS-based
+
+# Node configuration
+eks_node_instance_types:
+  - "t3.large"
+  - "t3.xlarge"
+eks_node_disk_size: 100
+eks_min_nodes: 2
+eks_max_nodes: 10
+eks_desired_nodes: 4
+
+# GPU node group (optional)
+eks_enable_gpu_nodes: false
+eks_gpu_instance_types:
+  - "g4dn.xlarge"
+eks_gpu_min_nodes: 0
+eks_gpu_max_nodes: 5
+
+# Add-ons versions (use 'latest' or specific versions)
+eks_addon_versions:
+  vpc_cni: "latest"
+  coredns: "latest"
+  kube_proxy: "latest"
+  ebs_csi_driver: "latest"
+  efs_csi_driver: "latest"
+
+# Storage configuration
+storage_class_default: "gp3"
+enable_efs: true
+
+# Load balancer configuration
+use_nlb_for_services: true  # Use NLB instead of CLB
+
+# IAM configuration
+eks_enable_irsa: true
+eks_oidc_provider_enabled: true
+
+# Logging
+eks_cluster_logging:
+  - "api"
+  - "audit"
+  - "authenticator"
+
+# Cost optimization
+eks_enable_spot_instances: false
+eks_spot_allocation_strategy: "capacity-optimized"
+eks_on_demand_percentage: 70
+
+# Security
+eks_enable_secrets_encryption: true
+eks_enable_private_endpoint: false
+eks_enable_public_endpoint: true

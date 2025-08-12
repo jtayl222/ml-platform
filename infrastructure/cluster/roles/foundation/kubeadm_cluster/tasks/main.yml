@@ -1,0 +1,95 @@
+---
+- name: Include OS-specific variables
+  include_vars: "{{ ansible_os_family | lower }}.yml"
+  tags: [kubeadm, vars]
+
+- name: Check if admin.conf exists
+  stat:
+    path: /etc/kubernetes/admin.conf
+  register: admin_conf_check
+  delegate_to: "{{ groups['kubeadm_control_plane'][0] }}"
+  tags: [kubeadm, check]
+
+- name: Check cluster state if admin.conf exists
+  command: kubectl --kubeconfig=/etc/kubernetes/admin.conf cluster-info
+  register: cluster_check
+  failed_when: false
+  changed_when: false
+  delegate_to: "{{ groups['kubeadm_control_plane'][0] }}"
+  when: admin_conf_check.stat.exists
+  tags: [kubeadm, check]
+
+- name: Set cluster exists fact
+  set_fact:
+    kubeadm_cluster_exists: "{{ admin_conf_check.stat.exists and (cluster_check.rc | default(1)) == 0 }}"
+  tags: [kubeadm, check]
+
+# Prerequisites
+- name: Install prerequisites
+  include_tasks: prerequisites.yml
+  when: 
+    - kubeadm_state | default('present') != 'absent'
+    - not kubeadm_cluster_exists
+  tags: [kubeadm, prerequisites]
+
+# Initialize first control plane node
+- name: Initialize control plane
+  include_tasks: init-control-plane.yml
+  when:
+    - kubeadm_state | default('present') != 'absent'
+    - not kubeadm_cluster_exists
+    - inventory_hostname == groups['kubeadm_control_plane'][0]
+  tags: [kubeadm, control-plane]
+
+# Join additional control plane nodes (for HA)
+- name: Join additional control plane nodes
+  include_tasks: join-control-plane.yml
+  when:
+    - kubeadm_state | default('present') != 'absent'
+    - inventory_hostname in groups['kubeadm_control_plane']
+    - inventory_hostname != groups['kubeadm_control_plane'][0]
+    - control_plane_count | int > 1
+  tags: [kubeadm, control-plane, ha]
+
+# Install CNI plugin
+- name: Install CNI plugin
+  include_tasks: install-cni.yml
+  when:
+    - kubeadm_state | default('present') != 'absent'
+    - not kubeadm_cluster_exists
+    - inventory_hostname == groups['kubeadm_control_plane'][0]
+  tags: [kubeadm, cni]
+
+# Join worker nodes
+- name: Get join command
+  include_tasks: get-join-command.yml
+  when:
+    - kubeadm_state | default('present') != 'absent'
+    - inventory_hostname == groups['kubeadm_control_plane'][0]
+  tags: [kubeadm, workers]
+
+- name: Join worker nodes
+  include_tasks: join-workers.yml
+  when:
+    - kubeadm_state | default('present') != 'absent'
+    - inventory_hostname in groups['kubeadm_workers']
+  tags: [kubeadm, workers]
+
+# Post-installation tasks
+- name: Configure kubectl access
+  include_tasks: configure-kubectl.yml
+  when: kubeadm_state | default('present') != 'absent'
+  tags: [kubeadm, kubectl]
+
+- name: Label nodes
+  include_tasks: label-nodes.yml
+  when:
+    - kubeadm_state | default('present') != 'absent'
+    - inventory_hostname == groups['kubeadm_control_plane'][0]
+  tags: [kubeadm, labels]
+
+# Cluster removal
+- name: Remove cluster
+  include_tasks: remove-cluster.yml
+  when: kubeadm_state | default('present') == 'absent'
+  tags: [kubeadm, remove]

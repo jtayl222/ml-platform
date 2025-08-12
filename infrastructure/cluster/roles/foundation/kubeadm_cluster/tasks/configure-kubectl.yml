@@ -1,0 +1,31 @@
+---
+- name: Ensure .kube directory exists
+  file:
+    path: "{{ ansible_env.HOME }}/.kube"
+    state: directory
+    mode: '0755'
+
+- name: Check if admin.conf exists
+  stat:
+    path: /etc/kubernetes/admin.conf
+  register: admin_conf_stat
+  when: inventory_hostname in groups['kubeadm_control_plane']
+
+- name: Copy admin.conf to user's kube config
+  copy:
+    src: /etc/kubernetes/admin.conf
+    dest: "{{ ansible_env.HOME }}/.kube/config"
+    remote_src: yes
+    owner: "{{ ansible_user }}"
+    mode: '0600'
+  become: true
+  when: 
+    - inventory_hostname in groups['kubeadm_control_plane']
+    - admin_conf_stat.stat.exists | default(false)
+
+- name: Set KUBECONFIG environment variable
+  lineinfile:
+    path: "{{ ansible_env.HOME }}/.bashrc"
+    line: "export KUBECONFIG={{ ansible_env.HOME }}/.kube/config"
+    create: yes
+  when: inventory_hostname in groups['kubeadm_control_plane']

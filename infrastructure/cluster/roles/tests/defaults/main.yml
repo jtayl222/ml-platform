@@ -1,0 +1,56 @@
+---
+# Platform testing configuration
+
+# Test timeout settings
+test_timeout: 300
+test_retry_count: 3
+test_retry_delay: 10
+
+# Service endpoints to test
+test_endpoints:
+  mlflow:
+    url: "http://192.168.1.201:5000"
+    fallback: "http://{{ control_plane_ip }}:30800"
+    health_path: "/health"
+    expected_status: 200
+    
+  harbor:
+    url: "http://192.168.1.210"
+    fallback: "http://{{ control_plane_ip }}:30880"
+    health_path: "/api/v2.0/health"
+    expected_status: 200
+    
+  grafana:
+    url: "http://192.168.1.207:3000"
+    fallback: "http://{{ control_plane_ip }}:30300"
+    health_path: "/api/health"
+    expected_status: 200
+    
+  kiali:
+    url: "http://192.168.1.211:20001"
+    fallback: "http://{{ control_plane_ip }}:32001"
+    health_path: "/kiali/api/status"
+    expected_status: 200
+
+# Critical namespaces that must have running pods
+critical_namespaces:
+  - mlflow
+  - seldon-system
+  - monitoring
+  - argocd
+  - sealed-secrets
+  - istio-system
+
+# Optional namespaces
+optional_namespaces:
+  - harbor
+  - jupyterhub
+  - argowf
+  - istio-gateway
+
+# Resource thresholds
+resource_thresholds:
+  min_nodes: 3
+  min_storage_gb: 100
+  max_cpu_usage: 80
+  max_memory_usage: 80

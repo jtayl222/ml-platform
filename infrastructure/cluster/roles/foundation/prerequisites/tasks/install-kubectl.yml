@@ -1,0 +1,77 @@
+---
+# Install kubectl Kubernetes CLI tool
+
+- name: Check if kubectl is already installed
+  shell: |
+    if command -v kubectl >/dev/null 2>&1; then
+      version=$(kubectl version --client 2>/dev/null | head -1 || echo "kubectl")
+      echo "kubectl already installed: $version"
+      exit 0
+    else
+      echo "kubectl not found"
+      exit 1
+    fi
+  register: kubectl_check
+  failed_when: false
+  changed_when: false
+  delegate_to: localhost
+  run_once: true
+
+- name: Install kubectl
+  block:
+    - name: Get latest kubectl version
+      uri:
+        url: https://dl.k8s.io/release/stable.txt
+        return_content: yes
+        timeout: 10
+      register: kubectl_latest_version
+      delegate_to: localhost
+      run_once: true
+      when: prerequisites_kubectl_version == "latest"
+
+    - name: Set kubectl version to install
+      set_fact:
+        kubectl_version: "{{ kubectl_latest_version.content.strip() if prerequisites_kubectl_version == 'latest' else prerequisites_kubectl_version }}"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Download kubectl binary
+      get_url:
+        url: "https://dl.k8s.io/release/{{ kubectl_version }}/bin/linux/amd64/kubectl"
+        dest: "{{ prerequisites_temp_path }}/kubectl"
+        mode: '0755'
+        timeout: 30
+      delegate_to: localhost
+      run_once: true
+
+    - name: Install kubectl binary to system path
+      copy:
+        src: "{{ prerequisites_temp_path }}/kubectl"
+        dest: "{{ prerequisites_tools_path }}/kubectl"
+        mode: '0755'
+        remote_src: true
+      become: true
+      delegate_to: localhost
+      run_once: true
+
+  when: kubectl_check.rc != 0
+
+- name: Verify kubectl installation
+  shell: |
+    if command -v kubectl >/dev/null 2>&1; then
+      version=$(kubectl version --client 2>/dev/null | head -1 || echo "kubectl available")
+      echo "✅ kubectl successfully installed: $version"
+      exit 0
+    else
+      echo "❌ kubectl not found in PATH"
+      exit 1
+    fi
+  register: kubectl_verify
+  delegate_to: localhost
+  run_once: true
+
+- name: Display kubectl installation result
+  debug:
+    msg: "{{ kubectl_verify.stdout_lines }}"
+  delegate_to: localhost
+  run_once: true

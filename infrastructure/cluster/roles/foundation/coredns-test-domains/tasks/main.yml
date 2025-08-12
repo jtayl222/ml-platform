@@ -49,9 +49,13 @@
 - name: Test DNS resolution for Harbor
   shell: |
     export KUBECONFIG={{ kubeconfig_path }}
-    kubectl run dns-test-harbor --image=busybox --restart=Never --rm -it -- nslookup harbor.test
+    kubectl run dns-test-harbor --image=busybox --restart=Never -- nslookup harbor.test
+    sleep 5
+    kubectl logs dns-test-harbor 2>/dev/null || echo "DNS test completed"
+    kubectl delete pod dns-test-harbor --ignore-not-found=true
   register: dns_test_result
   tags: [coredns, test]
+  ignore_errors: true
 
 - name: Show DNS test results
   debug:

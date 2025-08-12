@@ -1,0 +1,16 @@
+---
+- name: Generate kubeadm join command
+  command: kubeadm token create --print-join-command
+  register: kubeadm_join_command_result
+  become: true
+
+- name: Save join command
+  set_fact:
+    kubeadm_join_command: "{{ kubeadm_join_command_result.stdout }}"
+
+- name: Create join command file
+  copy:
+    content: "{{ kubeadm_join_command }}"
+    dest: /tmp/kubeadm_join_command.sh
+    mode: '0755'
+  become: true

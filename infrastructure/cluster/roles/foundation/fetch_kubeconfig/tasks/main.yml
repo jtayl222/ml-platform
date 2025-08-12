@@ -7,25 +7,44 @@
     mode: "0700"
   delegate_to: localhost
 
-- name: Check if k3s.yaml exists on control plane
+- name: Set kubeconfig source path based on platform
+  set_fact:
+    kubeconfig_source_path: >-
+      {%- if kubernetes_platform == 'k3s' -%}
+      /etc/rancher/k3s/k3s.yaml
+      {%- elif kubernetes_platform == 'kubeadm' -%}
+      /etc/kubernetes/admin.conf
+      {%- elif kubernetes_platform == 'eks' -%}
+      ~/.kube/config
+      {%- else -%}
+      /etc/kubernetes/admin.conf
+      {%- endif -%}
+
+- name: Debug - Show resolved variables
+  debug:
+    msg:
+      - "kubernetes_platform: {{ kubernetes_platform | default('undefined') }}"
+      - "control_plane_host: {{ control_plane_host | default('undefined') }}"
+      - "kubeconfig_source_path: {{ kubeconfig_source_path }}"
+      - "kubeconfig_path: {{ kubeconfig_path }}"
+
+- name: Check if kubeconfig exists on control plane
   ansible.builtin.stat:
-    path: "{{ k3s_server_path }}"
-  register: k3s_stat
+    path: "{{ kubeconfig_source_path }}"
+  register: kubeconfig_stat
   delegate_to: "{{ control_plane_host }}"
   become: true
 
 - name: Copy kubeconfig from control plane via SSH
   ansible.builtin.shell: |
     mkdir -p "{{ kubeconfig_dir }}"
-    ssh {{ hostvars[control_plane_host]['ansible_host'] }} "sudo cat {{ k3s_server_path }}" > "{{ kubeconfig_path }}"
+    ssh {{ hostvars[control_plane_host]['ansible_host'] }} "sudo cat {{ kubeconfig_source_path }}" > "{{ kubeconfig_path }}"
     chmod 600 "{{ kubeconfig_path }}"
   delegate_to: localhost
   become: false
   register: direct_copy
   ignore_errors: true
   changed_when: direct_copy.rc == 0
-  when:
-    - k3s_stat.stat.exists | default(false)
 
 - name: Update kubeconfig to use external IP
   ansible.builtin.replace:
@@ -33,14 +52,15 @@
     regexp: 'https://127.0.0.1:6443'
     replace: 'https://{{ hostvars[control_plane_host].ansible_host }}:6443'
   delegate_to: localhost
-  when:
-    - k3s_stat.stat.exists | default(false)
-    - direct_copy.rc == 0
+  when: direct_copy.rc == 0
 
-- name: Delete local kubeconfig when uninstalling K3s
+- name: Delete local kubeconfig when uninstalling cluster
   ansible.builtin.file:
     path: "{{ kubeconfig_path }}"
     state: absent
   delegate_to: localhost
   become: false
-  when: k3s_state == 'absent'
+  when: >
+    (kubernetes_platform == 'k3s' and k3s_state is defined and k3s_state == 'absent') or
+    (kubernetes_platform == 'kubeadm' and kubeadm_state is defined and kubeadm_state == 'absent') or
+    (kubernetes_platform == 'eks' and eks_state is defined and eks_state == 'absent')

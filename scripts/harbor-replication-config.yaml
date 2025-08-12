@@ -1,0 +1,409 @@
+# Harbor Replication Configuration
+# This file defines all external images to be mirrored to Harbor registry
+# Used by harbor-sync.sh script for automated image mirroring and caching
+#
+# Strategy:
+# - Tier 1: Mission-critical components (6-hour sync)
+# - Tier 2: Platform infrastructure (daily sync) 
+# - Tier 3: Development and optional tools (weekly sync)
+# - Tier 4: GPU and specialized workloads (on-demand)
+
+# Tier 1: Critical Runtime Dependencies (sync every 6 hours)
+# These images are required for core ML model serving and cannot have downtime
+tier1:
+  schedule: "0 */6 * * *"
+  priority: "critical"
+  retry_count: 5
+  images:
+    # Seldon Core v2 Model Serving Stack
+    - source: docker.io/seldonio/mlserver
+      project: "library"
+      tags:
+        - "1.6.1"
+        - "1.6.0" 
+        - "1.5.6"
+        - "latest"
+      vulnerability_scan: true
+    
+    - source: docker.io/seldonio/seldon-agent
+      project: "library"
+      tags:
+        - "2.9.1"
+        - "2.9.0"
+        - "2.8.5"
+        - "latest"
+      vulnerability_scan: true
+        
+    - source: docker.io/seldonio/seldon-scheduler
+      project: "library"
+      tags:
+        - "2.9.1"
+        - "2.9.0"
+        - "latest"
+      vulnerability_scan: true
+    
+    # NVIDIA Triton Inference Server (GPU inference)
+    - source: nvcr.io/nvidia/tritonserver
+      project: "ml-models"
+      tags:
+        - "24.04-py3"
+        - "24.03-py3"
+        - "23.12-py3"
+      vulnerability_scan: true
+    
+    # MinIO Client for S3 operations
+    - source: docker.io/minio/mc
+      project: "library"
+      tags:
+        - "latest"
+        - "RELEASE.2024-11-17T19-35-25Z"
+        - "RELEASE.2024-10-02T08-17-07Z"
+      vulnerability_scan: true
+      
+    # MLflow Model Serving
+    - source: docker.io/python
+      project: "library"
+      tags:
+        - "3.11-slim"
+        - "3.10-slim"
+        - "3.9-slim"
+      vulnerability_scan: true
+
+# Tier 2: Platform Infrastructure (sync daily)  
+# Supporting services for the MLOps platform
+tier2:
+  schedule: "0 2 * * *"
+  priority: "high"
+  retry_count: 3
+  images:
+    # Monitoring and Observability Stack
+    - source: docker.io/prom/prometheus
+      project: "library"
+      tags:
+        - "v2.48.1"
+        - "v2.47.2"
+        - "latest"
+      vulnerability_scan: true
+      
+    - source: docker.io/grafana/grafana
+      project: "library"
+      tags:
+        - "10.2.3"
+        - "10.1.5"
+        - "latest"
+      vulnerability_scan: true
+      
+    - source: docker.io/prom/pushgateway
+      project: "library"
+      tags:
+        - "v1.7.0"
+        - "v1.6.2"
+        - "latest"
+      vulnerability_scan: true
+      
+    # Argo Workflows Stack
+    - source: quay.io/argoproj/workflow-controller
+      project: "library"
+      tags:
+        - "v3.5.2"
+        - "v3.4.15"
+        - "latest"
+      vulnerability_scan: true
+      
+    - source: quay.io/argoproj/argoexec
+      project: "library"
+      tags:
+        - "v3.5.2"
+        - "v3.4.15"
+        - "latest"
+      vulnerability_scan: true
+      
+    # Database Infrastructure
+    - source: docker.io/library/postgres
+      project: "library"
+      tags:
+        - "16.1-alpine"
+        - "15.5-alpine"
+        - "14.10-alpine"
+      vulnerability_scan: true
+      
+    - source: docker.io/library/redis
+      project: "library" 
+      tags:
+        - "7.2-alpine"
+        - "7.0-alpine"
+        - "6.2-alpine"
+      vulnerability_scan: true
+      
+    # MinIO Object Storage
+    - source: docker.io/minio/minio
+      project: "library"
+      tags:
+        - "RELEASE.2024-11-07T00-52-20Z"
+        - "RELEASE.2024-10-02T17-50-41Z"
+        - "latest"
+      vulnerability_scan: true
+      
+    # Istio Service Mesh Components
+    - source: docker.io/istio/pilot
+      project: "library"
+      tags:
+        - "1.27.1"
+        - "1.27.0"
+        - "1.26.7"
+      vulnerability_scan: true
+      
+    - source: docker.io/istio/proxyv2
+      project: "library"
+      tags:
+        - "1.27.1"
+        - "1.27.0"
+        - "1.26.7"
+      vulnerability_scan: true
+      
+    # Kiali Observability
+    - source: quay.io/kiali/kiali
+      project: "library"
+      tags:
+        - "v1.85.0"
+        - "v1.84.0"
+        - "latest"
+      vulnerability_scan: true
+      
+    # Jaeger Distributed Tracing
+    - source: docker.io/jaegertracing/jaeger-query
+      project: "library"
+      tags:
+        - "1.54"
+        - "1.53"
+        - "latest"
+      vulnerability_scan: true
+      
+    - source: docker.io/jaegertracing/jaeger-collector
+      project: "library"
+      tags:
+        - "1.54"
+        - "1.53" 
+        - "latest"
+      vulnerability_scan: true
+        
+    # Networking and Debugging utilities
+    - source: docker.io/nicolaka/netshoot
+      project: "library"
+      tags:
+        - "latest"
+        - "v0.11"
+        - "v0.10"
+      vulnerability_scan: false
+      
+    # Base images for workflows and init containers
+    - source: docker.io/library/busybox
+      project: "library"
+      tags:
+        - "1.36"
+        - "1.35"
+        - "latest"
+      vulnerability_scan: true
+      
+    - source: docker.io/library/alpine
+      project: "library"
+      tags:
+        - "3.19"
+        - "3.18" 
+        - "latest"
+      vulnerability_scan: true
+
+# Tier 3: Development and Data Science Tools (sync weekly)
+# Non-critical images for development environments
+tier3:
+  schedule: "0 3 * * 0"  # Sunday 3 AM
+  priority: "normal"
+  retry_count: 2
+  images:
+    # JupyterHub Data Science Notebooks
+    - source: docker.io/jupyter/datascience-notebook
+      project: "ml-tools"
+      tags:
+        - "python-3.11"
+        - "python-3.10"
+        - "latest"
+      vulnerability_scan: true
+    
+    - source: docker.io/jupyter/scipy-notebook
+      project: "ml-tools"
+      tags:
+        - "python-3.11"
+        - "python-3.10"
+        - "latest"
+      vulnerability_scan: true
+    
+    - source: docker.io/jupyter/tensorflow-notebook
+      project: "ml-tools"
+      tags:
+        - "python-3.11"
+        - "python-3.10"
+        - "latest"
+      vulnerability_scan: true
+    
+    - source: docker.io/jupyter/pytorch-notebook
+      project: "ml-tools"
+      tags:
+        - "python-3.11"
+        - "python-3.10"
+        - "latest"
+      vulnerability_scan: true
+      
+    # MLflow Server and UI
+    - source: docker.io/python
+      project: "ml-tools"
+      tags:
+        - "3.11-slim"
+        - "3.10-slim"
+      vulnerability_scan: true
+      
+    # Common ML Libraries Base Images
+    - source: docker.io/continuumio/miniconda3
+      project: "ml-tools"
+      tags:
+        - "23.10.0-1"
+        - "latest"
+      vulnerability_scan: true
+      
+    # Development utilities
+    - source: docker.io/library/node
+      project: "ml-tools"
+      tags:
+        - "20-alpine"
+        - "18-alpine"
+      vulnerability_scan: true
+
+# Tier 4: GPU and Specialized Workloads (on-demand sync)
+# High-resource and specialized images synced only when needed
+tier4:
+  schedule: "manual"  # Triggered manually or by events
+  priority: "low"
+  retry_count: 1
+  images:
+    # NVIDIA CUDA Runtime Images
+    - source: docker.io/nvidia/cuda
+      project: "ml-models"
+      tags:
+        - "12.3-runtime-ubuntu22.04"
+        - "12.2-runtime-ubuntu22.04"
+        - "11.8-runtime-ubuntu22.04"
+      vulnerability_scan: true
+      resource_intensive: true
+      
+    # PyTorch GPU Images
+    - source: docker.io/pytorch/pytorch
+      project: "ml-models"
+      tags:
+        - "2.1.1-cuda12.1-cudnn8-runtime"
+        - "2.0.1-cuda11.7-cudnn8-runtime"
+      vulnerability_scan: true
+      resource_intensive: true
+      
+    # TensorFlow GPU Images  
+    - source: docker.io/tensorflow/tensorflow
+      project: "ml-models"
+      tags:
+        - "2.14.0-gpu"
+        - "2.13.0-gpu"
+      vulnerability_scan: true
+      resource_intensive: true
+      
+    # Hugging Face Transformers
+    - source: docker.io/huggingface/transformers-pytorch-gpu
+      project: "ml-models"
+      tags:
+        - "4.36.0-torch2.1-cu121-ubuntu22.04"
+        - "latest"
+      vulnerability_scan: true
+      resource_intensive: true
+      
+    # RAPIDS AI (GPU-accelerated data science)
+    - source: docker.io/rapidsai/rapidsai-core
+      project: "ml-models"
+      tags:
+        - "23.12-cuda12.0-runtime-ubuntu22.04-py3.10"
+      vulnerability_scan: true
+      resource_intensive: true
+
+# Harbor Projects Configuration
+# Defines the structure and access control for image organization
+projects:
+  - name: library
+    public: true
+    description: "Mirrored public images from Docker Hub and external registries"
+    auto_scan: true
+    prevent_vulnerable_images: false
+    enable_content_trust: true
+    reuse_sys_cve_allowlist: true
+    quota:
+      storage: "500Gi"
+      
+  - name: ml-models
+    public: false  
+    description: "Production ML model images and GPU-accelerated runtimes"
+    auto_scan: true
+    prevent_vulnerable_images: true
+    enable_content_trust: true
+    severity_level: "medium"
+    members:
+      - role: "developer"
+        entity_name: "ml-engineers"
+      - role: "maintainer" 
+        entity_name: "platform-team"
+    quota:
+      storage: "1Ti"
+      
+  - name: ml-tools
+    public: false
+    description: "ML development tools, notebooks, and experimentation images"
+    auto_scan: true
+    prevent_vulnerable_images: false
+    enable_content_trust: false
+    severity_level: "low"
+    members:
+      - role: "developer"
+        entity_name: "data-scientists"
+      - role: "guest"
+        entity_name: "ml-researchers" 
+    quota:
+      storage: "200Gi"
+      
+  - name: staging
+    public: false
+    description: "Pre-production model testing and validation"
+    auto_scan: true  
+    prevent_vulnerable_images: true
+    enable_content_trust: true
+    severity_level: "high"
+    quota:
+      storage: "100Gi"
+
+# Global Sync Configuration
+global_config:
+  # Bandwidth throttling during business hours
+  bandwidth_limit:
+    business_hours: "50MB/s"  # 9 AM - 5 PM
+    off_hours: "200MB/s"      # 5 PM - 9 AM
+    
+  # Retention policies
+  retention:
+    keep_tagged_versions: 10
+    keep_untagged_days: 7
+    cleanup_schedule: "0 4 * * 1"  # Monday 4 AM
+    
+  # Health monitoring
+  health_check:
+    endpoint: "http://192.168.1.209:9091/metrics/job/harbor_sync"
+    timeout: 300
+    alert_on_failure: true
+    
+  # Security scanning
+  vulnerability_scanning:
+    enabled: true
+    scan_on_push: true
+    quarantine_policy: "medium"
+    whitelist_cves: []

@@ -1,0 +1,49 @@
+---
+# Platform detection defaults
+
+# Allow manual override of platform type
+platform_type: "{{ cluster_platform | default('auto') }}"
+
+# Platform detection methods
+detection_methods:
+  k3s:
+    - check: "systemctl status k3s"
+    - check: "which k3s"
+  kubeadm:
+    - check: "systemctl status kubelet"
+    - check: "test -f /etc/kubernetes/admin.conf"
+  eks:
+    - check: "test -f /etc/eks/release"
+    - check: "kubectl get nodes -o json | grep 'eks.amazonaws.com'"
+
+# Platform-specific settings that will be set based on detection
+platform_settings:
+  k3s:
+    kubernetes_api_port: 6443
+    cni_plugin: "cilium"
+    requires_cni_install: false
+    container_runtime: "containerd"
+    ingress_controller: "traefik"
+    storage_provisioner: "local-path"
+    
+  kubeadm:
+    kubernetes_api_port: 6443
+    cni_plugin: "cilium"
+    requires_cni_install: true
+    container_runtime: "containerd"
+    ingress_controller: "nginx"
+    storage_provisioner: "nfs"
+    
+  eks:
+    kubernetes_api_port: 443
+    cni_plugin: "aws-vpc-cni"
+    requires_cni_install: false
+    container_runtime: "containerd"
+    ingress_controller: "aws-load-balancer-controller"
+    storage_provisioner: "ebs-csi"
+
+# Kubeconfig paths per platform
+kubeconfig_paths:
+  k3s: "/etc/rancher/k3s/k3s.yaml"
+  kubeadm: "/etc/kubernetes/admin.conf"
+  eks: "~/.kube/config"  # Usually fetched via aws eks update-kubeconfig

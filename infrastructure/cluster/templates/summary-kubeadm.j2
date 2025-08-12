@@ -1,0 +1,23 @@
+🎯 Kubeadm Platform Services:
+
+🏗️ Control Plane: {{ groups['kubeadm_control_plane'] | length }} nodes
+🔧 Worker Nodes: {{ groups['kubeadm_workers'] | length }} nodes
+
+🌐 Service Access:
+- MLflow: http://{{ hostvars[groups['kubeadm_control_plane'][0]]['ansible_host'] }}:30800
+- Kiali: http://{{ hostvars[groups['kubeadm_control_plane'][0]]['ansible_host'] }}:32001  
+- Harbor: http://{{ hostvars[groups['kubeadm_control_plane'][0]]['ansible_host'] }}:30880
+- Grafana: http://{{ hostvars[groups['kubeadm_control_plane'][0]]['ansible_host'] }}:30300
+- Argo CD: http://{{ hostvars[groups['kubeadm_control_plane'][0]]['ansible_host'] }}:30080
+
+🔗 LoadBalancer Services (MetalLB):
+{% if metallb_enabled | default(false) %}
+- Available on 192.168.1.200-250 range
+{% else %}
+- Use NodePort endpoints above
+{% endif %}
+
+🔧 Next Steps:
+- Run verification: ./scripts/verify-platform.sh
+- Complete HA setup if needed: rejoin failed control plane nodes
+- Test ML workflows via MLflow and JupyterHub

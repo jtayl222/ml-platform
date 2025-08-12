@@ -1,0 +1,208 @@
+---
+- name: Stop services and clean stale containerd state (prevents snapshotter corruption)
+  shell: |
+    # Stop services that might be using containerd
+    systemctl stop kubelet || true
+    systemctl stop containerd || true
+    
+    # Clean stale containerd state from any previous deployments
+    # This prevents "failed to stat parent" snapshotter corruption errors
+    rm -rf /var/lib/containerd/* || true
+    rm -rf /run/containerd/* || true
+    
+    echo "Cleaned containerd state"
+  become: true
+  ignore_errors: true
+
+- name: Install prerequisite packages
+  package:
+    name: "{{ prerequisite_packages }}"
+    state: present
+  become: true
+
+- name: Load required kernel modules
+  modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - overlay
+    - br_netfilter
+  become: true
+
+- name: Persist kernel modules
+  copy:
+    content: |
+      overlay
+      br_netfilter
+    dest: "{{ modules_load_file }}"
+  become: true
+
+- name: Configure sysctl for Kubernetes
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: "{{ sysctl_config_file }}"
+    state: present
+    reload: yes
+  loop:
+    - { key: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+    - { key: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+    - { key: 'net.ipv4.ip_forward', value: '1' }
+  become: true
+
+- name: Disable swap
+  command: swapoff -a
+  become: true
+
+- name: Remove swap from fstab
+  lineinfile:
+    path: /etc/fstab
+    regexp: '^.*swap.*$'
+    state: absent
+  become: true
+
+- name: Install containerd from system repository
+  package:
+    name: "{{ containerd_package }}"
+    state: present
+  become: true
+
+- name: Create containerd config directory
+  file:
+    path: /etc/containerd
+    state: directory
+  become: true
+
+- name: Generate default containerd configuration
+  shell: containerd config default > /etc/containerd/config.toml
+  become: true
+
+- name: Configure containerd to use systemd cgroup driver
+  replace:
+    path: /etc/containerd/config.toml
+    regexp: 'SystemdCgroup = false'
+    replace: 'SystemdCgroup = true'
+  become: true
+
+- name: Configure containerd pause image
+  shell: |
+    if ! [ -f /etc/containerd/config.toml ]; then containerd config default | sudo tee /etc/containerd/config.toml >/dev/null; fi
+    sudo sed -i 's#^\(\s*sandbox_image\s*=\s*\).*$#\1"registry.k8s.io/pause:3.10"#' /etc/containerd/config.toml
+  become: true
+
+- name: Restart containerd
+  systemd:
+    name: "{{ containerd_service }}"
+    state: restarted
+    enabled: yes
+    daemon_reload: yes
+  become: true
+
+- name: Add Kubernetes APT repository (Debian/Ubuntu)
+  when: ansible_os_family == "Debian"
+  block:
+    - name: Ensure apt keyrings dir exists
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+      become: true
+
+    - name: Remove any existing Kubernetes keyring
+      file:
+        path: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+        state: absent
+      become: true
+
+    - name: Remove any existing Kubernetes repository
+      file:
+        path: /etc/apt/sources.list.d/kubernetes.list
+        state: absent
+      become: true
+
+    - name: Install Kubernetes APT key (v1.33 channel)
+      shell: |
+        curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.33/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+        chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+      become: true
+
+    - name: Verify keyring was created
+      stat:
+        path: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+      register: keyring_check
+      become: true
+
+    - name: Fail if keyring was not created
+      fail:
+        msg: "Kubernetes keyring was not created successfully"
+      when: not keyring_check.stat.exists
+
+    - name: Add Kubernetes APT repository (v1.33)
+      copy:
+        dest: /etc/apt/sources.list.d/kubernetes.list
+        content: |
+          deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.33/deb/ /
+        mode: "0644"
+      become: true
+
+    - name: apt update
+      apt:
+        update_cache: yes
+      become: true
+
+- name: Add Kubernetes YUM repository (RedHat/CentOS)
+  when: ansible_os_family == "RedHat"
+  block:
+    - name: Add Kubernetes repository
+      yum_repository:
+        name: kubernetes
+        description: Kubernetes Repository
+        baseurl: "{{ kubernetes_yum_repository.split('baseurl=')[1].split('\n')[0] }}"
+        gpgcheck: yes
+        gpgkey: "{{ kubernetes_yum_repository.split('gpgkey=')[1].split('\n')[0] }}"
+        exclude: kubelet kubeadm kubectl cri-tools kubernetes-cni
+      become: true
+
+- name: Install Kubernetes packages
+  block:
+    - name: Install Kubernetes packages with specific versions
+      package:
+        name: "{{ kubernetes_packages }}"
+        state: present
+      become: true
+  rescue:
+    - name: Check available Kubernetes versions
+      shell: apt-cache policy kubelet | grep -E "^\s+[0-9]+\.[0-9]+\.[0-9]+" | head -5
+      register: available_versions
+      become: true
+      
+    - name: Display available versions
+      debug:
+        msg: "Available Kubernetes versions: {{ available_versions.stdout_lines }}"
+        
+    - name: Install latest available Kubernetes packages
+      package:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: present
+      become: true
+
+- name: Hold Kubernetes packages (Debian/Ubuntu)
+  when: ansible_os_family == "Debian"
+  dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - kubelet
+    - kubeadm
+    - kubectl
+  become: true
+
+- name: Enable and start kubelet
+  systemd:
+    name: "{{ kubelet_service }}"
+    enabled: yes
+    state: started
+  become: true

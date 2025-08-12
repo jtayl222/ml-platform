@@ -90,6 +90,8 @@
             - minio
             - mlflow
             - monitoring
+            - harbor
+            - seldon-system
           register: namespace_creation
 
         - name: Display created namespaces

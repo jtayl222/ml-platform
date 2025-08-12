@@ -1,0 +1,355 @@
+---
+# Multi-Platform MLOps Deployment
+# Supports: k3s, kubeadm, EKS
+
+# =============================
+# PHASE 0: PLATFORM PREREQUISITES
+# =============================
+
+- name: Install Platform Prerequisites
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Install Essential Platform Tools
+      include_role:
+        name: foundation/prerequisites
+      tags: [prerequisites, foundation, tools]
+
+# =============================
+# PHASE 1: PLATFORM DETECTION
+# =============================
+
+- name: Detect and Configure Platform
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Detect Kubernetes platform
+      include_role:
+        name: foundation/platform_detection
+      tags: [always, platform]
+
+    - name: Set platform facts for all hosts
+      set_fact:
+        kubernetes_platform: "{{ kubernetes_platform }}"
+        cluster_platform: "{{ cluster_platform | default(kubernetes_platform) }}"
+      delegate_to: "{{ item }}"
+      delegate_facts: true
+      loop: "{{ groups['all'] }}"
+      tags: [always, platform]
+
+    - name: Display detected platform
+      debug:
+        msg: "Detected platform: {{ kubernetes_platform }}"
+      tags: [always, platform]
+
+# =============================
+# PHASE 1: CLUSTER DEPLOYMENT
+# =============================
+
+# K3s Deployment
+- name: Deploy K3s Cluster
+  hosts: all
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Deploy K3s control plane
+      include_role:
+        name: foundation/k3s_control_plane
+      when:
+        - kubernetes_platform == 'k3s'
+        - groups['k3s_control_plane'] is defined
+        - inventory_hostname in groups['k3s_control_plane']
+      tags: [k3s, control-plane]
+
+    - name: Deploy K3s workers
+      include_role:
+        name: foundation/k3s_workers
+      when:
+        - kubernetes_platform == 'k3s'
+        - groups['k3s_workers'] is defined
+        - inventory_hostname in groups['k3s_workers']
+      tags: [k3s, workers]
+
+# Kubeadm Deployment
+- name: Deploy Kubeadm Cluster
+  hosts: all
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Deploy kubeadm cluster
+      include_role:
+        name: foundation/kubeadm_cluster
+      when:
+        - kubernetes_platform == 'kubeadm'
+        - (groups['kubeadm_control_plane'] is defined and inventory_hostname in groups['kubeadm_control_plane']) or
+          (groups['kubeadm_workers'] is defined and inventory_hostname in groups['kubeadm_workers'])
+      tags: [kubeadm, cluster]
+
+# EKS Deployment
+- name: Deploy EKS Cluster
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Deploy EKS cluster
+      include_role:
+        name: foundation/eks_cluster
+      when:
+        - kubernetes_platform == 'eks'
+      tags: [eks, cluster]
+
+# =============================
+# PHASE 2: STORAGE SETUP
+# =============================
+
+# NFS for on-premises (k3s/kubeadm)
+- name: Setup NFS Infrastructure
+  hosts: nfs_server:k3s_control_plane:k3s_workers:kubeadm_control_plane:kubeadm_workers
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Deploy NFS Server
+      include_role:
+        name: foundation/nfs_server
+      when: 
+        - inventory_hostname in groups['nfs_server']
+        - kubernetes_platform in ['k3s', 'kubeadm']
+        - kubernetes_state != "absent"
+      tags: [storage, nfs, nfs-server]
+
+    - name: Deploy NFS Clients
+      include_role:
+        name: foundation/nfs_clients
+      when: 
+        - kubernetes_platform in ['k3s', 'kubeadm']
+        - kubernetes_state != "absent"
+        - inventory_hostname in groups[kubernetes_platform + '_control_plane'] or inventory_hostname in groups[kubernetes_platform + '_workers']
+      tags: [storage, nfs, nfs-clients]
+
+# =============================
+# PHASE 3: KUBERNETES FOUNDATION
+# =============================
+
+- name: Setup Kubernetes Foundation Components
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Deploy Foundation Components
+      block:
+        # Fetch kubeconfig
+        - name: Fetch kubeconfig
+          include_role:
+            name: foundation/fetch_kubeconfig
+          tags: [kubeconfig]
+
+        # Storage provisioner (NFS for on-prem, EBS/EFS for EKS)
+        - name: Deploy NFS Provisioner
+          include_role:
+            name: foundation/nfs_provisioner
+          when: kubernetes_platform in ['k3s', 'kubeadm']
+          tags: [storage, nfs-provisioner]
+
+        # MetalLB for bare metal clusters
+        - name: Deploy MetalLB Load Balancer
+          include_role:
+            name: foundation/metallb
+          when: kubernetes_platform in ['k3s', 'kubeadm']
+          tags: [networking, metallb]
+
+        # Sealed Secrets (all platforms)
+        - name: Deploy Sealed Secrets
+          include_role:
+            name: foundation/sealed_secrets
+          tags: [security, sealed-secrets]
+
+        # Create platform-appropriate secrets
+        - name: Deploy Secrets
+          include_role:
+            name: foundation/secrets
+          tags: [secrets]
+
+
+      when: kubernetes_state != "absent"
+
+# =============================
+# PHASE 4: CORE SERVICES
+# =============================
+
+- name: Deploy Core Infrastructure Services
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Deploy Core Services
+      block:
+        # Storage layer
+        - name: Deploy MinIO Storage
+          include_role:
+            name: storage/minio
+          tags: [storage, minio]
+
+        - name: Deploy Storage Credentials
+          include_role:
+            name: storage/credentials
+          tags: [storage, credentials]
+
+        # Monitoring
+        - name: Deploy Prometheus Stack
+          include_role:
+            name: monitoring/prometheus_stack
+          tags: [monitoring, prometheus]
+
+        # Messaging
+        - name: Deploy Kafka
+          include_role:
+            name: foundation/kafka
+          tags: [messaging, kafka]
+
+      when: kubernetes_state != "absent"
+
+# =============================
+# PHASE 5: SERVICE MESH
+# =============================
+
+- name: Deploy Service Mesh
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Deploy Istio with istioctl
+      include_role:
+        name: platform/istio
+      when: 
+        - kubernetes_state != "absent"
+        - enable_istio | default(true) or 'istio' in ansible_run_tags
+      tags: [istio, service-mesh, kiali]
+
+# =============================
+# PHASE 6: PLATFORM SERVICES
+# =============================
+
+- name: Deploy Platform Services
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Deploy Platform Components
+      block:
+        # Create shared storage PVCs
+        - name: Setup JupyterHub namespace and PVCs
+          block:
+            - name: Ensure jupyterhub namespace exists
+              kubernetes.core.k8s:
+                api_version: v1
+                kind: Namespace
+                name: jupyterhub
+                state: present
+                kubeconfig: "{{ kubeconfig_path }}"
+              tags: [jupyter, storage]
+
+            - name: Create shared storage PVCs
+              kubernetes.core.k8s:
+                state: present
+                src: "{{ item }}"
+                kubeconfig: "{{ kubeconfig_path }}"
+              loop:
+                - "manifests/shared-storage/shared-data-pvc-jupyterhub.yaml"
+                - "manifests/shared-storage/shared-artifacts-pvc-jupyterhub.yaml"
+              tags: [jupyter, storage]
+
+        # GitOps & CI/CD
+        - name: Deploy Argo CD
+          include_role:
+            name: platform/argo_cd
+          tags: [platform, argocd]
+
+        - name: Deploy Argo Workflows
+          include_role:
+            name: platform/argo_workflows
+          tags: [platform, workflows]
+
+        - name: Deploy Argo Events
+          include_role:
+            name: platform/argo_events
+          tags: [platform, argo-events]
+
+        # Development Environment
+        - name: Deploy JupyterHub
+          include_role:
+            name: platform/jupyterhub
+          tags: [platform, jupyter]
+
+        - name: Deploy Kubernetes Dashboard
+          include_role:
+            name: platform/dashboard
+          tags: [platform, dashboard]
+
+        # Container Registry
+        - name: Deploy Harbor Registry
+          include_role:
+            name: platform/harbor
+          when: enable_harbor | default(true)
+          tags: [platform, harbor]
+
+        # Model Serving
+        - name: Deploy Seldon Core
+          include_role:
+            name: platform/seldon
+          tags: [platform, seldon]
+
+      when: kubernetes_state != "absent"
+
+# =============================
+# PHASE 7: MLOPS SERVICES
+# =============================
+
+- name: Deploy MLOps Services
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Deploy MLOps Components
+      block:
+        # ML Experiment Tracking
+        - name: Deploy MLflow
+          include_role:
+            name: mlops/mlflow
+          tags: [mlops, mlflow]
+
+        # ML Pipelines
+        - name: Deploy Kubeflow Pipelines
+          include_role:
+            name: mlops/kubeflow
+          when: enable_kubeflow | default(false)
+          tags: [mlops, kubeflow]
+
+        # ML Serving
+        - name: Deploy KServe
+          include_role:
+            name: mlops/kserve
+          when: enable_istio | default(false)
+          tags: [mlops, kserve]
+
+      when: kubernetes_state != "absent"
+
+# =============================
+# PHASE 8: SUMMARY
+# =============================
+
+- name: Deployment Summary
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Show deployment summary
+      debug:
+        msg:
+          - "🎉 Multi-Platform MLOps Deployment Complete!"
+          - "Platform: {{ kubernetes_platform }}"
+          - ""
+          - "🚀 Service Access:"
+          - "{{ lookup('template', 'summary-' + kubernetes_platform + '.j2') }}"
+      when: kubernetes_state != "absent"
+      tags: [summary]

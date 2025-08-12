@@ -1,13 +1,16 @@
-# 🚀 Production MLOps Platform on K3s
+# 🚀 Multi-Platform Production MLOps Stack
 
-## 🏗️ **High-Performance Cluster Architecture**
+## 🏗️ **High-Performance Multi-Platform Architecture**
 ```
-🎯 K3s MLOps Platform (36 CPU cores, 250GB RAM)
+🎯 Production MLOps Platform (Supports K3s, Kubeadm, EKS)
 ├── Infrastructure Layer
-│   ├── K3s Cluster (1 control + 4 worker nodes)
-│   ├── NFS Storage (1Ti+ persistent volumes) 
-│   |── Sealed Secrets (GitOps-ready credential management)
-│   └── Istio Service Mesh (advanced networking) 
+│   ├── Kubernetes Cluster (auto-detected or specified)
+│   ├── Multi-Platform Support (K3s, Kubeadm, EKS)
+│   ├── Persistent Storage (NFS/EBS/EFS) 
+│   ├── Sealed Secrets (GitOps-ready credentials)
+│   ├── Istio Service Mesh v1.27.x (Helm-based)
+│   ├── Kiali + Jaeger (full observability stack)
+│   └── Harbor Registry (enterprise container registry) 
 ├── MLOps Layer  
 │   ├── MLflow (experiment tracking + model registry)
 │   ├── Seldon Core (production model serving)
@@ -21,26 +24,32 @@
 ├── Monitoring Layer
 │   ├── Prometheus (metrics collection)
 │   ├── Grafana (observability dashboards)
+│   ├── Kiali (service mesh observability)
+│   ├── Jaeger (distributed tracing)
 │   └── AlertManager (intelligent alerting)
 └── Storage Layer
     ├── MinIO (S3-compatible object storage)
+    ├── Harbor (container registry with security scanning)
     └── NFS (shared filesystem storage)
 ```
 
 > **Enterprise-grade MLOps infrastructure demonstrating production machine learning operations at scale**
 
-[![Kubernetes](https://img.shields.io/badge/Kubernetes-K3s%20v1.33.1-blue)](https://k3s.io/)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-K3s%20|%20Kubeadm%20|%20EKS-blue)](https://kubernetes.io/)
 [![MLflow](https://img.shields.io/badge/MLflow-3.1.0-4-orange)](https://mlflow.org/)
 [![Seldon](https://img.shields.io/badge/Seldon%20Core-Model%20Serving-green)](https://seldon.io/)
 [![Ansible](https://img.shields.io/badge/Ansible-Infrastructure%20as%20Code-red)](https://ansible.com/)
-[![Istio](https://img.shields.io/badge/Istio-Service%20Mesh-purple)](https://istio.io/) [NEW]
+[![Istio](https://img.shields.io/badge/Istio-Service%20Mesh%20v1.27-purple)](https://istio.io/)
+[![Kiali](https://img.shields.io/badge/Kiali-Observability%20v1.85-orange)](https://kiali.io/)
+[![Jaeger](https://img.shields.io/badge/Jaeger-Tracing-lightblue)](https://jaegertracing.io/)
+[![Harbor](https://img.shields.io/badge/Harbor-Registry-navy)](https://goharbor.io/)
 [![Argo CD](https://img.shields.io/badge/Argo%20CD-GitOps-blue)](https://argoproj.github.io/argo-cd/)
 [![Prometheus](https://img.shields.io/badge/Prometheus-Monitoring-yellow)](https://prometheus.io/)
 [![Grafana](https://img.shields.io/badge/Grafana-Dashboards-blue)](https://grafana.com/)
 [![MinIO](https://img.shields.io/badge/MinIO-Object%20Storage-blue)](https://min.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A complete, production-ready MLOps platform built on Kubernetes (K3s), featuring experiment tracking, model serving, pipeline orchestration, GitOps, and comprehensive monitoring - all optimized for high-performance on-premises deployment.
+A complete, production-ready MLOps platform supporting multiple Kubernetes distributions (K3s, Kubeadm, EKS), featuring experiment tracking, model serving, pipeline orchestration, GitOps, Istio service mesh with full observability stack (Kiali + Jaeger), enterprise container registry (Harbor), and comprehensive monitoring - optimized for both on-premises and cloud deployments.
 
 ## 🎯 **What This Demonstrates**
 
@@ -64,7 +73,7 @@ A complete, production-ready MLOps platform built on Kubernetes (K3s), featuring
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│             Production MLOps Platform Architecture              │
+│          Multi-Platform MLOps Architecture                      │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  Development        Experimentation       Production            │
@@ -82,23 +91,59 @@ A complete, production-ready MLOps platform built on Kubernetes (K3s), featuring
 │  └──────────────┘  └─────────────┘  └──────────────┘         │
 │                                                                 │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │          Prometheus + Grafana (Monitoring)             │   │
+│  │  Istio v1.27.x + Kiali + Jaeger (Full Observability)  │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                 │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │        K3s Cluster (36 CPU, 250GB RAM, 5 Nodes)        │   │
+│  │       Prometheus + Grafana (Monitoring)                │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │   Kubernetes (K3s / Kubeadm / EKS) - Auto-detected     │   │
 │  └─────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+## 🌐 **Multi-Platform Support**
+
+### **Supported Kubernetes Distributions**
+
+| Platform | Best For | Key Features |
+|----------|----------|--------------|
+| **K3s** | Edge/Homelab | Lightweight, built-in storage, single binary |
+| **Kubeadm** | On-premises | Full control, HA control plane, standard K8s |
+| **EKS** | AWS Cloud | Managed service, auto-scaling, AWS integration |
+
+### **Platform-Specific Features**
+
+- **Automatic Platform Detection**: Detects your Kubernetes distribution automatically
+- **Platform-Optimized Profiles**: Istio v1.27.x configurations tailored for each platform
+- **Unified Deployment**: Same `ansible-playbook` command works across all platforms
+- **Full Observability Stack**: Kiali + Jaeger + Prometheus integration for all platforms
+- **Enterprise Registry**: Harbor with vulnerability scanning and image mirroring
+
 ## 🚀 **Quick Start**
 
 ### **Prerequisites**
+
+**For K3s:**
 - Ubuntu 20.04+ on all nodes
-- Ansible 2.10+ on deployment machine  
-- SSH key access to cluster nodes
 - 5 nodes with 36+ CPU cores total
-- External PostgreSQL server accessible from the cluster
+- SSH access to all nodes
+
+**For Kubeadm:**
+- Ubuntu 20.04+ or RHEL 8+ on all nodes
+- Minimum 3 control plane nodes for HA
+- 2+ worker nodes
+
+**For EKS:**
+- AWS account with appropriate permissions
+- AWS CLI configured
+- eksctl installed (or will be installed by playbook)
+
+**All Platforms:**
+- Ansible 2.10+ on deployment machine
+- External PostgreSQL server for MLflow
 
 ### **Deploy Complete Platform**
 ```bash
@@ -112,18 +157,38 @@ A complete, production-ready MLOps platform built on Kubernetes (K3s), featuring
 git clone https://github.com/yourusername/ml-platform.git
 cd ml-platform
 
-# 2. Configure your inventory
-cp inventory/production/hosts.yml.example inventory/production/hosts.yml
-# Edit with your node IPs and configuration
+# 2. Configure your inventory (choose platform)
+# For K3s:
+cp inventory/production/hosts.example inventory/production/hosts
+# For Kubeadm:
+cp inventory/production/hosts-kubeadm.example inventory/production/hosts-kubeadm
+# For EKS:
+cp inventory/production/hosts-eks.example inventory/production/hosts-eks
 
 # 3. Deploy platform (20-30 minutes)
 ./scripts/create-all-sealed-secrets.sh
-ansible-playbook -i inventory/production/hosts.yml infrastructure/cluster/site.yml
 
-# 4. Access your MLOps platform
+# Deploy with auto-detection
+ansible-playbook -i inventory/production/hosts infrastructure/cluster/site-multiplatform.yml
+
+# Or specify platform explicitly
+ansible-playbook -i inventory/production/hosts-k3s infrastructure/cluster/site-multiplatform.yml -e platform_type=k3s
+ansible-playbook -i inventory/production/hosts-kubeadm infrastructure/cluster/site-multiplatform.yml -e platform_type=kubeadm
+ansible-playbook -i inventory/production/hosts-eks infrastructure/cluster/site-multiplatform.yml -e platform_type=eks
+
+# 4. Verify platform deployment (Industry Best Practice)
+chmod +x scripts/verify-platform.sh
+./scripts/verify-platform.sh
+
+# Run comprehensive Ansible tests
+ansible-playbook -i inventory/production/hosts-k3s infrastructure/cluster/test-platform.yml
+
+# 5. Access your MLOps platform
 echo "🎯 Platform Ready!"
 echo "MLflow: http://your-cluster-ip:30800"
-echo "JupyterHub: http://your-cluster-ip:30888"
+echo "Kiali Observability: http://your-cluster-ip:32001"
+echo "Harbor Registry: http://your-cluster-ip:30880" 
+echo "Grafana: http://your-cluster-ip:30300"
 echo "See docs/services.md for all endpoints"
 ```
 
@@ -134,6 +199,7 @@ echo "See docs/services.md for all endpoints"
 | **MLflow** | `:30800` | Experiment tracking & **PostgreSQL-backed model registry** | ✅ | [📖](docs/services/mlflow.md) |
 | **JupyterHub** | `:30888` | Collaborative data science environment | ✅ | [📖](docs/services/jupyterhub.md) |
 | **Seldon Core** | API/CLI | Production model serving platform | ✅ | [📖](docs/services/seldon.md) |
+| **KServe** | Via Istio | Kubernetes-native model serving | 🔧 | [📖](docs/services/kserve.md) |
 | **Kubeflow** | `:31234` | ML pipeline orchestration | ✅ | [📖](docs/services/kubeflow.md) |
 | **Argo CD** | `:30080` | GitOps continuous deployment | ✅ | [📖](docs/services/argocd.md) |
 | **Argo Workflows** | `:32746` | Pipeline execution engine | ✅ | [📖](docs/services/argo-workflows.md) |
@@ -141,22 +207,54 @@ echo "See docs/services.md for all endpoints"
 | **Prometheus** | `:30090` | Metrics collection | ✅ | [📖](docs/services/prometheus.md) |
 | **MinIO Console** | `:31578` | S3-compatible storage management | ✅ | [📖](docs/services/minio.md) |
 | **K8s Dashboard** | `:30444` | Cluster management interface | ✅ | [📖](docs/services/dashboard.md) |
-| **Seldon Core** | API/CLI | Production model serving platform | ✅ | [📖](docs/services/seldon.md) |
-| **KServe** | Via Istio | Kubernetes-native model serving | 🔧 | [📖](docs/services/kserve.md) | [NEW]
-| **Kubeflow** | `:31234` | ML pipeline orchestration | ✅ | [📖](docs/services/kubeflow.md) |
-| **Argo CD** | `:30080` | GitOps continuous deployment | ✅ | [📖](docs/services/argocd.md) |
-| **Argo Workflows** | `:32746` | Pipeline execution engine | ✅ | [📖](docs/services/argo-workflows.md) |
-| **Istio Gateway** | `:31080` | Service mesh gateway | 🔧 | [📖](docs/services/istio.md) | [NEW]
+| **Istio Gateway** | `:31080` | Service mesh gateway (v1.27.x) | ✅ | [📖](docs/services/istio.md) |
+| **Kiali** | `:32001` | Service mesh observability (v1.85) | ✅ | [📖](docs/services/kiali.md) |
+| **Jaeger** | Port-forward | Distributed tracing | ✅ | [📖](docs/services/jaeger.md) |
+| **Harbor** | `:30880` | Enterprise container registry | ✅ | [📖](docs/services/harbor.md) |
 
 [📊 **Complete Service Access Guide**](docs/services.md)
+
+## 🔍 **Platform Verification & Testing**
+
+### **Enterprise-Grade Verification**
+This platform includes comprehensive verification tools following industry best practices:
+
+```bash
+# Quick health check
+./scripts/verify-platform.sh
+
+# Comprehensive Ansible-based tests
+ansible-playbook infrastructure/cluster/test-platform.yml
+
+# Continuous monitoring
+kubectl get pods --all-namespaces --watch
+kubectl top nodes
+```
+
+### **What Gets Verified**
+✅ **Platform Prerequisites**: yq v4, Helm v3, kubectl, system dependencies  
+✅ **Cluster Health**: Node readiness, pod status, resource availability  
+✅ **Core Services**: Storage, networking, security, service mesh  
+✅ **MLOps Stack**: MLflow, Seldon Core, JupyterHub functionality  
+✅ **DevOps Tools**: Argo CD, Harbor registry, monitoring stack  
+✅ **Service Endpoints**: LoadBalancer IPs, API connectivity, health checks  
+✅ **ML Workflow**: End-to-end experiment tracking and model serving  
+
+### **Industry Standard Validation**
+- **Automated Health Checks**: Comprehensive service verification
+- **Resource Thresholds**: CPU, memory, and storage monitoring
+- **Endpoint Testing**: Service accessibility and API functionality  
+- **Integration Tests**: Cross-service communication validation
+- **Performance Baselines**: Resource usage and response time metrics
+- **Security Validation**: RBAC, network policies, sealed secrets
 
 ## 🛠️ **Technology Stack**
 
 ### **Core Infrastructure**
 | Component | Technology | Version | Purpose |
 |-----------|------------|---------|---------|
-| **Orchestration** | K3s (Lightweight Kubernetes) | v1.33.1 | Container platform |
-| **Service Mesh** | Istio | v1.26.1 | Advanced networking & traffic management |
+| **Orchestration** | Kubernetes | K3s v1.33.1 / Kubeadm v1.33 / EKS v1.31 | Multi-platform support |
+| **Service Mesh** | Istio + Kiali + Jaeger | v1.27.x + v1.85 | Advanced networking & full observability |
 | **Automation** | Ansible | 2.10+ | Infrastructure as Code |
 | **Storage** | NFS + MinIO | Latest | Persistent & object storage |
 | **Database** | PostgreSQL | 15+ | MLflow metadata backend |
@@ -177,7 +275,7 @@ echo "See docs/services.md for all endpoints"
 | **GitOps** | Argo CD | Latest | Declarative deployments |
 | **Pipelines** | Argo Workflows | Latest | CI/CD automation |
 | **Monitoring** | Prometheus + Grafana | Latest | Metrics & dashboards |
-| **Storage** | MinIO | Latest | S3-compatible object storage |
+| **Storage** | MinIO + Harbor | Latest | S3-compatible object storage + container registry |
 
 ## 📊 **Complete ML Lifecycle**
 
@@ -210,6 +308,8 @@ This platform supports the entire machine learning lifecycle:
 - [📊 Monitoring Strategy](docs/monitoring.md) - Observability approach
 - [🧩 Platform Components](docs/components.md)
 - [🧪 MLflow Deployment](docs/mlflow-deployment.md)
+- [🕸️ Service Mesh Architecture](docs/service-mesh.md) - Istio v1.27.x + Kiali + Jaeger setup
+- [🌐 Multi-Platform Guide](docs/multi-platform.md) - K3s, Kubeadm, EKS deployment
 
 ### **🛠️ Operations & Management**
 - [🎯 Service Access](docs/services.md) - All platform services
@@ -228,13 +328,15 @@ This platform supports the entire machine learning lifecycle:
 ## 🎓 **Professional Portfolio Value**
 
 ### **For MLOps Engineers, this demonstrates:**
+- ✅ **Multi-platform Kubernetes expertise** (K3s, Kubeadm, EKS)
 - ✅ **Production infrastructure design** patterns and best practices
 - ✅ **ML lifecycle automation** from experiment to production
 - ✅ **Scalable model serving** architectures with Seldon Core
+- ✅ **Service mesh implementation** with Istio v1.27.x, Kiali, and Jaeger observability
 - ✅ **Observability and monitoring** strategies for ML systems
 - ✅ **Infrastructure as Code** with Ansible automation
 - ✅ **GitOps methodologies** for reliable deployments
-- ✅ **Kubernetes expertise** with optimized configurations
+- ✅ **Cloud-native and on-premises** deployment capabilities
 
 ### **📊 Demonstrated Business Impact:**
 - 🕒 **95% faster deployments** (manual → automated GitOps)
@@ -262,14 +364,28 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
 This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.
 
+## 🔄 **Changelog**
+
+### **Latest Updates**
+
+- **🌐 Multi-Platform Support**: Now supports K3s, Kubeadm, and EKS deployments
+- **🕸️ Istio v1.27.x Upgrade**: Latest stable service mesh with Helm-based deployment
+- **👁️ Full Observability Stack**: Kiali v1.85 + Jaeger tracing integration
+- **🏗️ Harbor Registry**: Enterprise container registry with vulnerability scanning and 4-tier image mirroring
+- **🔍 Platform Auto-Detection**: Automatically detects and optimizes for your Kubernetes platform
+- **📦 Enhanced Configurations**: Platform-specific Istio profiles and comprehensive Harbor replication
+
 ---
 
 ## 🏅 **Platform Highlights**
 
 **This MLOps platform rivals enterprise solutions costing $200k+ annually, demonstrating:**
 
+- ✅ **Multi-platform flexibility** - Deploy anywhere (edge, on-prem, cloud)
 - ✅ **Complete MLOps infrastructure** with all major components
 - ✅ **Production-grade reliability** and monitoring
+- ✅ **Advanced service mesh** with Istio v1.27.x, Kiali, and Jaeger observability
+- ✅ **Enterprise container registry** with Harbor security scanning and mirroring
 - ✅ **Scalable architecture** supporting team collaboration
 - ✅ **Modern DevOps practices** with GitOps and IaC
 - ✅ **Enterprise security** with proper credential management

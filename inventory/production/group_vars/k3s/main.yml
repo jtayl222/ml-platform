@@ -1,0 +1,35 @@
+---
+# K3s-specific configuration
+
+# Platform identifier
+cluster_platform: "k3s"
+
+# K3s version
+k3s_version: v1.33.1+k3s1
+k3s_state: present
+
+# K3s specific paths
+k3s_server_path: /etc/rancher/k3s/k3s.yaml
+
+# K3s network configuration
+k3s_pod_cidr: "10.42.0.0/16"
+k3s_service_cidr: "10.43.0.0/16"
+k3s_api_port: 6443
+
+# CNI Configuration
+cilium_enabled: true
+calico_enabled: false
+
+# K3s control plane configuration
+control_plane_host: "{{ groups['k3s_control_plane'][0] }}"
+control_plane_ip: "{{ hostvars[groups['k3s_control_plane'][0]]['ansible_host'] }}"
+
+# K3s specific features
+k3s_disable:
+  - traefik  # We'll use Istio ingress gateway
+  - servicelb  # We'll use MetalLB
+
+k3s_kubelet_args:
+  - "eviction-hard=memory.available<100Mi,nodefs.available<10%"
+  - "eviction-soft=memory.available<200Mi,nodefs.available<15%"
+  - "eviction-soft-grace-period=memory.available=5m,nodefs.available=5m"

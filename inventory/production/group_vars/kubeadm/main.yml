@@ -1,0 +1,49 @@
+---
+# Kubeadm-specific configuration
+
+# Platform identifier
+cluster_platform: "kubeadm"
+
+# Kubernetes version
+kubernetes_version: "1.33.1"
+
+# Control plane configuration
+control_plane_endpoint: "{{ hostvars[groups['kubeadm_control_plane'][0]]['ansible_host'] }}:6443"
+control_plane_host: "{{ groups['kubeadm_control_plane'][0] }}"
+control_plane_ip: "{{ hostvars[groups['kubeadm_control_plane'][0]]['ansible_host'] }}"
+
+# Network configuration
+pod_network_cidr: "10.244.0.0/16"
+service_cidr: "10.96.0.0/12"
+
+# CNI plugin
+cni_plugin: "cilium"
+cilium_version: "1.16.5"
+
+# High Availability settings
+enable_ha: "{{ groups['kubeadm_control_plane'] | length > 1 }}"
+loadbalancer_apiserver:
+  address: "{{ control_plane_ip }}"
+  port: 6443
+
+# etcd configuration for HA
+etcd_endpoints: >-
+  {%- set etcd_members = [] -%}
+  {%- for host in groups['kubeadm_control_plane'] -%}
+    {%- set _ = etcd_members.append('https://' + hostvars[host]['ansible_host'] + ':2379') -%}
+  {%- endfor -%}
+  {{ etcd_members | join(',') }}
+
+# Container runtime
+container_runtime: "containerd"
+containerd_config_path: "/etc/containerd/config.toml"
+
+# Kubeadm specific features
+enable_admission_plugins:
+  - NodeRestriction
+  - ResourceQuota
+  - PodSecurityPolicy
+
+# Audit logging
+audit_log_path: "/var/log/kubernetes/audit.log"
+audit_policy_file: "/etc/kubernetes/audit-policy.yaml"
