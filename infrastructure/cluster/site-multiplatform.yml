@@ -165,6 +165,13 @@
             name: foundation/sealed_secrets
           tags: [security, sealed-secrets]
 
+        # Container Registry (Foundation service for image caching)
+        - name: Deploy Harbor Registry
+          include_role:
+            name: platform/harbor
+          when: enable_harbor | default(true)
+          tags: [foundation, harbor, registry]
+
         # Create platform-appropriate secrets
         - name: Deploy Secrets
           include_role:
@@ -286,13 +293,6 @@
           include_role:
             name: platform/dashboard
           tags: [platform, dashboard]
-
-        # Container Registry
-        - name: Deploy Harbor Registry
-          include_role:
-            name: platform/harbor
-          when: enable_harbor | default(true)
-          tags: [platform, harbor]
 
         # Model Serving
         - name: Deploy Seldon Core

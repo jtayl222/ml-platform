@@ -61,6 +61,13 @@ tier1:
       vulnerability_scan: true
       
     # MLflow Model Serving
+    - source: docker.io/jtayl22/mlflow-postgresql
+      project: "library"
+      tags:
+        - "3.1.0-4"
+        - "latest"
+      vulnerability_scan: true
+      
     - source: docker.io/python
       project: "library"
       tags:
@@ -184,6 +191,104 @@ tier2:
       tags:
         - "1.54"
         - "1.53" 
+        - "latest"
+      vulnerability_scan: true
+        
+    # Knative Serving Components (KServe dependency)
+    - source: gcr.io/knative-releases/knative.dev/serving/cmd/activator
+      project: "library"
+      destination_name: "knative-activator"
+      tags:
+        - "v1.15.0"
+        - "latest"
+      vulnerability_scan: true
+      
+    - source: gcr.io/knative-releases/knative.dev/serving/cmd/autoscaler
+      project: "library"
+      destination_name: "knative-autoscaler"
+      tags:
+        - "v1.15.0"
+        - "latest"
+      vulnerability_scan: true
+      
+    - source: gcr.io/knative-releases/knative.dev/serving/cmd/controller
+      project: "library"
+      destination_name: "knative-controller"
+      tags:
+        - "v1.15.0"
+        - "latest"
+      vulnerability_scan: true
+      
+    - source: gcr.io/knative-releases/knative.dev/serving/cmd/webhook
+      project: "library"
+      destination_name: "knative-webhook"
+      tags:
+        - "v1.15.0"
+        - "latest"
+      vulnerability_scan: true
+      
+    # Knative Istio Networking
+    - source: gcr.io/knative-releases/knative.dev/net-istio/cmd/controller
+      project: "library"
+      destination_name: "knative-istio-controller"
+      tags:
+        - "v1.15.0"
+        - "latest"
+      vulnerability_scan: true
+      
+    - source: gcr.io/knative-releases/knative.dev/net-istio/cmd/webhook
+      project: "library"
+      destination_name: "knative-istio-webhook"
+      tags:
+        - "v1.15.0"
+        - "latest"
+      vulnerability_scan: true
+    
+    # KServe Model Serving Platform  
+    - source: docker.io/kserve/kserve-controller
+      project: "ml-models"
+      tags:
+        - "v0.13.1"
+        - "v0.13.0"
+        - "latest"
+      vulnerability_scan: true
+      
+    - source: docker.io/kserve/models-web-app
+      project: "ml-models"
+      tags:
+        - "v0.13.1"
+        - "latest"
+      vulnerability_scan: true
+      
+    - source: docker.io/kserve/storage-initializer
+      project: "ml-models"
+      tags:
+        - "v0.13.1"
+        - "latest"
+      vulnerability_scan: true
+      
+    # Cert-Manager (TLS certificate management)
+    - source: quay.io/jetstack/cert-manager-controller
+      project: "library"
+      tags:
+        - "v1.16.1"
+        - "v1.15.3"
+        - "latest"
+      vulnerability_scan: true
+      
+    - source: quay.io/jetstack/cert-manager-webhook
+      project: "library"
+      tags:
+        - "v1.16.1"
+        - "v1.15.3"
+        - "latest"
+      vulnerability_scan: true
+      
+    - source: quay.io/jetstack/cert-manager-cainjector
+      project: "library"
+      tags:
+        - "v1.16.1"
+        - "v1.15.3"
         - "latest"
       vulnerability_scan: true
         

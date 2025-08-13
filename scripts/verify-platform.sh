@@ -130,7 +130,7 @@ check_core_services() {
     kubectl get pods -n metallb-system --no-headers 2>/dev/null | grep -q "Running" && echo -e "✅ MetalLB: Running" || echo -e "⚠️ MetalLB: Not running or not installed"
     
     # Sealed Secrets
-    kubectl get pods -n sealed-secrets --no-headers 2>/dev/null | grep -q "Running" && echo -e "✅ Sealed Secrets: Running" || echo -e "❌ Sealed Secrets: Not running"
+    kubectl get pods -n kube-system -l app.kubernetes.io/name=sealed-secrets --no-headers 2>/dev/null | grep -q "Running" && echo -e "✅ Sealed Secrets: Running" || echo -e "❌ Sealed Secrets: Not running"
 }
 
 check_service_mesh() {

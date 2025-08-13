@@ -2,24 +2,25 @@
 - name: Move static pod manifests (prevents restart)
   shell: |
     mkdir -p /root/k8s-manifests-backup
-    mv /etc/kubernetes/manifests/* /root/k8s-manifests-backup/ 2>/dev/null || true
+    mv /etc/kubernetes/manifests/* /root/k8s-manifests-backup/ \
+      2>/dev/null || true
   become: true
-  ignore_errors: yes
+  ignore_errors: true
 
 - name: Stop kubelet (stops managing static pods)
   systemd:
     name: kubelet
     state: stopped
-    enabled: no
+    enabled: false
   become: true
-  ignore_errors: yes
+  ignore_errors: true
 
-- name: Stop container runtime (kills static pod containers and zombie processes)
+- name: Stop container runtime (kills zombie processes)
   systemd:
     name: containerd
     state: stopped
   become: true
-  ignore_errors: yes
+  ignore_errors: true
 
 - name: Wait for all containers to be killed
   wait_for:
@@ -29,7 +30,7 @@
 - name: Reset kubeadm cluster
   command: kubeadm reset --force
   become: true
-  ignore_errors: yes
+  ignore_errors: true
 
 - name: Remove Kubernetes configuration
   file:
@@ -52,7 +53,7 @@
     - kubeadm
     - kubectl
   become: true
-  ignore_errors: yes
+  ignore_errors: true
 
 - name: Remove Kubernetes packages
   package:
@@ -68,4 +69,4 @@
     - iptables -t mangle -F
     - iptables -X
   become: true
-  ignore_errors: yes
+  ignore_errors: true

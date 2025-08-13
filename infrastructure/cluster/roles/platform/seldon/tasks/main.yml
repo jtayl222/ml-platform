@@ -69,6 +69,8 @@
       # Runtime configuration (no controller settings here)
       controllerManager:
         image:
+          registry: "{{ seldon_custom_images.registry if seldon_custom_images.enabled else 'docker.io' }}"
+          repository: "{{ seldon_custom_images.agent.repository if seldon_custom_images.enabled else 'seldonio/seldon-agent' }}"
           tag: "{{ seldon_operator_image_tag }}"
         resources:
           requests:
@@ -77,6 +79,21 @@
           limits:
             cpu: "{{ seldon_manager_cpu_limit }}"
             memory: "{{ seldon_manager_memory_limit }}"
+      scheduler:
+        image:
+          registry: "{{ seldon_custom_images.registry if seldon_custom_images.enabled else 'docker.io' }}"
+          repository: "{{ seldon_custom_images.scheduler.repository if seldon_custom_images.enabled else 'seldonio/seldon-scheduler' }}"
+          tag: "{{ seldon_operator_image_tag }}"
+      dataflow:
+        image:
+          registry: "{{ seldon_custom_images.registry if seldon_custom_images.enabled else 'docker.io' }}"
+          repository: "{{ seldon_custom_images.dataflow.repository if seldon_custom_images.enabled else 'seldonio/seldon-dataflow-engine' }}"
+          tag: "{{ seldon_operator_image_tag }}"
+      envoy:
+        image:
+          registry: "{{ seldon_custom_images.registry if seldon_custom_images.enabled else 'docker.io' }}"
+          repository: "{{ seldon_custom_images.envoy.repository if seldon_custom_images.enabled else 'seldonio/seldon-envoy' }}"
+          tag: "{{ seldon_operator_image_tag }}"
       istio:
         enabled: true
         gateway: "istio-system/istio-ingressgateway"
