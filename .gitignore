@@ -141,3 +141,8 @@ local-storage/
 
 .claude
 CLAUDE.md
+
+# Claude RAG generated files
+.claude-rag/index.json
+.claude-rag/cache.json
+.claude-rag/*.tmp

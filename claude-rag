@@ -1,0 +1,26 @@
+#!/bin/bash
+# Claude RAG Toolkit wrapper for ml-platform project
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+TOOLKIT_PATH="/home/user/REPOS/claude-rag-toolkit"
+VENV_PYTHON="$TOOLKIT_PATH/venv/bin/python3"
+DIRECT_PYTHON="/usr/bin/python3"
+
+# Check if virtual environment exists and use it
+if [ -f "$VENV_PYTHON" ]; then
+    PYTHON_CMD="$VENV_PYTHON"
+    export PYTHONPATH="$TOOLKIT_PATH/src:$PYTHONPATH"
+    CLI_PATH="$TOOLKIT_PATH/venv/bin/claude-rag"
+    
+    # If the CLI command exists in venv, use it
+    if [ -f "$CLI_PATH" ]; then
+        exec "$CLI_PATH" "$@"
+    else
+        exec "$PYTHON_CMD" "$TOOLKIT_PATH/src/cli.py" "$@"
+    fi
+else
+    # Fall back to direct execution
+    export PYTHONPATH="$TOOLKIT_PATH/src:$PYTHONPATH"
+    cd "$SCRIPT_DIR"
+    exec "$DIRECT_PYTHON" "$TOOLKIT_PATH/src/cli.py" "$@"
+fi
