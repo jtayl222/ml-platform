@@ -1,0 +1,51 @@
+{
+  "repo_type": "mlops-platform",
+  "keywords": [
+    "k3s",
+    "harbor",
+    "istio",
+    "seldon",
+    "kubeadm",
+    "metallb",
+    "prometheus",
+    "grafana",
+    "jupyterhub",
+    "argo",
+    "sealed-secrets",
+    "calico",
+    "cilium",
+    "ansible",
+    "kubernetes"
+  ],
+  "file_patterns": [
+    "*.yml",
+    "*.yaml",
+    "*.md",
+    "*.sh",
+    "roles/**/*.yml",
+    "inventory/**/*.yml",
+    "scripts/*.sh",
+    "docs/*.md"
+  ],
+  "exclude_paths": [
+    ".git",
+    "node_modules",
+    "__pycache__",
+    "venv",
+    "env",
+    "*.log",
+    "tmp/",
+    ".cache/",
+    ".ansible/",
+    "fetched_tokens/"
+  ],
+  "extraction_focus": [
+    "ansible_tasks",
+    "kubernetes_resources",
+    "shell_commands",
+    "troubleshooting_sections",
+    "configuration_examples",
+    "service_endpoints",
+    "network_policies"
+  ]
+}
