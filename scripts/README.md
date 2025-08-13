@@ -50,6 +50,29 @@ Run bootstrap-kubeadm.sh to redeploy.
 ./scripts/delete_kubeadm.sh
 ```
 
+### add-kubeadm-control-plane.sh
+Adds additional control plane nodes to existing kubeadm cluster for high availability.
+
+**Prerequisites:**
+- Existing kubeadm cluster with at least one control plane node
+- New node(s) added to inventory under `[kubeadm_control_plane]`
+- SSH access to target nodes
+
+**Usage:**
+```bash
+# Add a specific control plane node
+./scripts/add-kubeadm-control-plane.sh --node nuc10i3-2
+
+# Shows available control plane nodes from inventory
+./scripts/add-kubeadm-control-plane.sh
+```
+
+**What it does:**
+- Validates the target node exists in inventory
+- Runs kubeadm join for control plane with proper certificates
+- Updates cluster configuration for HA topology
+- Verifies new control plane node is ready
+
 ### delete_eks.sh
 Completely removes EKS cluster and cleans up AWS resources.
 
