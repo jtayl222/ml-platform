@@ -1,0 +1,233 @@
+---
+# Check if node is safe to join/initialize
+# This prevents conflicts with existing clusters or orphaned processes
+
+- name: Check if critical Kubernetes ports are in use
+  shell: |
+    PORTS_IN_USE=""
+    for PORT in 6443 10250 10259 10257 2379 2380; do
+      if ss -tlnp 2>/dev/null | grep -q ":${PORT} "; then
+        PROCESS=$(ss -tlnp 2>/dev/null | grep ":${PORT} " | awk '{print $6}' | head -1)
+        PORTS_IN_USE="${PORTS_IN_USE}Port ${PORT} is in use by ${PROCESS}\n"
+      fi
+    done
+    if [ -n "$PORTS_IN_USE" ]; then
+      echo -e "$PORTS_IN_USE"
+      exit 1
+    fi
+    echo "All ports are free"
+  register: port_check
+  failed_when: false
+  changed_when: false
+
+- name: Check if node is part of an existing cluster
+  shell: |
+    # Check multiple indicators of cluster membership
+    CLUSTER_INDICATORS=""
+    
+    # Check for kubeconfig
+    if [ -f /etc/kubernetes/admin.conf ]; then
+      CLUSTER_INDICATORS="${CLUSTER_INDICATORS}Found: /etc/kubernetes/admin.conf\n"
+    fi
+    
+    # Check for kubelet config
+    if [ -f /etc/kubernetes/kubelet.conf ]; then
+      CLUSTER_INDICATORS="${CLUSTER_INDICATORS}Found: /etc/kubernetes/kubelet.conf\n"
+    fi
+    
+    # Check for etcd data
+    if [ -d /var/lib/etcd/member ]; then
+      CLUSTER_INDICATORS="${CLUSTER_INDICATORS}Found: /var/lib/etcd/member\n"
+    fi
+    
+    # Check for static pod manifests
+    if ls /etc/kubernetes/manifests/*.yaml >/dev/null 2>&1; then
+      MANIFESTS=$(ls /etc/kubernetes/manifests/*.yaml 2>/dev/null | wc -l)
+      CLUSTER_INDICATORS="${CLUSTER_INDICATORS}Found: ${MANIFESTS} static pod manifests\n"
+    fi
+    
+    # Check if kubelet is running
+    if systemctl is-active kubelet >/dev/null 2>&1; then
+      CLUSTER_INDICATORS="${CLUSTER_INDICATORS}Service: kubelet is active\n"
+    fi
+    
+    # Check for running kube processes
+    if pgrep -f "kube-apiserver|kube-controller|kube-scheduler|etcd" >/dev/null 2>&1; then
+      PROCS=$(pgrep -f "kube-apiserver|kube-controller|kube-scheduler|etcd" | wc -l)
+      CLUSTER_INDICATORS="${CLUSTER_INDICATORS}Found: ${PROCS} kubernetes processes running\n"
+    fi
+    
+    if [ -n "$CLUSTER_INDICATORS" ]; then
+      echo -e "Node appears to be part of an existing cluster:\n${CLUSTER_INDICATORS}"
+      exit 1
+    fi
+    echo "Node is clean - not part of any cluster"
+  register: cluster_check
+  failed_when: false
+  changed_when: false
+
+- name: Try to detect which cluster the node belongs to (if any)
+  shell: |
+    if [ -f /etc/kubernetes/admin.conf ]; then
+      # Try to get cluster info
+      CLUSTER_NAME=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf config current-context 2>/dev/null || echo "unknown")
+      API_SERVER=$(kubectl --kubeconfig=/etc/kubernetes/admin.conf cluster-info 2>/dev/null | grep "Kubernetes" | grep -oE 'https://[^ ]+' || echo "unknown")
+      echo "Current cluster: ${CLUSTER_NAME}"
+      echo "API Server: ${API_SERVER}"
+      
+      # Check if this matches our expected cluster
+      if [ "$API_SERVER" != "unknown" ]; then
+        EXPECTED_API="https://{{ hostvars[groups['kubeadm_control_plane'][0]]['ansible_host'] }}:6443"
+        if [ "$API_SERVER" != "$EXPECTED_API" ]; then
+          echo "WARNING: Node is connected to different cluster!"
+          echo "Expected: $EXPECTED_API"
+          echo "Actual: $API_SERVER"
+          exit 1
+        fi
+      fi
+    else
+      echo "No existing cluster configuration found"
+    fi
+  register: cluster_identity
+  failed_when: false
+  changed_when: false
+  when: cluster_check.rc != 0
+
+- name: Evaluate node state and decide action
+  set_fact:
+    node_state: >-
+      {%- if port_check.rc == 0 and cluster_check.rc == 0 -%}
+        clean
+      {%- elif cluster_identity is defined and cluster_identity.stdout is search('different cluster') -%}
+        foreign_cluster
+      {%- elif port_check.rc != 0 or cluster_check.rc != 0 -%}
+        dirty
+      {%- else -%}
+        unknown
+      {%- endif -%}
+
+- name: Display node state assessment
+  debug:
+    msg: |
+      Node State Assessment for {{ inventory_hostname }}:
+      ====================================================
+      State: {{ node_state }}
+      
+      Port Check:
+      {{ port_check.stdout }}
+      
+      Cluster Check:
+      {{ cluster_check.stdout }}
+      
+      {% if cluster_identity is defined and cluster_identity.stdout %}
+      Cluster Identity:
+      {{ cluster_identity.stdout }}
+      {% endif %}
+
+- name: Fail if node is part of a foreign cluster
+  fail:
+    msg: |
+      SAFETY CHECK FAILED: Node {{ inventory_hostname }} belongs to a different cluster!
+      
+      This node appears to be an active member of another Kubernetes cluster.
+      Joining it to this cluster could cause data loss or corruption.
+      
+      {{ cluster_identity.stdout if cluster_identity is defined else '' }}
+      
+      To proceed, you must first:
+      1. Properly leave the existing cluster (kubectl drain/delete node)
+      2. Run 'kubeadm reset' on the node
+      3. Clean up with: rm -rf /etc/kubernetes /var/lib/etcd /var/lib/kubelet
+      
+      Or use --extra-vars="force_cluster_join=true" to override (DANGEROUS!)
+  when: 
+    - node_state == "foreign_cluster"
+    - force_cluster_join | default(false) | bool == false
+
+- name: Attempt automatic cleanup if node is dirty but not foreign
+  block:
+    - name: Show what needs cleaning
+      debug:
+        msg: |
+          Node has remnants from previous deployment. Will attempt cleanup:
+          
+          {{ port_check.stdout }}
+          {{ cluster_check.stdout }}
+
+    - name: Stop kubelet service
+      systemd:
+        name: kubelet
+        state: stopped
+      become: true
+      ignore_errors: true
+
+    - name: Kill kubernetes processes
+      shell: |
+        pkill -f "kube-apiserver|kube-controller|kube-scheduler|etcd" || true
+        sleep 2
+        pkill -9 -f "kube-apiserver|kube-controller|kube-scheduler|etcd" || true
+      become: true
+      ignore_errors: true
+
+    - name: Clean kubernetes directories
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/kubernetes/manifests
+        - /var/lib/etcd
+      become: true
+      ignore_errors: true
+
+    - name: Re-check ports after cleanup
+      shell: |
+        for PORT in 6443 10250 10259 10257 2379 2380; do
+          if ss -tlnp 2>/dev/null | grep -q ":${PORT} "; then
+            echo "Port ${PORT} is still in use!"
+            exit 1
+          fi
+        done
+        echo "All critical ports are now free"
+      register: final_port_check
+      become: true
+
+    - name: Mark node as cleaned
+      set_fact:
+        node_state: "cleaned"
+      when: final_port_check.rc == 0
+
+  when: 
+    - node_state == "dirty"
+    - auto_cleanup_dirty_nodes | default(true) | bool
+
+- name: Fail if node is still dirty after cleanup attempt
+  fail:
+    msg: |
+      SAFETY CHECK FAILED: Node {{ inventory_hostname }} has conflicting processes!
+      
+      The following issues prevent this node from joining the cluster:
+      {{ port_check.stdout }}
+      {{ cluster_check.stdout }}
+      
+      Automatic cleanup {{ 'was attempted but failed' if auto_cleanup_dirty_nodes | default(true) else 'is disabled' }}.
+      
+      To fix this manually:
+      1. Stop all kubernetes services: systemctl stop kubelet
+      2. Kill all kubernetes processes: pkill -f kube
+      3. Stop containerd: systemctl stop containerd
+      4. Clean directories: rm -rf /etc/kubernetes /var/lib/etcd /var/lib/kubelet
+      5. Restart containerd: systemctl start containerd
+      
+      Or use --extra-vars="force_cluster_join=true" to override (NOT RECOMMENDED)
+  when:
+    - node_state == "dirty"
+    - force_cluster_join | default(false) | bool == false
+
+- name: Final node state summary
+  debug:
+    msg: |
+      ✅ Node {{ inventory_hostname }} is {{ node_state }} and ready to proceed
+      {% if node_state == "cleaned" %}
+      Note: Automatic cleanup was performed successfully
+      {% endif %}
+  when: node_state in ["clean", "cleaned"]
