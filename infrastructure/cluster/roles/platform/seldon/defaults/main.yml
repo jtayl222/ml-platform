@@ -62,10 +62,22 @@ ghcr_docker_config: |
 
 # Custom image configuration
 seldon_custom_images:
-  enabled: false
-  registry: "docker.io"
+  enabled: "{{ enable_harbor | default(false) }}"
+  registry: "{{ harbor_loadbalancer_ip | default('192.168.1.210') }}/library"
   agent:
-    repository: "seldonio/seldon-agent"
+    repository: "seldon-agent"
+    tag: "{{ seldon_operator_image_tag }}"
+    pullPolicy: "IfNotPresent"
+  scheduler:
+    repository: "seldon-scheduler"
+    tag: "{{ seldon_operator_image_tag }}"
+    pullPolicy: "IfNotPresent"
+  dataflow:
+    repository: "seldon-dataflow-engine"
+    tag: "{{ seldon_operator_image_tag }}"
+    pullPolicy: "IfNotPresent"
+  envoy:
+    repository: "seldon-envoy"
     tag: "{{ seldon_operator_image_tag }}"
     pullPolicy: "IfNotPresent"
 

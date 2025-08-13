@@ -65,14 +65,25 @@ seldon_enable_network_policies: true
 ### Custom Image Variables
 
 ```yaml
-# Enable custom agent images
+# Harbor Integration (auto-enabled when Harbor is present)
 seldon_custom_images:
-  enabled: true
-  registry: "your-registry.com"
+  enabled: "{{ enable_harbor | default(false) }}"  # Auto-enable with Harbor
+  registry: "{{ harbor_loadbalancer_ip }}/library"  # Use Harbor registry
   agent:
-    repository: "your-org/seldon-agent"  
-    tag: "custom-version"
-    pullPolicy: "Always"
+    repository: "seldon-agent"  
+    tag: "{{ seldon_operator_image_tag }}"
+    pullPolicy: "IfNotPresent"
+  scheduler:
+    repository: "seldon-scheduler"
+    tag: "{{ seldon_operator_image_tag }}"
+  dataflow:
+    repository: "seldon-dataflow-engine"
+    tag: "{{ seldon_operator_image_tag }}"
+
+# When Harbor is enabled, Seldon will:
+# - Pull images from Harbor instead of external registries
+# - Use pre-loaded/mirrored images for airgapped environments
+# - Reduce external dependencies and improve security
 
 # PR #6582 - SELDON_SERVER_HOST support
 seldon_server_host:
