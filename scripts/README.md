@@ -80,6 +80,25 @@ Completely removes EKS cluster and cleans up AWS resources.
 ./scripts/delete_eks.sh
 ```
 
+## Harbor Registry Management
+
+### harbor-replication-config.yaml
+Configuration file for Harbor image replication and mirroring strategy.
+
+**Purpose:**
+Defines which external images should be mirrored to Harbor for airgapped deployments
+and reduced external dependencies.
+
+**Tier Structure:**
+- **Tier 1**: Mission-critical components (6-hour sync) - Seldon, MLflow runtime
+- **Tier 2**: Platform infrastructure (daily sync) - Prometheus, Grafana, Argo
+- **Tier 3**: Development tools (weekly sync) - Jupyter, utilities
+- **Tier 4**: Specialized workloads (on-demand) - GPU, custom models
+
+**Usage:**
+Used by `harbor-sync.sh` script (if available) for automated image mirroring.
+Can also be used as reference for manual Harbor replication rule creation.
+
 ## Sealed Secrets Management
 
 ### create-all-sealed-secrets.sh
