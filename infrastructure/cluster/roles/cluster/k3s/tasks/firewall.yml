@@ -1,0 +1,80 @@
+---
+- name: Configure UFW for K3s cluster communication
+  block:
+    - name: Allow K3s API server (6443)
+      community.general.ufw:
+        rule: allow
+        port: "6443"
+        proto: tcp
+        src: "{{ hostvars[item]['ansible_default_ipv4']['address'] }}"
+      with_items: "{{ groups['all'] }}"
+      when: hostvars[item]['ansible_default_ipv4']['address'] != ansible_default_ipv4.address
+
+    - name: Allow Kubelet API (10250)
+      community.general.ufw:
+        rule: allow
+        port: "10250"
+        proto: tcp
+        src: "{{ hostvars[item]['ansible_default_ipv4']['address'] }}"
+      with_items: "{{ groups['all'] }}"
+      when: hostvars[item]['ansible_default_ipv4']['address'] != ansible_default_ipv4.address
+
+    - name: Allow Calico BGP (179)
+      community.general.ufw:
+        rule: allow
+        port: "179"
+        proto: tcp
+        src: "{{ hostvars[item]['ansible_default_ipv4']['address'] }}"
+      with_items: "{{ groups['all'] }}"
+      when: hostvars[item]['ansible_default_ipv4']['address'] != ansible_default_ipv4.address
+
+    - name: Allow Calico VXLAN (4789)
+      community.general.ufw:
+        rule: allow
+        port: "4789"
+        proto: udp
+        src: "{{ hostvars[item]['ansible_default_ipv4']['address'] }}"
+      with_items: "{{ groups['all'] }}"
+      when: hostvars[item]['ansible_default_ipv4']['address'] != ansible_default_ipv4.address
+
+    - name: Allow Calico Typha (5473)
+      community.general.ufw:
+        rule: allow
+        port: "5473"
+        proto: tcp
+        src: "{{ hostvars[item]['ansible_default_ipv4']['address'] }}"
+      with_items: "{{ groups['all'] }}"
+      when: hostvars[item]['ansible_default_ipv4']['address'] != ansible_default_ipv4.address
+
+    - name: Allow Node Exporter (9100)
+      community.general.ufw:
+        rule: allow
+        port: "9100"
+        proto: tcp
+        src: "{{ hostvars[item]['ansible_default_ipv4']['address'] }}"
+      with_items: "{{ groups['all'] }}"
+      when: hostvars[item]['ansible_default_ipv4']['address'] != ansible_default_ipv4.address
+
+    - name: Allow NodePort range (30000-32767)
+      community.general.ufw:
+        rule: allow
+        port: "30000:32767"
+        proto: tcp
+        comment: "K3s NodePort services"
+
+    - name: Allow pod-to-pod communication (Calico)
+      community.general.ufw:
+        rule: allow
+        src: "10.244.0.0/16"
+        comment: "Calico pod network"
+
+    - name: Allow service network
+      community.general.ufw:
+        rule: allow
+        src: "10.96.0.0/12"
+        comment: "K3s service network"
+
+    - name: Reload UFW rules
+      community.general.ufw:
+        state: reloaded
+  tags: [k3s, firewall, security]

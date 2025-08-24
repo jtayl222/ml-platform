@@ -4,20 +4,8 @@
   include_tasks: check-node-state.yml
   tags: [kubeadm, safety-check]
 
-- name: Stop services and clean stale containerd state (prevents snapshotter corruption)
-  shell: |
-    # Stop services that might be using containerd
-    systemctl stop kubelet || true
-    systemctl stop containerd || true
-    
-    # Clean stale containerd state from any previous deployments
-    # This prevents "failed to stat parent" snapshotter corruption errors
-    rm -rf /var/lib/containerd/* || true
-    rm -rf /run/containerd/* || true
-    
-    echo "Cleaned containerd state"
-  become: true
-  ignore_errors: true
+# Aggressive containerd cleanup removed - this was breaking live deployments
+# Cleanup is only done during cluster teardown (kubeadm reset)
 
 - name: Install prerequisite packages
   package:
@@ -96,15 +84,15 @@
   become: true
 
 - name: Configure Harbor insecure registry for containerd
-  shell: |
-    cat >> /etc/containerd/config.toml <<EOF
-    
-        [plugins."io.containerd.grpc.v1.cri".registry.mirrors."{{ harbor_loadbalancer_ip | default('192.168.1.210') }}"]
-          endpoint = ["http://{{ harbor_loadbalancer_ip | default('192.168.1.210') }}"]
-    
-        [plugins."io.containerd.grpc.v1.cri".registry.configs."{{ harbor_loadbalancer_ip | default('192.168.1.210') }}".tls]
-          insecure_skip_verify = true
-    EOF
+  blockinfile:
+    path: /etc/containerd/config.toml
+    marker: "# {mark} ANSIBLE MANAGED HARBOR REGISTRY CONFIG"
+    block: |
+      [plugins."io.containerd.grpc.v1.cri".registry.mirrors."{{ harbor_loadbalancer_ip | default('192.168.1.210') }}"]
+        endpoint = ["http://{{ harbor_loadbalancer_ip | default('192.168.1.210') }}"]
+      
+      [plugins."io.containerd.grpc.v1.cri".registry.configs."{{ harbor_loadbalancer_ip | default('192.168.1.210') }}".tls]
+        insecure_skip_verify = true
   become: true
   when: enable_harbor | default(true)
 
@@ -114,6 +102,19 @@
     state: restarted
     enabled: yes
     daemon_reload: yes
+  become: true
+
+- name: Wait for containerd to be ready
+  wait_for:
+    path: /run/containerd/containerd.sock
+    timeout: 30
+  become: true
+
+- name: Verify containerd is running
+  command: systemctl is-active containerd
+  register: containerd_status
+  failed_when: containerd_status.stdout != "active"
+  changed_when: false
   become: true
 
 - name: Add Kubernetes APT repository (Debian/Ubuntu)

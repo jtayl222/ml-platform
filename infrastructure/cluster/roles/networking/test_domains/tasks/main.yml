@@ -1,0 +1,70 @@
+---
+# CoreDNS configuration for .test domains
+# This prevents ISP DNS interception of internal .test domains
+
+- name: Create CoreDNS custom configuration for .test domains
+  kubernetes.core.k8s:
+    name: coredns-custom
+    namespace: kube-system
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: coredns-custom
+        namespace: kube-system
+      data:
+        test.server: |
+          test:53 {
+              errors
+              hosts {
+                  {{ harbor_loadbalancer_ip | default('192.168.1.210') }} harbor.test
+                  {{ nginx_ingress_loadbalancer_ip | default('192.168.1.249') }} ml-api.test
+                  {{ k3s_control_plane_ip | default('192.168.1.85') }} dashboard.test
+                  ttl 60
+              }
+              log
+          }
+    kubeconfig: "{{ kubeconfig_path }}"
+  tags: [coredns, test-domains]
+
+- name: Restart CoreDNS to apply new configuration
+  shell: |
+    export KUBECONFIG={{ kubeconfig_path }}
+    kubectl rollout restart deployment/coredns -n kube-system
+  tags: [coredns, restart]
+
+- name: Wait for CoreDNS to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: coredns
+    namespace: kube-system
+    kubeconfig: "{{ kubeconfig_path }}"
+    wait_condition:
+      type: Available
+      status: "True"
+    wait_timeout: 60
+  tags: [coredns, wait]
+
+- name: Test DNS resolution for Harbor
+  shell: |
+    export KUBECONFIG={{ kubeconfig_path }}
+    kubectl run dns-test-harbor --image=busybox --restart=Never -- nslookup harbor.test
+    sleep 5
+    kubectl logs dns-test-harbor 2>/dev/null || echo "DNS test completed"
+    kubectl delete pod dns-test-harbor --ignore-not-found=true
+  register: dns_test_result
+  tags: [coredns, test]
+  ignore_errors: true
+
+- name: Show DNS test results
+  debug:
+    msg: |
+      DNS Test Results:
+      {% if '192.168.1.210' in dns_test_result.stdout %}
+      ✅ harbor.test DNS resolution working correctly (resolves to 192.168.1.210)
+      {% else %}
+      ❌ harbor.test DNS resolution failed
+      {% endif %}
+      Output: {{ dns_test_result.stdout }}
+  tags: [coredns, test]

@@ -1,0 +1,55 @@
+---
+- name: Deploy NFS Server
+  block:
+    - name: Install NFS server packages
+      apt:
+        name:
+          - nfs-kernel-server
+          - nfs-common
+        state: present
+        update_cache: yes
+      become: true
+
+    - name: Create NFS export directory
+      file:
+        path: "{{ nfs_path }}"
+        state: directory
+        owner: nobody
+        group: nogroup
+        mode: '0777'
+      become: true
+
+    - name: Configure NFS exports
+      lineinfile:
+        path: /etc/exports
+        line: "{{ nfs_path }} {{ nfs_allowed_networks }}(rw,sync,no_subtree_check,no_root_squash)"
+        create: yes
+      become: true
+      notify: restart nfs
+
+    - name: Export NFS shares
+      command: exportfs -a
+      become: true
+
+    - name: Start and enable NFS services
+      systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+      become: true
+      loop:
+        - nfs-kernel-server
+        - rpcbind
+  when: k3s_state is not defined or k3s_state != "absent"
+
+- name: Remove NFS exports (cleanup)
+  block:
+    - name: Remove NFS exports
+      lineinfile:
+        path: /etc/exports
+        state: absent
+        regexp: "^{{ nfs_export_path }}"
+      
+    - name: Reload NFS exports
+      command: exportfs -ra
+  when: k3s_state is defined and k3s_state == "absent"

@@ -10,28 +10,27 @@ command -v helm >/dev/null 2>&1 || { echo "❌ Helm required"; exit 1; }
 
 # Deploy infrastructure
 echo "📦 Deploying kubeadm cluster..."
-ansible-playbook -i inventory/production/hosts-kubeadm infrastructure/cluster/site-multiplatform.yml
+ansible-playbook -i inventory/production/hosts-kubeadm infrastructure/cluster/site.yml -e platform_type=kubeadm
 
 # Wait for cluster to be ready
 echo "⏳ Waiting for cluster to be ready..."
-export KUBECONFIG=/home/user/REPOS/ml-platform/infrastructure/fetched_tokens/kubeconfig-kubeadm
+export KUBECONFIG=infrastructure/fetched_tokens/kubeconfig-kubeadm
 kubectl wait --for=condition=Ready nodes --all --timeout=600s
 
-# Install CNI (Cilium)
-echo "🌐 Installing Cilium CNI..."
-ansible-playbook -i inventory/production/hosts-kubeadm infrastructure/cluster/site-multiplatform.yml --tags cni
+# Install CNI (Cilium) - included in main deployment
+echo "🌐 CNI (Cilium) deployed with cluster..."
 
 # Install Helm charts
 echo "📊 Installing monitoring stack..."
-ansible-playbook -i inventory/production/hosts-kubeadm infrastructure/cluster/site-multiplatform.yml --tags monitoring
+ansible-playbook -i inventory/production/hosts-kubeadm infrastructure/cluster/site.yml --tags monitoring
 
 # Deploy MLOps components  
 echo "🤖 Deploying MLOps platform..."
-ansible-playbook -i inventory/production/hosts-kubeadm infrastructure/cluster/site-multiplatform.yml --tags mlops
+ansible-playbook -i inventory/production/hosts-kubeadm infrastructure/cluster/site.yml --tags mlops
 
 # Deploy platform services
 echo "🔧 Deploying platform services..."
-ansible-playbook -i inventory/production/hosts-kubeadm infrastructure/cluster/site-multiplatform.yml --tags platform
+ansible-playbook -i inventory/production/hosts-kubeadm infrastructure/cluster/site.yml --tags platform
 
 echo "✅ MLOps platform ready!"
 echo ""

@@ -1,0 +1,60 @@
+---
+# K3s agent (worker) installation tasks
+
+- name: Check if K3s agent is already running
+  systemd:
+    name: k3s-agent
+  register: k3s_agent_service_status
+  failed_when: false
+  changed_when: false
+  tags: [k3s, agent]
+
+- name: Get K3s token from control plane
+  set_fact:
+    k3s_token: "{{ hostvars[k3s_control_plane_host]['k3s_token'] }}"
+  when: k3s_token is not defined
+  tags: [k3s, agent]
+
+- name: Install K3s agent
+  block:
+    - name: Download and install K3s agent
+      shell: |
+        curl -sfL {{ k3s_install_script_url }} | \
+        K3S_URL="{{ k3s_server_url }}" \
+        K3S_TOKEN="{{ k3s_token }}" \
+        INSTALL_K3S_VERSION="{{ k3s_version }}" \
+        INSTALL_K3S_EXEC="agent {{ k3s_common_args | join(' ') }} {{ k3s_agent_args | join(' ') }}" \
+        sh -
+      environment:
+        INSTALL_K3S_CHANNEL: "{{ k3s_channel }}"
+      become: true
+      when: not k3s_binary.stat.exists or k3s_agent_service_status.status.ActiveState != "active"
+
+    - name: Ensure K3s agent service is started and enabled
+      systemd:
+        name: k3s-agent
+        state: started
+        enabled: true
+        daemon_reload: true
+      become: true
+
+    - name: Wait for agent to connect to cluster
+      wait_for:
+        timeout: 300
+        delay: 10
+      tags: [k3s, agent]
+
+  tags: [k3s, agent]
+
+- name: Verify agent joined cluster
+  delegate_to: "{{ k3s_control_plane_host }}"
+  command: |
+    {{ k3s_install_dir }}/k3s kubectl get nodes {{ inventory_hostname }} \
+    --kubeconfig={{ k3s_config_dir }}/k3s.yaml
+  register: node_check
+  until: "'Ready' in node_check.stdout"
+  retries: 30
+  delay: 10
+  become: true
+  changed_when: false
+  tags: [k3s, agent, verify]

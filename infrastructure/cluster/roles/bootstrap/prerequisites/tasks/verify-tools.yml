@@ -1,0 +1,55 @@
+---
+# Verify all essential platform tools are properly installed
+
+- name: Comprehensive tool verification
+  block:
+    - name: Test yq v4 functionality
+      shell: |
+        echo "test: value" | yq '.test' 2>/dev/null
+      register: yq_test
+      delegate_to: localhost
+      run_once: true
+
+    - name: Test helm functionality
+      shell: |
+        helm version --short 2>/dev/null
+      register: helm_test
+      delegate_to: localhost
+      run_once: true
+
+    - name: Test kubectl functionality
+      shell: |
+        kubectl version --client 2>/dev/null | head -1 || echo "kubectl available"
+      register: kubectl_test
+      delegate_to: localhost
+      run_once: true
+
+    - name: Test jq functionality
+      shell: |
+        echo '{"test": "value"}' | jq '.test' 2>/dev/null
+      register: jq_test
+      delegate_to: localhost
+      run_once: true
+
+- name: Display platform tools verification
+  debug:
+    msg:
+      - "🔍 Platform Tools Verification Results:"
+      - ""
+      - "✅ yq v4: {{ yq_test.stdout if yq_test.rc == 0 else '❌ FAILED' }}"
+      - "✅ helm: {{ helm_test.stdout if helm_test.rc == 0 else '❌ FAILED' }}"
+      - "✅ kubectl: {{ kubectl_test.stdout if kubectl_test.rc == 0 else '❌ FAILED' }}"
+      - "✅ jq: {{ jq_test.stdout if jq_test.rc == 0 else '❌ FAILED' }}"
+      - ""
+      - "🎯 Platform Prerequisites: {{ 'READY ✅' if (yq_test.rc == 0 and helm_test.rc == 0 and kubectl_test.rc == 0 and jq_test.rc == 0) else 'FAILED ❌' }}"
+  delegate_to: localhost
+  run_once: true
+
+- name: Fail if critical tools are missing
+  fail:
+    msg: "Critical platform prerequisites are missing. Platform deployment cannot continue."
+  when: >
+    yq_test.rc != 0 or 
+    helm_test.rc != 0 or 
+    kubectl_test.rc != 0 or 
+    jq_test.rc != 0

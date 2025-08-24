@@ -1,0 +1,91 @@
+---
+# EKS cluster configuration
+
+# Cluster basics
+eks_cluster_name: "mlops-platform-eks"
+eks_cluster_version: "1.31"
+eks_region: "{{ aws_region | default('us-west-2') }}"
+
+# Networking
+eks_vpc_cidr: "10.0.0.0/16"
+eks_enable_private_access: true
+eks_enable_public_access: true
+eks_public_access_cidrs:
+  - "0.0.0.0/0"  # Restrict this in production
+
+# Node groups
+eks_node_groups:
+  - name: "mlops-workers"
+    instance_types:
+      - "t3.large"
+      - "t3.xlarge"
+    scaling_config:
+      desired: 3
+      min: 2
+      max: 10
+    disk_size: 100
+    labels:
+      role: "mlops"
+      workload: "general"
+    taints: []
+    
+  - name: "gpu-workers"
+    instance_types:
+      - "g4dn.xlarge"
+    scaling_config:
+      desired: 0
+      min: 0
+      max: 5
+    disk_size: 200
+    labels:
+      role: "mlops"
+      workload: "gpu"
+    taints:
+      - key: "nvidia.com/gpu"
+        value: "true"
+        effect: "NoSchedule"
+
+# Add-ons
+eks_addons:
+  - name: "vpc-cni"
+    version: "latest"
+  - name: "kube-proxy"
+    version: "latest"
+  - name: "coredns"
+    version: "latest"
+  - name: "aws-ebs-csi-driver"
+    version: "latest"
+  - name: "aws-efs-csi-driver"
+    version: "latest"
+
+# IAM configuration
+eks_create_iam_role: true
+eks_iam_role_name: "{{ eks_cluster_name }}-cluster-role"
+eks_node_iam_role_name: "{{ eks_cluster_name }}-node-role"
+
+# OIDC provider
+eks_enable_irsa: true  # IAM Roles for Service Accounts
+
+# Logging
+eks_enabled_cluster_log_types:
+  - "api"
+  - "audit"
+  - "authenticator"
+  - "controllerManager"
+  - "scheduler"
+
+# Security
+eks_enable_secrets_encryption: true
+eks_kms_key_id: ""  # If empty, AWS managed key will be used
+
+# Tags
+eks_tags:
+  Environment: "production"
+  Platform: "mlops"
+  ManagedBy: "ansible"
+  Project: "ml-platform"
+
+# AWS CLI configuration
+aws_cli_path: "/usr/local/bin/aws"
+eksctl_version: "0.169.0"
+eksctl_download_url: "https://github.com/weaveworks/eksctl/releases/download/v{{ eksctl_version }}/eksctl_Linux_amd64.tar.gz"

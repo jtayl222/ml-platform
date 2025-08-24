@@ -1,0 +1,3 @@
+---
+# All variables are inherited from group_vars/all.yml
+# No need to redefine nfs_server_ip and nfs_path here

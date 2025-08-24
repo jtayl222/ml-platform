@@ -1,0 +1,22 @@
+---
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: {{ metallb_ip_pool_name }}
+  namespace: {{ metallb_namespace }}
+  labels:
+    app: metallb
+    component: ipaddresspool
+spec:
+  addresses:
+    - {{ metallb_ip_range }}
+  autoAssign: true
+{% if metallb_advertisement_aggregation_length %}
+  aggregationLength: {{ metallb_advertisement_aggregation_length }}
+{% endif %}
+{% if metallb_advertisement_communities %}
+  communities:
+{% for community in metallb_advertisement_communities %}
+    - {{ community }}
+{% endfor %}
+{% endif %}

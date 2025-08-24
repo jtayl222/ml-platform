@@ -1,0 +1,50 @@
+---
+# Unified K3s role - routes to server or agent tasks based on node_role
+
+- name: Validate node_role parameter
+  assert:
+    that:
+      - node_role in ['server', 'agent']
+    fail_msg: "node_role must be either 'server' or 'agent', got: {{ node_role }}"
+  tags: [k3s, validate]
+
+- name: Display K3s deployment configuration
+  debug:
+    msg:
+      - "Node: {{ inventory_hostname }}"
+      - "Role: {{ node_role }}"
+      - "Version: {{ k3s_version }}"
+      - "State: {{ k3s_state }}"
+      - "Cluster CIDR: {{ k3s_cluster_cidr }}"
+      - "Service CIDR: {{ k3s_service_cidr }}"
+  tags: [k3s, info]
+
+# Common pre-installation tasks
+- name: Execute common K3s tasks
+  include_tasks: common.yml
+  tags: [k3s, common]
+
+# Route based on desired state
+- name: Install K3s
+  block:
+    - name: Install K3s server (control plane)
+      include_tasks: server.yml
+      when: node_role == 'server'
+      tags: [k3s, server]
+
+    - name: Install K3s agent (worker)
+      include_tasks: agent.yml  
+      when: node_role == 'agent'
+      tags: [k3s, agent]
+  when: k3s_state == 'present'
+
+- name: Uninstall K3s
+  include_tasks: uninstall.yml
+  when: k3s_state == 'absent'
+  tags: [k3s, uninstall]
+
+# Post-installation validation
+- name: Validate K3s installation
+  include_tasks: validate.yml
+  when: k3s_state == 'present'
+  tags: [k3s, validate]

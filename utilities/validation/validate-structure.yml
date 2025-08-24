@@ -1,0 +1,157 @@
+---
+# Infrastructure Structure Validation Playbook
+# Validates that the new layered structure is working correctly
+
+- name: Validate Infrastructure Structure
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    kubeconfig_path: "/tmp/k3s-kubeconfig.yaml"
+    
+  tasks:
+    - name: Validation Phase - Directory Structure
+      block:
+        - name: Check required directories exist
+          stat:
+            path: "{{ item }}"
+          register: dir_check
+          failed_when: not dir_check.stat.exists
+          loop:
+            - "{{ playbook_dir }}/../../infrastructure/cluster/roles/bootstrap"
+            - "{{ playbook_dir }}/../../infrastructure/cluster/roles/cluster"
+            - "{{ playbook_dir }}/../../infrastructure/cluster/roles/networking"
+            - "{{ playbook_dir }}/../../infrastructure/cluster/roles/storage"
+            - "{{ playbook_dir }}/../../infrastructure/cluster/roles/security"
+            - "{{ playbook_dir }}/../../infrastructure/cluster/roles/platform"
+            - "{{ playbook_dir }}/../../infrastructure/cluster/roles/mlops"
+            - "{{ playbook_dir }}/../../infrastructure/cluster/roles/observability"
+            - "{{ playbook_dir }}/../../infrastructure/cluster/playbooks"
+            - "{{ playbook_dir }}/../../infrastructure/cluster/inventories"
+      tags: [structure]
+      
+    - name: Validation Phase - Role Structure
+      block:
+        - name: Check critical roles exist
+          stat:
+            path: "{{ item }}"
+          register: role_check
+          failed_when: not role_check.stat.exists
+          loop:
+            - "{{ playbook_dir }}/../../infrastructure/cluster/roles/bootstrap/prerequisites"
+            - "{{ playbook_dir }}/../../infrastructure/cluster/roles/cluster/k3s"
+            - "{{ playbook_dir }}/../../infrastructure/cluster/roles/networking/metallb"
+            - "{{ playbook_dir }}/../../infrastructure/cluster/roles/storage/minio"
+            - "{{ playbook_dir }}/../../infrastructure/cluster/roles/security/sealed_secrets"
+            - "{{ playbook_dir }}/../../infrastructure/cluster/roles/platform/argo/cd"
+            - "{{ playbook_dir }}/../../infrastructure/cluster/roles/mlops/mlflow"
+            - "{{ playbook_dir }}/../../infrastructure/cluster/roles/observability/prometheus_stack"
+      tags: [roles]
+      
+    - name: Validation Phase - Playbook Syntax
+      block:
+        - name: Find all playbooks
+          find:
+            paths: "{{ playbook_dir }}/../../infrastructure/cluster/playbooks"
+            patterns: "*.yml,*.yaml"
+          register: playbook_files
+          
+        - name: Check playbook syntax
+          shell: "ansible-playbook --syntax-check {{ item.path }}"
+          loop: "{{ playbook_files.files }}"
+          changed_when: false
+      tags: [syntax]
+      
+    - name: Validation Phase - Role Dependencies
+      block:
+        - name: Check for meta/main.yml in critical roles
+          stat:
+            path: "{{ item }}/meta/main.yml"
+          register: meta_check
+          loop:
+            - "{{ playbook_dir }}/../../infrastructure/cluster/roles/cluster/k3s"
+            - "{{ playbook_dir }}/../../infrastructure/cluster/roles/platform/argo/cd"
+            - "{{ playbook_dir }}/../../infrastructure/cluster/roles/mlops/mlflow"
+            
+        - name: Validate meta files contain dependencies
+          shell: |
+            if [[ -f "{{ item.item }}/meta/main.yml" ]]; then
+              if grep -q "dependencies:" "{{ item.item }}/meta/main.yml"; then
+                echo "Dependencies found in {{ item.item }}"
+              else
+                echo "No dependencies section in {{ item.item }}"
+              fi
+            fi
+          loop: "{{ meta_check.results }}"
+          when: item.stat.exists
+          changed_when: false
+      tags: [dependencies]
+      
+    - name: Validation Phase - Environment Configuration
+      block:
+        - name: Check environment inventories exist
+          stat:
+            path: "{{ item }}"
+          register: env_check
+          failed_when: not env_check.stat.exists
+          loop:
+            - "{{ playbook_dir }}/../../infrastructure/cluster/inventories/dev"
+            - "{{ playbook_dir }}/../../infrastructure/cluster/inventories/staging" 
+            - "{{ playbook_dir }}/../../infrastructure/cluster/inventories/prod"
+            
+        - name: Check environment group_vars exist
+          stat:
+            path: "{{ item }}"
+          register: group_vars_check
+          failed_when: not group_vars_check.stat.exists
+          loop:
+            - "{{ playbook_dir }}/../../infrastructure/cluster/inventories/dev/group_vars/all.yml"
+            - "{{ playbook_dir }}/../../infrastructure/cluster/inventories/staging/group_vars/all.yml"
+            - "{{ playbook_dir }}/../../infrastructure/cluster/inventories/prod/group_vars/all.yml"
+      tags: [environments]
+
+    - name: Validation Phase - Role Content
+      block:
+        - name: Check unified k3s role structure
+          stat:
+            path: "{{ playbook_dir }}/../../infrastructure/cluster/roles/cluster/k3s/{{ item }}"
+          register: k3s_structure
+          failed_when: not k3s_structure.stat.exists
+          loop:
+            - "tasks/main.yml"
+            - "defaults/main.yml"
+            
+        - name: Check for k3s role unification markers
+          find:
+            paths: "{{ playbook_dir }}/../../infrastructure/cluster/roles/cluster/k3s"
+            patterns: ".needs_manual_merge"
+          register: merge_markers
+          
+        - name: Report manual merge requirements
+          debug:
+            msg: "K3s role needs manual merging - check {{ item.path }}"
+          loop: "{{ merge_markers.files }}"
+          when: merge_markers.files | length > 0
+      tags: [content]
+      
+    - name: Validation Summary
+      debug:
+        msg:
+          - "✅ Infrastructure validation completed successfully!"
+          - ""
+          - "Structure Status:"
+          - "  - Directory structure: ✅ Valid"
+          - "  - Critical roles: ✅ Present"
+          - "  - Playbook syntax: ✅ Valid"
+          - "  - Environment configs: ✅ Present"
+          - ""
+          - "Next Steps:"
+          - "  1. Review any manual merge requirements"
+          - "  2. Test deployment with --check flag"
+          - "  3. Run integration tests"
+      tags: [summary]
+      
+  handlers:
+    - name: Report validation failure
+      fail:
+        msg: "Infrastructure validation failed - check previous tasks for details"

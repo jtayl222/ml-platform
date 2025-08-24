@@ -1,0 +1,74 @@
+---
+# Common K3s tasks for both server and agent nodes
+
+- name: Check if K3s is already installed
+  stat:
+    path: "{{ k3s_install_dir }}/k3s"
+  register: k3s_binary
+  tags: [k3s, common]
+
+- name: Create K3s configuration directory
+  file:
+    path: "{{ k3s_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+  tags: [k3s, common]
+
+- name: Configure firewall for K3s
+  include_tasks: firewall.yml
+  when: ansible_os_family in ['Debian', 'RedHat']
+  tags: [k3s, firewall]
+
+- name: Setup private registry configuration
+  template:
+    src: registries.yaml.j2
+    dest: "{{ k3s_registries_config_file }}"
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  when: k3s_private_registries | length > 0
+  notify: restart k3s
+  tags: [k3s, registry]
+
+- name: Disable swap
+  block:
+    - name: Turn off swap
+      command: swapoff -a
+      become: true
+      changed_when: false
+
+    - name: Remove swap from fstab
+      replace:
+        path: /etc/fstab
+        regexp: '^([^#].*?\sswap\s+sw\s+.*)$'
+        replace: '# \1'
+      become: true
+  tags: [k3s, common]
+
+- name: Load required kernel modules
+  modprobe:
+    name: "{{ item }}"
+    state: present
+  become: true
+  loop:
+    - br_netfilter
+    - overlay
+  tags: [k3s, common]
+
+- name: Set kernel parameters for Kubernetes
+  sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    sysctl_set: true
+    reload: true
+  become: true
+  loop:
+    - { name: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+    - { name: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+    - { name: 'net.ipv4.ip_forward', value: '1' }
+  tags: [k3s, common]

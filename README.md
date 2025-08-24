@@ -69,6 +69,47 @@ A complete, production-ready MLOps platform supporting multiple Kubernetes distr
 - 📈 **Improved model performance** through automated A/B testing
 - 🔍 **Full ML lifecycle observability** and tracking
 
+## 🏗️ **Infrastructure Architecture**
+
+### **Layered Architecture Design**
+
+The platform uses a modern **layered architecture** that separates concerns and enables maintainable, scalable deployments:
+
+```
+📁 infrastructure/cluster/
+├── 📄 site.yml                    # Main deployment playbook (all platforms)
+├── 📁 playbooks/
+│   ├── 📄 bootstrap.yml           # Platform detection & prerequisites
+│   └── 📄 cluster.yml             # Kubernetes cluster deployment
+└── 📁 roles/
+    ├── 📁 bootstrap/               # Platform prerequisites & detection
+    │   ├── 📁 platform_detection/  # Auto-detect K3s/Kubeadm/EKS
+    │   └── 📁 prerequisites/       # Install kubectl, helm, yq
+    ├── 📁 cluster/                 # Kubernetes cluster management
+    │   ├── 📁 k3s/                 # Unified K3s deployment (server/agent)
+    │   ├── 📁 kubeadm/             # Kubeadm cluster management
+    │   ├── 📁 eks/                 # EKS cluster management
+    │   ├── 📁 cni/                 # Container Network Interface
+    │   │   ├── 📁 cilium/          # Cilium CNI (default)
+    │   │   ├── 📁 calico/          # Calico CNI (alternative)
+    │   │   └── 📁 flannel/         # Flannel CNI (legacy)
+    │   └── 📁 kubeconfig/          # Kubeconfig fetching
+    ├── 📁 networking/              # Network infrastructure
+    │   └── 📁 metallb/             # MetalLB load balancer
+    ├── 📁 storage/                 # Storage infrastructure
+    │   └── 📁 nfs/                 # NFS server/clients/provisioner
+    └── 📁 security/                # Security infrastructure
+        ├── 📁 sealed_secrets/      # Sealed Secrets controller
+        └── 📁 secrets/             # Secret management
+```
+
+### **Benefits of Layered Architecture:**
+- ✅ **Modular Design**: Each layer has a single responsibility
+- ✅ **Platform Agnostic**: Same roles work across K3s, Kubeadm, EKS
+- ✅ **Easy Testing**: Individual layers can be tested independently
+- ✅ **Maintainable**: Clear separation of infrastructure concerns
+- ✅ **Reusable**: Roles can be used in different combinations
+
 ## 🏛️ **Platform Architecture**
 
 ```
@@ -169,12 +210,12 @@ cp inventory/production/hosts-eks.example inventory/production/hosts-eks
 ./scripts/create-all-sealed-secrets.sh
 
 # Deploy with auto-detection
-ansible-playbook -i inventory/production/hosts infrastructure/cluster/site-multiplatform.yml
+ansible-playbook -i inventory/production/hosts infrastructure/cluster/site.yml
 
 # Or specify platform explicitly
-ansible-playbook -i inventory/production/hosts-k3s infrastructure/cluster/site-multiplatform.yml -e platform_type=k3s
-ansible-playbook -i inventory/production/hosts-kubeadm infrastructure/cluster/site-multiplatform.yml -e platform_type=kubeadm
-ansible-playbook -i inventory/production/hosts-eks infrastructure/cluster/site-multiplatform.yml -e platform_type=eks
+ansible-playbook -i inventory/production/hosts-k3s infrastructure/cluster/site.yml -e platform_type=k3s
+ansible-playbook -i inventory/production/hosts-kubeadm infrastructure/cluster/site.yml -e platform_type=kubeadm
+ansible-playbook -i inventory/production/hosts-eks infrastructure/cluster/site.yml -e platform_type=eks
 
 # 4. Verify platform deployment (Industry Best Practice)
 chmod +x scripts/verify-platform.sh
@@ -183,7 +224,15 @@ chmod +x scripts/verify-platform.sh
 # Run comprehensive Ansible tests
 ansible-playbook -i inventory/production/hosts-k3s infrastructure/cluster/test-platform.yml
 
-# 5. Access your MLOps platform
+# 5. Platform-specific cluster management
+# For Kubeadm clusters:
+./scripts/kubeadm-delete.sh          # Clean cluster teardown with verification
+./scripts/kubeadm-bootstrap.sh       # Bootstrap script (if available)
+
+# For K3s clusters: 
+./scripts/delete_k3s.sh              # K3s-specific teardown
+
+# 6. Access your MLOps platform
 echo "🎯 Platform Ready!"
 echo "MLflow: http://your-cluster-ip:30800"
 echo "Kiali Observability: http://your-cluster-ip:32001"
@@ -319,6 +368,13 @@ This platform supports the entire machine learning lifecycle:
 - [🔗 CNI Migration](docs/k3s-calico-migration-guide.md) - Flannel to Calico upgrade
 - [📋 Migration Analysis](docs/flannel-to-calico-migration-required.md) - Technical justification
 
+### **🔧 Infrastructure Management**
+- **Clean Cluster Teardown**: `./scripts/kubeadm-delete.sh` with automated verification
+- **Platform Detection**: Automatic K3s/Kubeadm/EKS detection and optimization
+- **Layered Deployment**: Bootstrap → Cluster → Networking → Storage → Security → Platform → MLOps
+- **CNI Management**: Default Cilium with Calico/Flannel alternatives
+- **Cluster Validation**: Comprehensive health checks and service verification
+
 ### **👩‍💻 Development & Usage**
 - [🧪 Running Experiments](docs/experiments.md) - MLflow integration
 - [🚀 Deploying Models](docs/model-deployment.md) - Seldon Core serving
@@ -368,12 +424,16 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) for deta
 
 ### **Latest Updates**
 
-- **🌐 Multi-Platform Support**: Now supports K3s, Kubeadm, and EKS deployments
+- **🏗️ Infrastructure Restructure**: Complete migration to layered architecture for improved maintainability
+- **🔧 Enhanced Cluster Management**: New `kubeadm-delete.sh` with verification and cleanup automation
+- **🌐 Multi-Platform Support**: Now supports K3s, Kubeadm, and EKS deployments with unified `site.yml`
+- **🚀 Cilium CNI Default**: Modern Container Network Interface with platform-agnostic configuration
 - **🕸️ Istio v1.27.x Upgrade**: Latest stable service mesh with Helm-based deployment
 - **👁️ Full Observability Stack**: Kiali v1.85 + Jaeger tracing integration
 - **🏗️ Harbor Registry**: Enterprise container registry with vulnerability scanning and 4-tier image mirroring
 - **🔍 Platform Auto-Detection**: Automatically detects and optimizes for your Kubernetes platform
 - **📦 Enhanced Configurations**: Platform-specific Istio profiles and comprehensive Harbor replication
+- **🛠️ Improved Reliability**: Fixed containerd issues, duplicate CNI installations, and cluster teardown processes
 
 ---
 

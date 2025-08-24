@@ -15,7 +15,7 @@ aws sts get-caller-identity >/dev/null 2>&1 || { echo "❌ AWS credentials not c
 
 # Deploy EKS infrastructure
 echo "☁️  Deploying EKS cluster..."
-ansible-playbook -i inventory/production/hosts-eks infrastructure/cluster/site-multiplatform.yml
+ansible-playbook -i inventory/production/hosts-eks infrastructure/cluster/site.yml
 
 # Wait for cluster to be ready
 echo "⏳ Waiting for EKS cluster to be ready..."
@@ -24,19 +24,19 @@ kubectl wait --for=condition=Ready nodes --all --timeout=900s
 
 # Install AWS Load Balancer Controller
 echo "⚖️  Installing AWS Load Balancer Controller..."
-ansible-playbook -i inventory/production/hosts-eks infrastructure/cluster/site-multiplatform.yml --tags aws-load-balancer
+ansible-playbook -i inventory/production/hosts-eks infrastructure/cluster/site.yml --tags aws-load-balancer
 
 # Install monitoring stack
 echo "📊 Installing monitoring stack..."
-ansible-playbook -i inventory/production/hosts-eks infrastructure/cluster/site-multiplatform.yml --tags monitoring
+ansible-playbook -i inventory/production/hosts-eks infrastructure/cluster/site.yml --tags monitoring
 
 # Deploy MLOps components  
 echo "🤖 Deploying MLOps platform..."
-ansible-playbook -i inventory/production/hosts-eks infrastructure/cluster/site-multiplatform.yml --tags mlops
+ansible-playbook -i inventory/production/hosts-eks infrastructure/cluster/site.yml --tags mlops
 
 # Deploy platform services
 echo "🔧 Deploying platform services..."
-ansible-playbook -i inventory/production/hosts-eks infrastructure/cluster/site-multiplatform.yml --tags platform
+ansible-playbook -i inventory/production/hosts-eks infrastructure/cluster/site.yml --tags platform
 
 echo "✅ MLOps platform ready on EKS!"
 echo ""

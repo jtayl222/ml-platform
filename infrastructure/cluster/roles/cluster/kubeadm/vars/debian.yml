@@ -1,6 +1,12 @@
 ---
 # Debian/Ubuntu specific variables for kubeadm
 
+# Kubernetes version (define here to ensure vars have access)
+kubernetes_version: "1.33.1"
+kubeadm_version: "{{ kubernetes_version }}"
+kubelet_version: "{{ kubernetes_version }}"
+kubectl_version: "{{ kubernetes_version }}"
+
 # Package names
 kubernetes_packages:
   - "kubelet={{ kubelet_version }}-*"

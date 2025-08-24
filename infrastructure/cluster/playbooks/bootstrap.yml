@@ -1,0 +1,103 @@
+---
+# Bootstrap Playbook - Platform Prerequisites and Detection
+# This playbook handles the initial setup required before cluster deployment
+# It is platform-agnostic and prepares the environment for any Kubernetes distribution
+
+- name: Install Platform Prerequisites
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Install Essential Platform Tools
+      include_role:
+        name: ../roles/bootstrap/prerequisites
+      tags: [prerequisites, tools]
+
+- name: Detect and Configure Platform
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Detect Kubernetes platform
+      include_role:
+        name: ../roles/bootstrap/platform_detection
+      tags: [platform-detection]
+
+    - name: Set platform facts for all hosts
+      set_fact:
+        kubernetes_platform: "{{ kubernetes_platform }}"
+        cluster_platform: "{{ cluster_platform | default(kubernetes_platform) }}"
+      delegate_to: "{{ item }}"
+      delegate_facts: true
+      loop: "{{ groups['all'] }}"
+      when: groups['all'] is defined
+      tags: [platform-detection]
+
+    - name: Display detected platform
+      debug:
+        msg: 
+          - "Detected platform: {{ kubernetes_platform }}"
+          - "Cluster platform: {{ cluster_platform | default(kubernetes_platform) }}"
+      tags: [platform-detection]
+
+    - name: Set unified kubernetes_state based on platform
+      set_fact:
+        kubernetes_state: "{{ lookup('vars', kubernetes_platform + '_state', default='present') }}"
+      tags: [platform-detection]
+
+    - name: Propagate kubernetes_state to all hosts
+      set_fact:
+        kubernetes_state: "{{ kubernetes_state }}"
+      delegate_to: "{{ item }}"
+      delegate_facts: true
+      loop: "{{ groups['all'] }}"
+      when: groups['all'] is defined
+      tags: [platform-detection]
+
+    - name: Display kubernetes state
+      debug:
+        msg: "Kubernetes state: {{ kubernetes_state }}"
+      tags: [platform-detection]
+
+- name: Verify Bootstrap Prerequisites
+  hosts: all
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Verify system requirements
+      block:
+        - name: Check minimum CPU cores
+          assert:
+            that:
+              - ansible_processor_vcpus >= 2
+            fail_msg: "System requires at least 2 CPU cores, found {{ ansible_processor_vcpus }}"
+          when: inventory_hostname != 'localhost'
+
+        - name: Check minimum memory
+          assert:
+            that:
+              - ansible_memtotal_mb >= 2048
+            fail_msg: "System requires at least 2GB RAM, found {{ ansible_memtotal_mb }}MB"
+          when: inventory_hostname != 'localhost'
+
+        - name: Check disk space
+          assert:
+            that:
+              - item.size_available > 10737418240  # 10GB in bytes
+            fail_msg: "Insufficient disk space on {{ item.mount }}: {{ (item.size_available / 1024 / 1024 / 1024) | round(2) }}GB available"
+          loop: "{{ ansible_mounts }}"
+          when: 
+            - item.mount in ['/', '/var']
+            - inventory_hostname != 'localhost'
+      tags: [verify-requirements]
+      when: inventory_hostname != 'localhost'
+
+    - name: Display bootstrap summary
+      debug:
+        msg:
+          - "Bootstrap completed successfully"
+          - "Platform: {{ kubernetes_platform }}"
+          - "State: {{ kubernetes_state }}"
+          - "Nodes: {{ groups['all'] | length }}"
+      run_once: true
+      tags: [summary]

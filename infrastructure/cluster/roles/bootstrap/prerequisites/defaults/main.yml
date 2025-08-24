@@ -1,0 +1,38 @@
+---
+# Platform prerequisites configuration
+
+# Essential tools configuration
+prerequisites_install_yq: true
+prerequisites_yq_version: "v4.44.3"  # Latest stable v4
+prerequisites_yq_install_method: "binary"  # binary, snap, or package
+
+prerequisites_install_helm: true
+prerequisites_helm_version: "v3.15.4"
+
+prerequisites_install_kubectl: true
+prerequisites_kubectl_version: "latest"
+
+# System packages required across all roles
+prerequisites_system_packages:
+  - curl
+  - wget
+  - unzip
+  - jq
+  - git
+  - rsync
+  - htop
+  - net-tools
+
+# Python packages for Ansible modules
+prerequisites_python_packages:
+  - kubernetes
+  - pyyaml
+  - requests
+
+# Platform-specific package management
+prerequisites_remove_conflicting_packages:
+  - yq  # Remove apt/yum version that conflicts with v4
+
+# Tool installation paths
+prerequisites_tools_path: "/usr/local/bin"
+prerequisites_temp_path: "/tmp/prerequisites"

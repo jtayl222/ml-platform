@@ -5,11 +5,11 @@ echo "🚀 Bootstrapping MLOps Platform with kubeadm (simple single control plan
 
 # Deploy single control plane
 echo "📦 Deploying kubeadm single control plane..."
-ansible-playbook -i inventory/production/hosts-kubeadm infrastructure/cluster/site-multiplatform.yml --limit "nuc10i3-1,localhost" --tags kubeadm
+ansible-playbook -i inventory/production/hosts-kubeadm infrastructure/cluster/site.yml --limit "nuc10i3-1,localhost" --tags kubeadm
 
 # Fetch kubeconfig
 echo "📥 Fetching kubeconfig..."
-ansible-playbook -i inventory/production/hosts-kubeadm infrastructure/cluster/site-multiplatform.yml --tags kubeconfig
+ansible-playbook -i inventory/production/hosts-kubeadm infrastructure/cluster/site.yml --tags kubeconfig
 
 # Install CNI
 echo "🌐 Installing Cilium CNI..."

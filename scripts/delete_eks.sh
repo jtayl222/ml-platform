@@ -11,17 +11,17 @@ aws sts get-caller-identity >/dev/null 2>&1 || { echo "❌ AWS credentials not c
 
 # Clean up platform services first to release AWS LoadBalancers
 echo "🧹 Cleaning up platform services..."
-ansible-playbook -i inventory/production/hosts-eks infrastructure/cluster/site-multiplatform.yml \
+ansible-playbook -i inventory/production/hosts-eks infrastructure/cluster/site.yml \
   --tags platform --extra-vars="platform_state=absent" || echo "Platform cleanup completed with warnings"
 
 # Clean up monitoring stack
 echo "📊 Cleaning up monitoring stack..."
-ansible-playbook -i inventory/production/hosts-eks infrastructure/cluster/site-multiplatform.yml \
+ansible-playbook -i inventory/production/hosts-eks infrastructure/cluster/site.yml \
   --tags monitoring --extra-vars="monitoring_state=absent" || echo "Monitoring cleanup completed with warnings"
 
 # Remove EKS cluster
 echo "☁️  Removing EKS cluster..."
-ansible-playbook -i inventory/production/hosts-eks infrastructure/cluster/site-multiplatform.yml \
+ansible-playbook -i inventory/production/hosts-eks infrastructure/cluster/site.yml \
   --extra-vars="eks_state=absent"
 
 # Clean up local kubeconfig

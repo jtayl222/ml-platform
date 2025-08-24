@@ -1,0 +1,104 @@
+---
+# K3s server (control plane) installation tasks
+
+- name: Check if K3s server is already running
+  systemd:
+    name: k3s
+  register: k3s_service_status
+  failed_when: false
+  changed_when: false
+  tags: [k3s, server]
+
+- name: Install K3s server
+  block:
+    - name: Download and install K3s server
+      shell: |
+        curl -sfL {{ k3s_install_script_url }} | \
+        INSTALL_K3S_VERSION="{{ k3s_version }}" \
+        INSTALL_K3S_EXEC="{{ k3s_common_args | join(' ') }} {{ k3s_server_args | join(' ') }}" \
+        sh -
+      environment:
+        INSTALL_K3S_CHANNEL: "{{ k3s_channel }}"
+        K3S_KUBECONFIG_MODE: "644"
+      become: true
+      when: not k3s_binary.stat.exists or k3s_service_status.status.ActiveState != "active"
+
+    - name: Ensure K3s service is started and enabled
+      systemd:
+        name: k3s
+        state: started
+        enabled: true
+        daemon_reload: true
+      become: true
+
+    - name: Wait for K3s to be ready
+      wait_for:
+        port: 6443
+        host: "{{ ansible_default_ipv4.address }}"
+        delay: 10
+        timeout: 300
+
+    - name: Wait for node to be ready
+      command: |
+        {{ k3s_install_dir }}/k3s kubectl get nodes {{ inventory_hostname }} \
+        --kubeconfig={{ k3s_config_dir }}/k3s.yaml
+      register: node_status
+      until: "'Ready' in node_status.stdout"
+      retries: 30
+      delay: 10
+      become: true
+      changed_when: false
+
+    - name: Create kubeconfig symlink for kubectl
+      file:
+        src: "{{ k3s_config_dir }}/k3s.yaml"
+        dest: "/root/.kube/config"
+        state: link
+        force: true
+      become: true
+      ignore_errors: true
+
+    - name: Ensure .kube directory exists for root
+      file:
+        path: /root/.kube
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+      become: true
+
+    - name: Copy kubeconfig to root's .kube directory
+      copy:
+        src: "{{ k3s_config_dir }}/k3s.yaml"
+        dest: /root/.kube/config
+        remote_src: true
+        owner: root
+        group: root
+        mode: '0600'
+      become: true
+
+    - name: Get K3s node token for workers
+      slurp:
+        src: "{{ k3s_token_file }}"
+      register: k3s_node_token
+      become: true
+
+    - name: Store K3s token as fact for workers
+      set_fact:
+        k3s_token: "{{ k3s_node_token.content | b64decode | trim }}"
+      delegate_to: "{{ item }}"
+      delegate_facts: true
+      loop: "{{ groups['all'] }}"
+      when: groups['all'] is defined
+
+  tags: [k3s, server]
+
+- name: Label control plane node
+  command: |
+    {{ k3s_install_dir }}/k3s kubectl label node {{ inventory_hostname }} \
+    node-role.kubernetes.io/control-plane=true \
+    node-role.kubernetes.io/master=true \
+    --overwrite --kubeconfig={{ k3s_config_dir }}/k3s.yaml
+  become: true
+  changed_when: false
+  tags: [k3s, server, labels]

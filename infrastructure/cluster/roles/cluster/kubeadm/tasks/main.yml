@@ -51,14 +51,8 @@
     - control_plane_count | int > 1
   tags: [kubeadm, control-plane, ha]
 
-# Install CNI plugin
-- name: Install CNI plugin
-  include_tasks: install-cni.yml
-  when:
-    - kubeadm_state | default('present') != 'absent'
-    - not kubeadm_cluster_exists
-    - inventory_hostname == groups['kubeadm_control_plane'][0]
-  tags: [kubeadm, cni]
+# CNI plugin installation moved to dedicated CNI roles
+# This prevents double installation and configuration conflicts
 
 # Join worker nodes
 - name: Get join command

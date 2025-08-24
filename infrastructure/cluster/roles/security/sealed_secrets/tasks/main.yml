@@ -1,0 +1,225 @@
+---
+- name: Deploy Sealed Secrets Infrastructure
+  block:
+    - name: Verify Prerequisites
+      block:
+        - name: Ensure kubeconfig exists
+          ansible.builtin.stat:
+            path: "{{ kubeconfig_path }}"
+          register: kubeconfig_stat
+          delegate_to: "{{ groups['ansible_controller'][0] }}"
+          become: false
+
+        - name: Fail if kubeconfig doesn't exist
+          ansible.builtin.fail:
+            msg: "Kubeconfig not found at {{ kubeconfig_path }}. Please run the kubeconfig tasks first."
+          when: not kubeconfig_stat.stat.exists
+          delegate_to: "{{ groups['ansible_controller'][0] }}"
+          become: false
+      tags: [prerequisites, validation]
+
+    - name: Setup Sealed Secrets Controller
+      block:
+        - name: Add Bitnami Helm repository
+          kubernetes.core.helm_repository:
+            name: sealed-secrets
+            repo_url: https://bitnami-labs.github.io/sealed-secrets
+            kubeconfig: "{{ kubeconfig_path }}"
+
+        - name: Install Sealed Secrets Controller
+          kubernetes.core.helm:
+            name: sealed-secrets
+            chart_ref: sealed-secrets/sealed-secrets
+            release_namespace: kube-system
+            create_namespace: false
+            kubeconfig: "{{ kubeconfig_path }}"
+            wait: true
+            wait_timeout: "300s"
+
+        - name: Wait for Sealed Secrets Controller pod to be ready
+          kubernetes.core.k8s_info:
+            api_version: v1
+            kind: Pod
+            namespace: kube-system
+            label_selectors:
+              - "app.kubernetes.io/name=sealed-secrets"
+            kubeconfig: "{{ kubeconfig_path }}"
+            wait: true
+            wait_condition:
+              type: Ready
+              status: "True"
+            wait_timeout: 300
+
+        - name: Verify controller deployment is available
+          kubernetes.core.k8s_info:
+            api_version: apps/v1
+            kind: Deployment
+            name: sealed-secrets
+            namespace: kube-system
+            kubeconfig: "{{ kubeconfig_path }}"
+            wait: true
+            wait_condition:
+              type: Available
+              status: "True"
+            wait_timeout: 300
+          register: controller_deployment
+
+        - name: Display controller status
+          ansible.builtin.debug:
+            msg: "Sealed Secrets Controller is ready and available"
+          when: controller_deployment.resources | length > 0
+      tags: [controller, helm]
+
+    - name: Prepare Application Namespaces
+      block:
+        - name: Ensure namespaces exist for sealed secrets
+          kubernetes.core.k8s:
+            kubeconfig: "{{ kubeconfig_path }}"
+            definition:
+              apiVersion: v1
+              kind: Namespace
+              metadata:
+                name: "{{ item }}"
+            state: present
+          loop:
+            - argocd
+            - argowf
+            - iris-demo
+            - jupyterhub
+            - kserve
+            - minio
+            - mlflow
+            - monitoring
+            - harbor
+            - seldon-system
+          register: namespace_creation
+
+        - name: Display created namespaces
+          ansible.builtin.debug:
+            msg: "Ensured {{ namespace_creation.results | length }} namespaces exist"
+      tags: [namespaces, preparation]
+
+    - name: Generate Sealed Secrets from Scripts
+      block:
+        - name: Check if sealed secrets script exists
+          ansible.builtin.stat:
+            path: "{{ playbook_dir }}/../../scripts/create-all-sealed-secrets.sh"
+          register: sealed_secrets_script
+          delegate_to: localhost
+
+        - name: Make script executable
+          ansible.builtin.file:
+            path: "{{ playbook_dir }}/../../scripts/create-all-sealed-secrets.sh"
+            mode: '0755'
+          delegate_to: localhost
+          when: sealed_secrets_script.stat.exists
+
+        - name: Wait for sealed-secrets controller to be fully ready
+          ansible.builtin.pause:
+            seconds: 30
+          when: sealed_secrets_script.stat.exists
+
+        - name: Run sealed secrets creation script
+          ansible.builtin.shell: |
+            cd "{{ playbook_dir }}"
+            ../../scripts/create-all-sealed-secrets.sh
+          environment:
+            KUBECONFIG: "{{ kubeconfig_path }}"
+          delegate_to: localhost
+          register: script_result
+          when: sealed_secrets_script.stat.exists
+
+        - name: Display script output
+          ansible.builtin.debug:
+            msg: "{{ script_result.stdout_lines | default(['No output']) }}"
+          when: sealed_secrets_script.stat.exists and script_result is defined
+
+        - name: Display script errors if any
+          ansible.builtin.debug:
+            msg: "Script errors: {{ script_result.stderr_lines | default(['No errors']) }}"
+          when: sealed_secrets_script.stat.exists and script_result is defined and script_result.stderr_lines | default([]) | length > 0
+
+        - name: Script not found message
+          ansible.builtin.debug:
+            msg: "Sealed secrets script not found at {{ playbook_dir }}/../../scripts/create-all-sealed-secrets.sh"
+          when: not sealed_secrets_script.stat.exists
+      tags: [scripts, generation]
+
+    - name: Deploy Sealed Secrets
+      block:
+        - name: Check if sealed secrets manifests directory exists
+          ansible.builtin.stat:
+            path: "{{ playbook_dir }}/../manifests/sealed-secrets"
+          register: sealed_secrets_dir
+          delegate_to: localhost
+
+        - name: Find sealed secret manifest files
+          ansible.builtin.find:
+            paths: "{{ playbook_dir }}/../manifests/sealed-secrets"
+            patterns: "*.yaml,*.yml"
+          register: sealed_secret_files
+          delegate_to: localhost
+          when: sealed_secrets_dir.stat.exists
+
+        - name: Apply sealed secrets manifests
+          kubernetes.core.k8s:
+            kubeconfig: "{{ kubeconfig_path }}"
+            src: "{{ item.path }}"
+            state: present
+          loop: "{{ sealed_secret_files.files | default([]) }}"
+          when: sealed_secrets_dir.stat.exists
+          register: sealed_secrets_applied
+
+        - name: Display applied sealed secrets
+          ansible.builtin.debug:
+            msg: "Applied {{ sealed_secrets_applied.results | default([]) | length }} sealed secret manifests"
+          when: sealed_secrets_dir.stat.exists
+
+        - name: No sealed secrets found message
+          ansible.builtin.debug:
+            msg: "No sealed secrets directory found. Sealed secrets can be created manually or via scripts."
+          when: not sealed_secrets_dir.stat.exists
+      tags: [secrets, manifests]
+
+  rescue:
+    - name: Handle Sealed Secrets deployment failure
+      block:
+        - name: Display error information
+          ansible.builtin.debug:
+            msg: |
+              Sealed Secrets deployment failed. Common issues:
+              - Kubernetes cluster not ready
+              - Insufficient permissions
+              - Network connectivity issues
+              - Helm repository not accessible
+
+        - name: Check if controller was partially deployed
+          kubernetes.core.k8s_info:
+            api_version: apps/v1
+            kind: Deployment
+            name: sealed-secrets
+            namespace: kube-system
+            kubeconfig: "{{ kubeconfig_path }}"
+          register: partial_deployment
+          ignore_errors: true
+
+        - name: Cleanup partial deployment if needed
+          kubernetes.core.helm:
+            name: sealed-secrets
+            release_namespace: kube-system
+            kubeconfig: "{{ kubeconfig_path }}"
+            state: absent
+          when: partial_deployment.resources | default([]) | length > 0
+          ignore_errors: true
+
+        - name: Fail with helpful message
+          ansible.builtin.fail:
+            msg: "Sealed Secrets deployment failed. Check the error messages above and ensure your cluster is ready."
+
+  always:
+    - name: Display final status
+      ansible.builtin.debug:
+        msg: "Sealed Secrets deployment task completed"
+
+  when: k3s_state is not defined or k3s_state != "absent"
+  tags: [sealed-secrets]

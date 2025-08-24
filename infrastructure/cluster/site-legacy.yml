@@ -1,0 +1,338 @@
+---
+# Professional MLOps Platform Deployment
+
+# =============================
+# PHASE 0: PLATFORM PREREQUISITES
+# =============================
+
+# Play 0: Platform Prerequisites
+- name: Install Platform Prerequisites
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Install Essential Platform Tools
+      include_role:
+        name: foundation/prerequisites
+      tags: [prerequisites, foundation, tools]
+
+# =============================
+# PHASE 1: INFRASTRUCTURE SETUP
+# =============================
+
+# Play 1a: K3s Control Plane
+- name: Setup K3s Control Plane
+  hosts: k3s_control_plane
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Debug before calling control plane role
+      ansible.builtin.debug:
+        msg: "About to call k3s_control_plane role with k3s_state={{ k3s_state | default('undefined') }}"
+      tags: [k3s, control_plane, debug]
+
+    - name: Deploy or Remove K3s Control Plane
+      include_role:
+        name: foundation/k3s_control_plane
+      tags: [k3s, control_plane, cilium, cni, networking]
+
+# Play 1b: K3s Workers
+- name: Setup K3s Workers
+  hosts: k3s_workers
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Deploy or Remove K3s Workers
+      include_role:
+        name: foundation/k3s_workers
+      tags: [k3s, workers]
+
+# Play 2: NFS Infrastructure Setup
+- name: Setup NFS Infrastructure
+  hosts: nfs_server:k3s_control_plane:k3s_workers
+  gather_facts: true
+  become: true
+  tasks:
+    # NFS Server
+    - name: Deploy NFS Server
+      include_role:
+        name: foundation/nfs_server
+      when: 
+        - inventory_hostname in groups['nfs_server']
+        - k3s_state is not defined or k3s_state != "absent"
+      tags: [storage, nfs, nfs-server]
+
+    # NFS Clients
+    - name: Deploy NFS Clients
+      include_role:
+        name: foundation/nfs_clients
+      when: 
+        - inventory_hostname in groups['k3s_control_plane'] or inventory_hostname in groups['k3s_workers']
+        - k3s_state is not defined or k3s_state != "absent"
+      tags: [storage, nfs, nfs-clients]
+
+# =============================
+# PHASE 2: KUBERNETES FOUNDATION
+# =============================
+
+# Play 3: Kubernetes Infrastructure Setup
+- name: Setup Kubernetes Infrastructure
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Deploy Kubernetes Components
+      block:
+        # Kubeconfig
+        - name: Fetch kubeconfig
+          include_role:
+            name: foundation/fetch_kubeconfig
+          tags: [k3s, kubeconfig]
+
+        # NFS Provisioner
+        - name: Deploy NFS Provisioner
+          include_role:
+            name: foundation/nfs_provisioner
+          tags: [storage, nfs, nfs-provisioner]
+
+        # MetalLB Load Balancer
+        - name: Deploy MetalLB Load Balancer
+          include_role:
+            name: foundation/metallb
+          tags: [networking, metallb, load-balancer]
+
+        # Sealed Secrets (MUST be before secrets)
+        - name: Deploy Sealed Secrets
+          include_role:
+            name: foundation/sealed_secrets
+          tags: [security, sealed-secrets]
+
+        # Create Secrets (AFTER sealed secrets controller)
+        - name: Deploy Secrets for Active Components
+          include_role:
+            name: foundation/secrets
+          tags: [foundation, secrets, credentials]
+
+
+      when: k3s_state is not defined or k3s_state != "absent"
+
+# =============================
+# PHASE 3: CORE PLATFORM SERVICES
+# =============================
+
+# Play 4: Core Storage and Monitoring
+- name: Deploy Core Infrastructure
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Deploy Core Infrastructure Components
+      block:
+        # === STORAGE LAYER (First - other services depend on it) ===
+        - name: Deploy MinIO Storage
+          include_role:
+            name: storage/minio
+          tags: [core, storage, minio]
+
+        - name: Deploy Storage Credentials
+          include_role:
+            name: storage/credentials
+          tags: [core, storage, credentials]
+
+        # === MONITORING LAYER ===
+        - name: Deploy Prometheus Monitoring Stack
+          include_role:
+            name: monitoring/prometheus_stack
+          tags: [core, monitoring, prometheus]
+
+        # === MESSAGING LAYER ===
+        - name: Deploy Kafka
+          include_role:
+            name: foundation/kafka
+          tags: [core, messaging, kafka]
+
+      when: k3s_state is not defined or k3s_state != "absent"
+
+# =============================
+# PHASE 4: SERVICE MESH (OPTIONAL)
+# =============================
+
+# Play 5: Deploy Service Mesh
+- name: Deploy Service Mesh
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Deploy Istio Service Mesh
+      include_role:
+        name: platform/istio
+      when: 
+        - k3s_state is not defined or k3s_state != "absent"
+        - enable_istio | default(true) or 'istio' in ansible_run_tags
+      tags: [istio, service-mesh]
+
+# =============================
+# PHASE 5: PLATFORM LAYER
+# =============================
+
+# Play 6: Deploy Platform Services
+- name: Deploy Platform Services
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Deploy Platform Components
+      block:
+        # === NEW: Create MLOps shared storage PVCs for JupyterHub ===
+        # These PVCs must exist before JupyterHub (or other platform services) try to claim them.
+        - name: Ensure jupyterhub namespace exists
+          kubernetes.core.k8s:
+            api_version: v1
+            kind: Namespace
+            name: jupyterhub
+            state: present
+            kubeconfig: "{{ kubeconfig_path }}"
+            validate_certs: false
+          tags: [jupyter, jupyterhub_pvc_setup]
+
+        - name: Create MLOps shared storage PVCs for JupyterHub
+          kubernetes.core.k8s:
+            state: present
+            # Path relative to the site.yml playbook location (infrastructure/cluster/)
+            src: "{{ item }}"
+            kubeconfig: "{{ kubeconfig_path }}"
+            validate_certs: false
+          loop:
+            - "manifests/shared-storage/shared-data-pvc-jupyterhub.yaml"
+            - "manifests/shared-storage/shared-artifacts-pvc-jupyterhub.yaml"
+          tags: [ jupyter, jupyterhub_pvc_setup ] # Optional: Add a tag if you want to run this specifically later
+
+        # === GITOPS & CI/CD ===
+        - name: Deploy Argo CD
+          include_role:
+            name: platform/argo_cd
+          tags: [platform, argocd]
+
+        - name: Deploy Argo Workflows
+          include_role:
+            name: platform/argo_workflows
+          tags: [platform, workflows]
+
+        - name: Deploy Argo Events
+          include_role:
+            name: platform/argo_events
+          tags: [platform, argo-events]
+
+        # === DEVELOPMENT ENVIRONMENT ===
+        - name: Deploy JupyterHub
+          include_role:
+            name: platform/jupyterhub
+          tags: [platform, jupyter]
+
+        - name: Deploy Kubernetes Dashboard
+          include_role:
+            name: platform/dashboard
+          tags: [platform, dashboard]
+
+        # === CONTAINER REGISTRY ===
+        - name: Deploy Harbor Registry
+          include_role:
+            name: platform/harbor
+          when: enable_harbor | default(true)
+          tags: [platform, registry, harbor]
+
+        # === MODEL SERVING ===
+        - name: Deploy Seldon Core
+          include_role:
+            name: platform/seldon
+          tags: [platform, model-serving, seldon, seldon-core]
+
+      when: k3s_state is not defined or k3s_state != "absent"
+
+# =============================
+# PHASE 6: MLOPS LAYER
+# =============================
+
+# Play 7: Deploy MLOps Services
+- name: Deploy MLOps Services
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Deploy MLOps Components
+      block:
+        # === ML EXPERIMENT TRACKING ===
+        - name: Deploy MLflow
+          include_role:
+            name: mlops/mlflow
+          tags: [mlops, mlflow]
+
+        # === ML PIPELINES ===
+        - name: Deploy Kubeflow Pipelines
+          include_role:
+            name: mlops/kubeflow
+          when: enable_kubeflow | default(false)
+          tags: [mlops, kubeflow, pipelines]
+
+        # === ML SERVING (ADVANCED) ===
+        - name: Deploy KServe ML Serving Platform
+          include_role:
+            name: mlops/kserve
+          when: enable_istio | default(true)
+          tags: [mlops, kserve]
+
+      when: k3s_state is not defined or k3s_state != "absent"
+
+# =============================
+# PHASE 7: CLEANUP & VALIDATION
+# =============================
+
+# =============================
+# PHASE 8: SUMMARY & CLEANUP
+# =============================
+
+# Play 9: Final Summary and Cleanup
+- name: Deployment Summary and Cleanup
+  hosts: localhost:nfs_server
+  gather_facts: false
+  tasks:
+    # Deployment Summary (localhost only)
+    - name: Show deployment summary
+      debug:
+        msg:
+          - "🎉 Production MLOps Platform Deployment Complete!"
+          - ""
+          - "🚀 MLOps Core Services:"
+          - "- MLflow: http://192.168.1.85:30800"
+          - "- Seldon Core: http://192.168.1.85:32000"
+          - "- Argo CD: http://192.168.1.85:30080"
+          - "- JupyterHub: http://192.168.1.85:30888"
+          - "- Kubernetes Dashboard: http://192.168.1.85:30443"
+          - ""
+          - "🔗 Load Balancer Services:"
+          - "- MetalLB: LoadBalancer IPs from 192.168.1.200-250"
+          - ""
+          - "📊 Monitoring & Storage:"
+          - "- Grafana: http://192.168.1.85:30300"
+          - "- Prometheus: http://192.168.1.85:30090"
+          - "- Pushgateway: http://192.168.1.85:32091"
+          - "- MinIO Console: http://192.168.1.85:30901"
+          - ""
+          - "🔧 Advanced Services (if enabled):"
+          - "- Istio Gateway: http://192.168.1.85:31080"
+          - "- KServe Models: Available via Istio Gateway"
+          - "- Kubeflow Pipelines: http://192.168.1.85:31234 (if deployed)"
+          - "- Argo Workflows: http://192.168.1.85:32746"
+          - ""
+          - "🐳 Container Registry:"
+          - "- Harbor Registry: http://192.168.1.210 (LoadBalancer) or http://192.168.1.85:30880 (NodePort)"
+          - "- Harbor Admin: admin (password configured via harbor_admin_password)"
+          - ""
+          - "🔑 Access Instructions:"
+          - "- kubectl: export KUBECONFIG=/tmp/k3s-kubeconfig.yaml"
+          - "- Dashboard: Use --enable-skip-login for demo access"
+      when: 
+        - inventory_hostname == 'localhost'
+        - k3s_state is not defined or k3s_state != "absent"
+      tags: [summary]
+

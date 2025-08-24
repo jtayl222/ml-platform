@@ -3,8 +3,8 @@
 echo "🗑️  Removing kubeadm cluster and cleaning up storage..."
 
 # Remove kubeadm cluster and cleanup storage in one command
-ansible-playbook -i inventory/production/hosts-kubeadm infrastructure/cluster/site-multiplatform.yml \
-  --extra-vars="kubernetes_state=absent kubeadm_state=absent"
+ansible-playbook -i inventory/production/hosts-kubeadm infrastructure/cluster/site.yml \
+  --extra-vars="kubernetes_state=absent kubeadm_state=absent platform_type=kubeadm"
 
 # Clean up local kubeconfig
 echo "🧹 Cleaning up local kubeconfig..."

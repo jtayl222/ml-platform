@@ -1,0 +1,61 @@
+---
+# K3s validation tasks
+
+- name: Validate K3s installation
+  block:
+    - name: Check K3s binary exists
+      stat:
+        path: "{{ k3s_install_dir }}/k3s"
+      register: k3s_bin_check
+      failed_when: not k3s_bin_check.stat.exists
+
+    - name: Check K3s version
+      command: "{{ k3s_install_dir }}/k3s --version"
+      register: k3s_version_output
+      changed_when: false
+
+    - name: Display K3s version
+      debug:
+        msg: "K3s version: {{ k3s_version_output.stdout }}"
+
+    - name: Check K3s service status (server)
+      systemd:
+        name: k3s
+      register: k3s_service_check
+      when: node_role == 'server'
+      failed_when: k3s_service_check.status.ActiveState != "active"
+
+    - name: Check K3s agent service status (agent)
+      systemd:
+        name: k3s-agent
+      register: k3s_agent_service_check
+      when: node_role == 'agent'
+      failed_when: k3s_agent_service_check.status.ActiveState != "active"
+
+    - name: Verify node is in Ready state (server only)
+      command: |
+        {{ k3s_install_dir }}/k3s kubectl get node {{ inventory_hostname }} \
+        -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' \
+        --kubeconfig={{ k3s_config_dir }}/k3s.yaml
+      register: node_ready_status
+      when: node_role == 'server'
+      become: true
+      failed_when: node_ready_status.stdout != "True"
+      changed_when: false
+
+    - name: Check cluster connectivity (server only)
+      command: |
+        {{ k3s_install_dir }}/k3s kubectl cluster-info \
+        --kubeconfig={{ k3s_config_dir }}/k3s.yaml
+      register: cluster_info
+      when: node_role == 'server'
+      become: true
+      changed_when: false
+
+    - name: Display cluster info (server only)
+      debug:
+        msg: "{{ cluster_info.stdout_lines }}"
+      when: node_role == 'server'
+
+  become: true
+  tags: [k3s, validate]

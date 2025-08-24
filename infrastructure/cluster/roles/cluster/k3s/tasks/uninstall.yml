@@ -1,0 +1,62 @@
+---
+# K3s uninstallation tasks
+
+- name: Uninstall K3s
+  block:
+    - name: Check for K3s uninstall script (server)
+      stat:
+        path: /usr/local/bin/k3s-uninstall.sh
+      register: k3s_uninstall_script
+      when: node_role == 'server'
+
+    - name: Check for K3s agent uninstall script (agent)
+      stat:
+        path: /usr/local/bin/k3s-agent-uninstall.sh
+      register: k3s_agent_uninstall_script
+      when: node_role == 'agent'
+
+    - name: Run K3s uninstall script (server)
+      command: /usr/local/bin/k3s-uninstall.sh
+      become: true
+      when:
+        - node_role == 'server'
+        - k3s_uninstall_script.stat.exists
+
+    - name: Run K3s agent uninstall script (agent)
+      command: /usr/local/bin/k3s-agent-uninstall.sh
+      become: true
+      when:
+        - node_role == 'agent'
+        - k3s_agent_uninstall_script.stat.exists
+
+    - name: Remove K3s data directory
+      file:
+        path: "{{ k3s_data_dir }}"
+        state: absent
+      become: true
+
+    - name: Remove K3s config directory
+      file:
+        path: "{{ k3s_config_dir }}"
+        state: absent
+      become: true
+
+    - name: Remove K3s binary
+      file:
+        path: "{{ k3s_install_dir }}/k3s"
+        state: absent
+      become: true
+
+    - name: Remove kubectl symlink
+      file:
+        path: "{{ k3s_install_dir }}/kubectl"
+        state: absent
+      become: true
+
+    - name: Remove crictl symlink
+      file:
+        path: "{{ k3s_install_dir }}/crictl"
+        state: absent
+      become: true
+
+  tags: [k3s, uninstall]

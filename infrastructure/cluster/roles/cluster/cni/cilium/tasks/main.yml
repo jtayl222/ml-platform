@@ -1,0 +1,10 @@
+---
+- name: Install Cilium CNI
+  include_tasks: install.yml
+  when: cilium_state == 'present'
+  tags: [cilium, cni, networking]
+
+- name: Remove Cilium CNI
+  include_tasks: remove.yml
+  when: cilium_state == 'absent'
+  tags: [cilium, cni, networking]

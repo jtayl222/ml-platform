@@ -1,0 +1,149 @@
+---
+# Cluster Deployment Playbook
+# Handles Kubernetes cluster creation for k3s, kubeadm, and EKS
+# Note: Requires bootstrap.yml to be run first to set kubernetes_platform
+
+# =============================
+# K3S CLUSTER DEPLOYMENT
+# =============================
+
+- name: Deploy K3s Control Plane
+  hosts: "{{ groups['k3s_control_plane'] | default([]) }}"
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Deploy K3s server nodes
+      include_role:
+        name: ../roles/cluster/k3s
+      vars:
+        node_role: server
+      when:
+        - kubernetes_platform == 'k3s'
+        - kubernetes_state != "absent"
+      tags: [k3s, control-plane]
+
+- name: Deploy K3s Workers
+  hosts: "{{ groups['k3s_workers'] | default([]) }}"
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Deploy K3s agent nodes
+      include_role:
+        name: ../roles/cluster/k3s
+      vars:
+        node_role: agent
+      when:
+        - kubernetes_platform == 'k3s'
+        - kubernetes_state != "absent"
+      tags: [k3s, workers]
+
+# =============================
+# KUBEADM CLUSTER DEPLOYMENT
+# =============================
+
+- name: Deploy Kubeadm Cluster
+  hosts: "{{ groups['kubeadm_control_plane'] | default([]) + groups['kubeadm_workers'] | default([]) }}"
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Deploy/Remove kubeadm cluster
+      include_role:
+        name: ../roles/cluster/kubeadm
+      when:
+        - kubernetes_platform == 'kubeadm'
+      tags: [kubeadm, cluster]
+
+# =============================
+# EKS CLUSTER DEPLOYMENT
+# =============================
+
+- name: Deploy EKS Cluster
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Deploy EKS cluster
+      include_role:
+        name: ../roles/cluster/eks
+      when:
+        - kubernetes_platform == 'eks'
+        - kubernetes_state != "absent"
+      tags: [eks, cluster]
+
+# =============================
+# KUBECONFIG MANAGEMENT
+# =============================
+
+- name: Fetch and Configure Kubeconfig
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Fetch kubeconfig for cluster access
+      include_role:
+        name: ../roles/cluster/kubeconfig
+      when: kubernetes_state != "absent"
+      tags: [kubeconfig]
+
+# =============================
+# CNI DEPLOYMENT
+# =============================
+
+- name: Deploy Container Network Interface
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Deploy Cilium CNI
+      include_role:
+        name: ../roles/cluster/cni/cilium
+      when:
+        - kubernetes_state != "absent"
+        - cni_plugin | default('cilium') == 'cilium'
+      tags: [cni, cilium]
+
+    - name: Deploy Calico CNI
+      include_role:
+        name: ../roles/cluster/cni/calico
+      when:
+        - kubernetes_state != "absent"
+        - cni_plugin | default('cilium') == 'calico'
+      tags: [cni, calico]
+
+    - name: Deploy Flannel CNI
+      include_role:
+        name: ../roles/cluster/cni/flannel
+      when:
+        - kubernetes_state != "absent"
+        - cni_plugin | default('cilium') == 'flannel'
+      tags: [cni, flannel]
+
+# =============================
+# CLUSTER VALIDATION
+# =============================
+
+- name: Validate Cluster Deployment
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Check cluster nodes
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Node
+        kubeconfig: "{{ kubeconfig_path }}"
+      register: cluster_nodes
+      when: kubernetes_state != "absent"
+      tags: [validate]
+
+    - name: Display cluster status
+      debug:
+        msg:
+          - "Cluster deployed successfully!"
+          - "Platform: {{ kubernetes_platform }}"
+          - "Nodes: {{ cluster_nodes.resources | length }}"
+          - "Kubeconfig: {{ kubeconfig_path }}"
+      when: 
+        - kubernetes_state != "absent"
+        - cluster_nodes is defined
+      tags: [validate, summary]

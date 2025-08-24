@@ -1,0 +1,102 @@
+---
+- name: Check if platform type is manually specified
+  set_fact:
+    platform_detected: "{{ platform_type }}"
+  when: 
+    - platform_type is defined 
+    - platform_type != 'auto'
+
+- name: Check if platform type is set in inventory
+  set_fact:
+    platform_detected: "{{ kubernetes_platform }}"
+  when: 
+    - platform_detected is not defined
+    - kubernetes_platform is defined
+    - kubernetes_platform != 'auto'
+
+- name: Check if platform type is set via cluster_platform variable
+  set_fact:
+    platform_detected: "{{ cluster_platform }}"
+  when: 
+    - platform_detected is not defined
+    - cluster_platform is defined
+    - cluster_platform != 'auto'
+
+- name: Auto-detect platform type
+  when: platform_detected is not defined
+  block:
+    - name: Check for k3s
+      command: systemctl is-active k3s
+      register: k3s_check
+      failed_when: false
+      changed_when: false
+      delegate_to: "{{ groups['k3s_control_plane'][0] | default(inventory_hostname) }}"
+
+    - name: Check for kubelet (kubeadm)
+      command: systemctl is-active kubelet
+      register: kubelet_check
+      failed_when: false
+      changed_when: false
+      delegate_to: "{{ groups['k3s_control_plane'][0] | default(inventory_hostname) }}"
+
+    - name: Check for EKS
+      stat:
+        path: /etc/eks/release
+      register: eks_check
+      delegate_to: "{{ groups['k3s_control_plane'][0] | default(inventory_hostname) }}"
+
+    - name: Determine platform type
+      set_fact:
+        platform_detected: >-
+          {%- if k3s_check.rc == 0 -%}
+          k3s
+          {%- elif eks_check.stat.exists -%}
+          eks
+          {%- elif kubelet_check.rc == 0 -%}
+          kubeadm
+          {%- else -%}
+          unknown
+          {%- endif -%}
+
+- name: Fail if platform cannot be detected
+  fail:
+    msg: "Unable to detect Kubernetes platform type. Please set 'platform_type' manually."
+  when: platform_detected == 'unknown'
+
+- name: Set platform-specific variables
+  set_fact:
+    kubernetes_platform: "{{ platform_detected }}"
+    cluster_platform: "{{ platform_detected }}"  # For compatibility
+    kubernetes_api_port: "{{ platform_settings[platform_detected].kubernetes_api_port }}"
+    platform_cni_plugin: "{{ platform_settings[platform_detected].cni_plugin }}"
+    platform_requires_cni_install: "{{ platform_settings[platform_detected].requires_cni_install }}"
+    platform_container_runtime: "{{ platform_settings[platform_detected].container_runtime }}"
+    platform_ingress_controller: "{{ platform_settings[platform_detected].ingress_controller }}"
+    platform_storage_provisioner: "{{ platform_settings[platform_detected].storage_provisioner }}"
+    platform_kubeconfig_path: "{{ kubeconfig_paths[platform_detected] }}"
+
+- name: Display detected platform information
+  debug:
+    msg:
+      - "Detected platform: {{ platform_detected }}"
+      - "API port: {{ kubernetes_api_port }}"
+      - "CNI plugin: {{ platform_cni_plugin }}"
+      - "Container runtime: {{ platform_container_runtime }}"
+      - "Ingress controller: {{ platform_ingress_controller }}"
+      - "Storage provisioner: {{ platform_storage_provisioner }}"
+
+- name: Set control plane group based on platform
+  set_fact:
+    control_plane_group: >-
+      {%- if platform_detected == 'k3s' -%}
+      k3s_control_plane
+      {%- elif platform_detected == 'kubeadm' -%}
+      kubeadm_control_plane
+      {%- elif platform_detected == 'eks' -%}
+      eks_control_plane
+      {%- endif -%}
+
+- name: Validate control plane group exists
+  fail:
+    msg: "Control plane group '{{ control_plane_group }}' not found in inventory"
+  when: groups[control_plane_group] is not defined or groups[control_plane_group] | length == 0
