@@ -1,0 +1,152 @@
+---
+# Configure containerd to trust Harbor registry on worker nodes
+- name: Configure containerd for Harbor registry access
+  become: true
+  block:
+    - name: Check if containerd config exists
+      stat:
+        path: /etc/containerd/config.toml
+      register: containerd_config_stat
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['k3s_workers'] if 'k3s_workers' in groups else groups['kubeadm_workers'] if 'kubeadm_workers' in groups else [] }}"
+      run_once: false
+
+    - name: Create containerd config directory
+      file:
+        path: /etc/containerd
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['k3s_workers'] if 'k3s_workers' in groups else groups['kubeadm_workers'] if 'kubeadm_workers' in groups else [] }}"
+      run_once: false
+
+    - name: Ensure containerd registry config section exists
+      lineinfile:
+        path: /etc/containerd/config.toml
+        line: '[plugins."io.containerd.grpc.v1.cri".registry]'
+        create: true
+        backup: true
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['k3s_workers'] if 'k3s_workers' in groups else groups['kubeadm_workers'] if 'kubeadm_workers' in groups else [] }}"
+      run_once: false
+
+    - name: Generate Harbor registry configuration for containerd
+      blockinfile:
+        path: /etc/containerd/config.toml
+        block: |
+          [plugins."io.containerd.grpc.v1.cri".registry.mirrors]
+            [plugins."io.containerd.grpc.v1.cri".registry.mirrors."harbor.test"]
+              endpoint = ["http://{{ harbor_loadbalancer_ip | default('192.168.1.210') }}"]
+            [plugins."io.containerd.grpc.v1.cri".registry.mirrors."{{ harbor_loadbalancer_ip | default('192.168.1.210') }}"]
+              endpoint = ["http://{{ harbor_loadbalancer_ip | default('192.168.1.210') }}"]
+              
+          [plugins."io.containerd.grpc.v1.cri".registry.configs]
+            [plugins."io.containerd.grpc.v1.cri".registry.configs."harbor.test"]
+              [plugins."io.containerd.grpc.v1.cri".registry.configs."harbor.test".tls]
+                insecure_skip_verify = true
+            [plugins."io.containerd.grpc.v1.cri".registry.configs."{{ harbor_loadbalancer_ip | default('192.168.1.210') }}"]
+              [plugins."io.containerd.grpc.v1.cri".registry.configs."{{ harbor_loadbalancer_ip | default('192.168.1.210') }}".tls]
+                insecure_skip_verify = true
+        marker: "# {mark} HARBOR REGISTRY CONFIGURATION"
+        insertafter: '^\[plugins\."io.containerd.grpc.v1.cri"\.registry\]'
+        create: false
+        backup: true
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['k3s_workers'] if 'k3s_workers' in groups else groups['kubeadm_workers'] if 'kubeadm_workers' in groups else [] }}"
+      run_once: false
+      notify: restart containerd
+      when: harbor_configure_containerd | default(true)
+
+    - name: Add Harbor hostname to /etc/hosts on worker nodes
+      lineinfile:
+        path: /etc/hosts
+        regexp: '^.*harbor\.test.*$'
+        line: "{{ harbor_loadbalancer_ip | default('192.168.1.210') }} harbor.test"
+        backup: true
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['k3s_workers'] if 'k3s_workers' in groups else groups['kubeadm_workers'] if 'kubeadm_workers' in groups else [] }}"
+      run_once: false
+      when: harbor_configure_hosts | default(true)
+
+    - name: Create crictl configuration
+      copy:
+        content: |
+          runtime-endpoint: unix:///run/containerd/containerd.sock
+          image-endpoint: unix:///run/containerd/containerd.sock
+          timeout: 10
+          debug: false
+        dest: /etc/crictl.yaml
+        owner: root
+        group: root
+        mode: '0644'
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['k3s_workers'] if 'k3s_workers' in groups else groups['kubeadm_workers'] if 'kubeadm_workers' in groups else [] }}"
+      run_once: false
+
+    - name: Configure Docker daemon for Harbor registry (if Docker is used)
+      block:
+        - name: Create Docker daemon configuration directory
+          file:
+            path: /etc/docker
+            state: directory
+            owner: root
+            group: root
+            mode: '0755'
+          delegate_to: "{{ item }}"
+          loop: "{{ groups['k3s_workers'] if 'k3s_workers' in groups else groups['kubeadm_workers'] if 'kubeadm_workers' in groups else [] }}"
+          run_once: false
+
+        - name: Configure Docker daemon for insecure Harbor registry
+          copy:
+            content: |
+              {
+                "insecure-registries": [
+                  "harbor.test",
+                  "{{ harbor_loadbalancer_ip | default('192.168.1.210') }}"
+                ]
+              }
+            dest: /etc/docker/daemon.json
+            owner: root
+            group: root
+            mode: '0644'
+            backup: true
+          delegate_to: "{{ item }}"
+          loop: "{{ groups['k3s_workers'] if 'k3s_workers' in groups else groups['kubeadm_workers'] if 'kubeadm_workers' in groups else [] }}"
+          run_once: false
+          notify: restart docker
+      when: harbor_configure_docker | default(true)
+
+  when: groups['k3s_workers'] is defined or groups['kubeadm_workers'] is defined
+  tags: [harbor, containerd, docker, configuration]
+
+- name: Verify Harbor registry access
+  block:
+    - name: Test pulling image from Harbor using IP
+      shell: |
+        crictl pull {{ harbor_loadbalancer_ip | default('192.168.1.210') }}/library/busybox:latest
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['k3s_workers'] if 'k3s_workers' in groups else groups['kubeadm_workers'] if 'kubeadm_workers' in groups else [] }}"
+      run_once: false
+      register: pull_ip_test
+      ignore_errors: yes
+
+    - name: Test pulling image from Harbor using hostname
+      shell: |
+        crictl pull harbor.test/library/busybox:latest
+      delegate_to: "{{ item }}"
+      loop: "{{ groups['k3s_workers'] if 'k3s_workers' in groups else groups['kubeadm_workers'] if 'kubeadm_workers' in groups else [] }}"
+      run_once: false
+      register: pull_hostname_test
+      ignore_errors: yes
+
+    - name: Display verification results
+      debug:
+        msg:
+          - "Harbor registry configuration status:"
+          - "  IP-based pull: {{ 'SUCCESS' if pull_ip_test.results[0].rc == 0 else 'FAILED' }}"
+          - "  Hostname-based pull: {{ 'SUCCESS' if pull_hostname_test.results[0].rc == 0 else 'FAILED' }}"
+      when: pull_ip_test is defined and pull_hostname_test is defined
+  when: harbor_verify_access | default(false)
+  tags: [harbor, verify]

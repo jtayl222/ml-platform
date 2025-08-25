@@ -508,6 +508,10 @@
       - "- kubectl get pvc -n {{ harbor_namespace }}"
   tags: [platform, harbor, summary]
 
+- name: Configure containerd and Docker for Harbor registry access
+  include_tasks: configure-containerd.yml
+  tags: [platform, harbor, containerd]
+
 - name: Configure Harbor replication and mirroring
   include_tasks: configure-replication.yml
   when: harbor_enable_replication | default(true)

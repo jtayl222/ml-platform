@@ -89,3 +89,8 @@ harbor_sync_parallel: 4
 # Harbor URL Configuration
 harbor_url: "http://{{ harbor_loadbalancer_ip | default('192.168.1.210') }}"
 harbor_admin_user: "admin"
+
+# Harbor Node Configuration
+harbor_configure_containerd: true  # Configure containerd for Harbor access
+harbor_configure_docker: true      # Configure Docker daemon for Harbor access
+harbor_configure_hosts: true       # Add Harbor hostname to /etc/hosts

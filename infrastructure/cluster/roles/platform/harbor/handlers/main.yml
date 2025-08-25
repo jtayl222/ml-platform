@@ -1,0 +1,17 @@
+---
+- name: restart containerd
+  become: true
+  systemd:
+    name: containerd
+    state: restarted
+    enabled: yes
+  listen: "restart containerd"
+
+- name: restart docker
+  become: true
+  systemd:
+    name: docker
+    state: restarted
+    enabled: yes
+  listen: "restart docker"
+  ignore_errors: yes  # Docker may not be installed on all nodes
