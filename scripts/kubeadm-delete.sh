@@ -2,18 +2,47 @@
 
 echo "🗑️  Removing kubeadm cluster and cleaning up storage..."
 
+# Step 1: Verify SSH connectivity first
+echo "🔍 Verifying SSH connectivity to all cluster nodes..."
+SSH_CHECK_FAILED=0
+for host in nuc8i5 nuc10i3-0 nuc10i3-1 nuc10i5 nuc10i7-0 nuc10i7-1; do
+  if ! ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=yes -o BatchMode=yes "$host" 'echo "SSH_OK"' >/dev/null 2>&1; then
+    echo "❌ SSH connectivity failed for $host"
+    echo "💡 Try: ssh-keygen -f ~/.ssh/known_hosts -R $host"
+    SSH_CHECK_FAILED=1
+  else
+    echo "✅ SSH connectivity OK for $host"
+  fi
+done
+
+if [ $SSH_CHECK_FAILED -eq 1 ]; then
+  echo ""
+  echo "🚫 SSH connectivity issues detected. Please fix SSH key verification issues above and retry."
+  echo "   Run the suggested ssh-keygen commands, then retry this script."
+  exit 1
+fi
+
+# Step 2: Check if there's actually a kubeadm cluster to delete
+echo "🔍 Checking if kubeadm cluster exists..."
+CLUSTER_EXISTS=0
+if ssh -o ConnectTimeout=5 nuc8i5 "test -f /etc/kubernetes/admin.conf" 2>/dev/null; then
+  echo "✅ Kubeadm cluster detected, proceeding with deletion"
+  CLUSTER_EXISTS=1
+else
+  echo "ℹ️  No kubeadm cluster found, performing cleanup only"
+fi
+
 # Critical: Complete cleanup FIRST (before cluster removal)
 echo "🧹 Pre-cleanup: Stop all kubernetes processes and services..."
 ansible kubeadm_control_plane,kubeadm_workers -i inventory/production/hosts-kubeadm -m shell -a "
-  # Stop all kubernetes services
+  # Stop kubelet service (kubeadm manages etcd as static pod, not service)
   sudo systemctl stop kubelet || true;
-  sudo systemctl stop etcd || true;
-  sudo systemctl disable etcd || true;
+  sudo systemctl disable kubelet || true;
   
-  # Kill any remaining kubernetes processes (multiple attempts)
-  sudo pkill -f 'kube-apiserver|kube-controller|kube-scheduler|etcd|kubelet|kube-proxy' || true;
+  # Kill any remaining kubernetes and CNI processes (multiple attempts)
+  sudo pkill -f 'kube-apiserver|kube-controller|kube-scheduler|etcd|kubelet|kube-proxy|cilium|flannel|calico' || true;
   sleep 2;
-  sudo pkill -9 -f 'kube-apiserver|kube-controller|kube-scheduler|etcd|kubelet|kube-proxy' || true;
+  sudo pkill -9 -f 'kube-apiserver|kube-controller|kube-scheduler|etcd|kubelet|kube-proxy|cilium|flannel|calico' || true;
   sleep 1;
   
   # Stop containerd after killing kubernetes processes
@@ -29,11 +58,25 @@ ansible kubeadm_control_plane,kubeadm_workers -i inventory/production/hosts-kube
   sudo rm -rf /var/lib/kubelet/ || true;
   sudo rm -rf /var/lib/kube-proxy/ || true;
   
-  # Clean CNI network interfaces  
+  # Clean CNI network interfaces and namespaces
   sudo rm -rf /etc/cni/net.d/* || true;
+  sudo rm -rf /var/lib/cni/* || true;
+  sudo rm -rf /opt/cni/bin/* || true;
+  
+  # Remove Cilium interfaces
   sudo ip link delete cilium_host 2>/dev/null || true;
   sudo ip link delete cilium_net 2>/dev/null || true;
   sudo ip link delete cilium_vxlan 2>/dev/null || true;
+  
+  # Remove leftover lxc interfaces (container network interfaces)
+  for iface in \$(ip link show | grep -o 'lxc[^@]*' | head -20); do
+    sudo ip link delete \$iface 2>/dev/null || true;
+  done;
+  
+  # Remove CNI network namespaces
+  for netns in \$(ip netns list | grep -o 'cni-[a-f0-9-]*' | head -20); do
+    sudo ip netns delete \$netns 2>/dev/null || true;
+  done;
   
   # Restart containerd with clean state
   sudo systemctl start containerd || true
@@ -41,10 +84,14 @@ ansible kubeadm_control_plane,kubeadm_workers -i inventory/production/hosts-kube
 
 # Verify pre-cleanup was successful
 echo "🔍 Verifying process cleanup..."
-REMAINING_PROCESSES=$(ansible kubeadm_control_plane,kubeadm_workers -i inventory/production/hosts-kubeadm -m shell -a "pgrep -f 'kube-|etcd' || echo 'none'" 2>/dev/null | grep -v 'none' | wc -l)
+if ! REMAINING_PROCESSES=$(ansible kubeadm_control_plane,kubeadm_workers -i inventory/production/hosts-kubeadm -m shell -a "pgrep -f 'kube-|etcd' || echo 'none'" 2>/dev/null | grep -v 'none' | wc -l); then
+  echo "⚠️  WARNING: Could not verify process cleanup due to connectivity issues, continuing..."
+  REMAINING_PROCESSES=0
+fi
+
 if [ "$REMAINING_PROCESSES" -gt 0 ]; then
   echo "⚠️  WARNING: $REMAINING_PROCESSES kubernetes processes still running, attempting final cleanup..."
-  ansible kubeadm_control_plane,kubeadm_workers -i inventory/production/hosts-kubeadm -m shell -a "
+  if ! ansible kubeadm_control_plane,kubeadm_workers -i inventory/production/hosts-kubeadm -m shell -a "
     sudo pkill -9 -f 'kube-|etcd' || true;
     # Check critical ports are free
     for PORT in 6443 10250 10259 10257 2379 2380; do
@@ -53,13 +100,20 @@ if [ "$REMAINING_PROCESSES" -gt 0 ]; then
         sudo lsof -ti:$PORT | sudo xargs kill -9 2>/dev/null || true;
       fi;
     done
-  " --become
+  " --become 2>/dev/null; then
+    echo "⚠️  WARNING: Final cleanup failed due to connectivity issues, continuing with cluster removal..."
+  fi
   sleep 2
 fi
 
 # Remove kubeadm cluster and cleanup storage
-ansible-playbook -i inventory/production/hosts-kubeadm infrastructure/cluster/site.yml \
-  --extra-vars="kubernetes_state=absent kubeadm_state=absent"
+if [ $CLUSTER_EXISTS -eq 1 ]; then
+  echo "🗑️  Removing kubeadm cluster via Ansible..."
+  ansible-playbook -i inventory/production/hosts-kubeadm infrastructure/cluster/site.yml \
+    --extra-vars="kubernetes_state=absent kubeadm_state=absent"
+else
+  echo "⚠️  Skipping Ansible cluster removal (no cluster found)"
+fi
 
 # Clean up local kubeconfig
 echo "🧹 Cleaning up local kubeconfig..."
@@ -89,7 +143,10 @@ fi
 
 # Verify containerd is functional on all nodes
 echo "🔍 Checking containerd status on all nodes..."
-CONTAINERD_CHECK=$(ansible kubeadm_control_plane,kubeadm_workers -i inventory/production/hosts-kubeadm -m command -a "systemctl is-active containerd" 2>/dev/null | grep -c "active")
+if ! CONTAINERD_CHECK=$(ansible kubeadm_control_plane,kubeadm_workers -i inventory/production/hosts-kubeadm -m command -a "systemctl is-active containerd" 2>/dev/null | grep -c "active" 2>/dev/null); then
+  echo "⚠️  WARNING: Could not check containerd status due to connectivity issues"
+  CONTAINERD_CHECK=0
+fi
 TOTAL_NODES=6  # Known node count to avoid hanging commands
 
 if [ "$CONTAINERD_CHECK" -eq "$TOTAL_NODES" ]; then
@@ -100,10 +157,10 @@ fi
 
 # Quick check for CNI interfaces (simplified to avoid hanging)
 echo "🔍 Checking for stale network interfaces..."
-if ansible kubeadm_control_plane[0] -i inventory/production/hosts-kubeadm -m shell -a "ip link show | grep -E 'cilium|flannel|calico' || echo 'clean'" 2>/dev/null | grep -q "clean"; then
+if ansible kubeadm_control_plane[0] -i inventory/production/hosts-kubeadm -m shell -a "ip link show | grep -E 'cilium|flannel|calico' || echo 'clean'" 2>/dev/null | grep -q "clean" 2>/dev/null; then
   echo "✅ No stale CNI network interfaces found"
 else
-  echo "⚠️  WARNING: May have stale CNI network interfaces"
+  echo "⚠️  WARNING: May have stale CNI network interfaces (or connectivity issues)"
 fi
 
 # Test containerd functionality with a quick image pull
@@ -111,7 +168,7 @@ echo "🔍 Testing containerd functionality..."
 if ansible kubeadm_control_plane[0] -i inventory/production/hosts-kubeadm -m shell -a "sudo crictl version >/dev/null 2>&1" >/dev/null 2>&1; then
   echo "✅ containerd is functional"
 else
-  echo "⚠️  WARNING: containerd may have issues"
+  echo "⚠️  WARNING: containerd may have issues (or connectivity issues)"
 fi
 
 echo ""
