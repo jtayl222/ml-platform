@@ -1,0 +1,119 @@
+---
+# Verify SSH connectivity to all cluster nodes
+# Critical for configuration management and Harbor containerd fixes
+
+- name: Test SSH connectivity to all cluster nodes
+  shell: |
+    ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=yes -o BatchMode=yes {{ item }} 'echo "SSH_OK"'
+  register: ssh_connectivity_results
+  failed_when: false
+  loop: "{{ groups['all'] | difference(['localhost']) }}"
+  delegate_to: localhost
+  run_once: true
+
+- name: Check for SSH key verification issues
+  shell: |
+    ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=yes -o BatchMode=yes {{ item }} 'echo "SSH_OK"' 2>&1 | grep -i "host key verification failed\|WARNING.*REMOTE HOST IDENTIFICATION HAS CHANGED" || echo "SSH_CLEAN"
+  register: ssh_key_issues_results
+  failed_when: false
+  loop: "{{ groups['all'] | difference(['localhost']) }}"
+  delegate_to: localhost
+  run_once: true
+
+- name: Display SSH connectivity results header
+  debug:
+    msg:
+      - "🔍 SSH Connectivity Verification Results:"
+      - ""
+  delegate_to: localhost
+  run_once: true
+
+- name: Display SSH connectivity for each node
+  debug:
+    msg: "{{ '✅' if item.rc == 0 else '❌' }} {{ item.item }}: {{ 'Connected' if item.rc == 0 else 'Failed - Connection error' }}"
+  loop: "{{ ssh_connectivity_results.results }}"
+  delegate_to: localhost
+  run_once: true
+
+- name: Display SSH key issues header
+  debug:
+    msg:
+      - ""
+      - "🔑 SSH Key Issues Detection:"
+  delegate_to: localhost
+  run_once: true
+
+- name: Display SSH key status for each node
+  debug:
+    msg: "{{ '🔧' if 'SSH_CLEAN' not in item.stdout else '✅' }} {{ item.item }}: {{ 'Key verification issue detected' if 'SSH_CLEAN' not in item.stdout else 'No key issues' }}"
+  loop: "{{ ssh_key_issues_results.results }}"
+  delegate_to: localhost
+  run_once: true
+
+- name: Calculate SSH connectivity status
+  set_fact:
+    ssh_success_count: "{{ ssh_connectivity_results.results | selectattr('rc', 'equalto', 0) | list | length }}"
+    total_nodes: "{{ groups['all'] | difference(['localhost']) | length }}"
+  delegate_to: localhost
+  run_once: true
+
+- name: Display SSH prerequisites summary
+  debug:
+    msg:
+      - ""
+      - "🎯 SSH Prerequisites: {{ 'READY ✅' if ssh_success_count | int == total_nodes | int else 'FAILED ❌' }}"
+  delegate_to: localhost
+  run_once: true
+
+- name: Check if any nodes have SSH key issues
+  set_fact:
+    nodes_with_key_issues: "{{ ssh_key_issues_results.results | selectattr('stdout', 'search', 'SSH_CLEAN') | map(attribute='item') | list }}"
+    nodes_needing_fixes: "{{ ssh_key_issues_results.results | rejectattr('stdout', 'search', 'SSH_CLEAN') | map(attribute='item') | list }}"
+  delegate_to: localhost
+  run_once: true
+
+- name: Display SSH key fix commands header
+  debug:
+    msg:
+      - "🔧 SSH Key Fix Commands:"
+      - "Run these commands to fix SSH key verification issues:"
+      - ""
+  when: nodes_needing_fixes | length > 0
+  delegate_to: localhost
+  run_once: true
+
+- name: Display SSH key fix command for each problematic node
+  debug:
+    msg: "ssh-keygen -f ~/.ssh/known_hosts -R {{ item }}"
+  loop: "{{ nodes_needing_fixes }}"
+  when: nodes_needing_fixes | length > 0
+  delegate_to: localhost
+  run_once: true
+
+- name: Display SSH key fix instructions footer
+  debug:
+    msg:
+      - ""
+      - "After running the commands above, re-run the playbook."
+  when: nodes_needing_fixes | length > 0
+  delegate_to: localhost
+  run_once: true
+
+- name: Calculate failed nodes
+  set_fact:
+    failed_nodes: "{{ ssh_connectivity_results.results | selectattr('rc', 'ne', 0) | map(attribute='item') | list }}"
+  delegate_to: localhost
+  run_once: true
+
+- name: Fail if SSH connectivity issues exist
+  fail:
+    msg: |
+      SSH connectivity issues detected. Cannot proceed with platform deployment.
+      
+      Failed nodes: {{ failed_nodes | join(', ') }}
+      
+      Please fix SSH connectivity issues and re-run the deployment.
+      Check SSH key verification issues above for specific fix commands.
+  when: ssh_success_count | int != total_nodes | int
+  delegate_to: localhost
+  run_once: true

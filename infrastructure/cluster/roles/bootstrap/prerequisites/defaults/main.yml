@@ -12,6 +12,9 @@ prerequisites_helm_version: "v3.15.4"
 prerequisites_install_kubectl: true
 prerequisites_kubectl_version: "latest"
 
+# SSH connectivity verification
+prerequisites_verify_ssh: true
+
 # System packages required across all roles
 prerequisites_system_packages:
   - curl

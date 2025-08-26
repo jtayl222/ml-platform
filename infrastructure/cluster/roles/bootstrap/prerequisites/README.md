@@ -11,6 +11,7 @@ This role installs and configures essential platform tools required for MLOps pl
 - ✅ **Tool Consistency**: Standardizes tool versions across all platform deployments  
 - ✅ **Dependency Management**: Installs all required tools before platform deployment
 - ✅ **Version Verification**: Validates tool functionality before proceeding
+- ✅ **SSH Connectivity**: Verifies SSH access to all cluster nodes before deployment
 
 ## Components Installed
 
@@ -25,6 +26,12 @@ This role installs and configures essential platform tools required for MLOps pl
 
 ### Python Dependencies
 - kubernetes, pyyaml, requests (for Ansible modules)
+
+### SSH Connectivity Verification
+- Tests SSH access to all cluster nodes
+- Detects SSH key verification issues
+- Provides fix commands for SSH problems
+- Prevents Harbor containerd configuration failures
 
 ## Configuration
 
@@ -41,6 +48,9 @@ prerequisites_helm_version: "v3.15.4"
 
 prerequisites_install_kubectl: true
 prerequisites_kubectl_version: "latest"
+
+# SSH connectivity verification
+prerequisites_verify_ssh: true
 
 # System packages
 prerequisites_system_packages:

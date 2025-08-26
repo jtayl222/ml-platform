@@ -74,6 +74,12 @@
       include_tasks: verify-tools.yml
       tags: [prerequisites, verify]
 
+    # ===== SSH CONNECTIVITY VERIFICATION =====
+    - name: Verify SSH connectivity to cluster nodes
+      include_tasks: verify-ssh-connectivity.yml
+      when: prerequisites_verify_ssh | default(true)
+      tags: [prerequisites, ssh, verify]
+
   rescue:
     - name: Handle prerequisites installation failure
       debug:
