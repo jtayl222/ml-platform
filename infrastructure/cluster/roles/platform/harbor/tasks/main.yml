@@ -63,27 +63,8 @@
     state: present
   tags: [platform, harbor, namespace]
 
-- name: Create Harbor persistent volume claims
-  kubernetes.core.k8s:
-    kubeconfig: "{{ kubeconfig_path }}"
-    definition:
-      apiVersion: v1
-      kind: PersistentVolumeClaim
-      metadata:
-        name: "{{ item.name }}"
-        namespace: "{{ harbor_namespace }}"
-      spec:
-        accessModes:
-          - ReadWriteOnce
-        storageClassName: "{{ harbor_storage_class }}"
-        resources:
-          requests:
-            storage: "{{ item.size }}"
-  loop:
-    - { name: "harbor-registry-pvc", size: "{{ harbor_registry_storage_size }}" }
-    - { name: "harbor-database-pvc", size: "{{ harbor_storage_size }}" }
-    - { name: "harbor-redis-pvc", size: "5Gi" }
-  tags: [platform, harbor, storage]
+# PVCs are now managed by StatefulSets via volumeClaimTemplates
+# This ensures data persistence across Harbor redeployments
 
 - name: Create Harbor configuration secret
   kubernetes.core.k8s:
@@ -143,7 +124,7 @@
             cpu: "{{ harbor_core_cpu_limit }}"
             memory: "{{ harbor_core_memory_limit }}"
       
-      # Harbor Registry Configuration
+      # Harbor Registry Configuration - Use StatefulSet for persistence
       registry:
         replicas: 1
         resources:
@@ -154,7 +135,7 @@
             cpu: "{{ harbor_registry_cpu_limit }}"
             memory: "{{ harbor_registry_memory_limit }}"
       
-      # Database Configuration
+      # Database Configuration - Use StatefulSet for persistence
       database:
         type: internal
         internal:
@@ -167,7 +148,7 @@
               cpu: "{{ harbor_database_cpu_limit }}"
               memory: "{{ harbor_database_memory_limit }}"
       
-      # Redis Configuration
+      # Redis Configuration - Use StatefulSet for persistence
       redis:
         type: internal
         internal:
@@ -221,7 +202,7 @@
             cpu: "{{ harbor_chartmuseum_cpu_limit }}"
             memory: "{{ harbor_chartmuseum_memory_limit }}"
       
-      # Persistence Configuration
+      # Persistence Configuration - Use existing PVCs
       persistence:
         enabled: true
         persistentVolumeClaim:
@@ -231,6 +212,8 @@
             existingClaim: "harbor-database-pvc"
           redis:
             existingClaim: "harbor-redis-pvc"
+          jobservice:
+            existingClaim: "harbor-jobservice"
       
       # Security Configuration
       secretkey: "{{ harbor_secret_key }}"
@@ -267,7 +250,7 @@
             httpPort: 80
             httpsPort: 443
             notaryPort: 4443
-      externalURL: "http://{{ harbor_loadbalancer_ip or '192.168.1.210' }}"
+      externalURL: "{{ 'https' if harbor_tls_enabled else 'http' }}://{{ harbor_loadbalancer_ip or '192.168.1.210' }}"
       
       # Harbor Core Configuration
       core:
@@ -280,7 +263,7 @@
             cpu: "{{ harbor_core_cpu_limit }}"
             memory: "{{ harbor_core_memory_limit }}"
       
-      # Harbor Registry Configuration
+      # Harbor Registry Configuration - Use StatefulSet for persistence
       registry:
         replicas: 1
         resources:
@@ -291,7 +274,7 @@
             cpu: "{{ harbor_registry_cpu_limit }}"
             memory: "{{ harbor_registry_memory_limit }}"
       
-      # Database Configuration
+      # Database Configuration - Use StatefulSet for persistence
       database:
         type: internal
         internal:
@@ -304,7 +287,7 @@
               cpu: "{{ harbor_database_cpu_limit }}"
               memory: "{{ harbor_database_memory_limit }}"
       
-      # Redis Configuration
+      # Redis Configuration - Use StatefulSet for persistence
       redis:
         type: internal
         internal:
@@ -358,7 +341,7 @@
             cpu: "{{ harbor_chartmuseum_cpu_limit }}"
             memory: "{{ harbor_chartmuseum_memory_limit }}"
       
-      # Persistence Configuration
+      # Persistence Configuration - Use existing PVCs
       persistence:
         enabled: true
         persistentVolumeClaim:
@@ -368,6 +351,8 @@
             existingClaim: "harbor-database-pvc"
           redis:
             existingClaim: "harbor-redis-pvc"
+          jobservice:
+            existingClaim: "harbor-jobservice"
       
       # Security Configuration
       secretkey: "{{ harbor_secret_key }}"

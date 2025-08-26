@@ -51,6 +51,9 @@ harbor_trivy_enabled: true
 harbor_notary_enabled: true
 harbor_chartmuseum_enabled: true
 
+# Security
+harbor_tls_enabled: false
+
 # Integration
 harbor_integrate_with_seldon: true
 harbor_integrate_with_jupyter: true
@@ -325,7 +328,7 @@ curl -u admin:Harbor12345 http://192.168.1.210/api/v2.0/projects
 ## Security Considerations
 
 1. **Change Default Passwords**: Update `harbor_admin_password`
-2. **Enable TLS**: Configure TLS certificates for HTTPS
+2. **Enable TLS**: Set `harbor_tls_enabled: true` and configure TLS certificates for HTTPS (disabled by default for containerd compatibility)
 3. **Network Policies**: Restrict access to Harbor services
 4. **Vulnerability Scanning**: Enable and monitor scan results
 5. **Content Trust**: Enable Notary for image signing
