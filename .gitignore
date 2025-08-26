@@ -145,4 +145,5 @@ CLAUDE.md
 # Claude RAG generated files
 .claude-rag/index.json
 .claude-rag/cache.json
+.claude-rag/embeddings/
 .claude-rag/*.tmp

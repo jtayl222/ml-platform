@@ -74,7 +74,7 @@
 
 - name: Configure Harbor webhook for image scan completion
   uri:
-    url: "{{ harbor_url | regex_replace('^http:', 'https:') }}/api/v2.0/projects/library/webhook/policies"
+    url: "{{ harbor_url }}/api/v2.0/projects/library/webhook/policies"
     method: POST
     user: "{{ harbor_admin_user }}"
     password: "{{ harbor_admin_password }}"
