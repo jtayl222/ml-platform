@@ -32,6 +32,15 @@ else
   echo "ℹ️  No kubeadm cluster found, performing cleanup only"
 fi
 
+# Distribute comprehensive CNI cleanup script if available
+if [ -f "scripts/cleanup-cni-interfaces.sh" ]; then
+  echo "📋 Distributing comprehensive CNI cleanup script..."
+  ansible kubeadm_control_plane,kubeadm_workers -i inventory/production/hosts-kubeadm \
+    -m copy -a "src=scripts/cleanup-cni-interfaces.sh dest=/tmp/cleanup-cni-interfaces.sh mode=0755" --become 2>/dev/null || {
+    echo "⚠️  Failed to distribute cleanup script, will use basic cleanup only"
+  }
+fi
+
 # Critical: Complete cleanup FIRST (before cluster removal)
 echo "🧹 Pre-cleanup: Stop all kubernetes processes and services..."
 ansible kubeadm_control_plane,kubeadm_workers -i inventory/production/hosts-kubeadm -m shell -a "
@@ -58,7 +67,13 @@ ansible kubeadm_control_plane,kubeadm_workers -i inventory/production/hosts-kube
   sudo rm -rf /var/lib/kubelet/ || true;
   sudo rm -rf /var/lib/kube-proxy/ || true;
   
-  # Clean CNI network interfaces and namespaces
+  # Clean CNI network interfaces and namespaces - use comprehensive cleanup
+  echo 'Running comprehensive CNI cleanup...';
+  if [ -f '/tmp/cleanup-cni-interfaces.sh' ]; then
+    /tmp/cleanup-cni-interfaces.sh 2>/dev/null || echo 'Comprehensive cleanup failed, using basic cleanup';
+  fi;
+  
+  # Fallback basic cleanup (in case comprehensive script not available)
   sudo rm -rf /etc/cni/net.d/* || true;
   sudo rm -rf /var/lib/cni/* || true;
   sudo rm -rf /opt/cni/bin/* || true;
@@ -68,12 +83,12 @@ ansible kubeadm_control_plane,kubeadm_workers -i inventory/production/hosts-kube
   sudo ip link delete cilium_net 2>/dev/null || true;
   sudo ip link delete cilium_vxlan 2>/dev/null || true;
   
-  # Remove leftover lxc interfaces (container network interfaces)
+  # Remove leftover lxc interfaces (container network interfaces) - limited to prevent hanging
   for iface in \$(ip link show | grep -o 'lxc[^@]*' | head -20); do
     sudo ip link delete \$iface 2>/dev/null || true;
   done;
   
-  # Remove CNI network namespaces
+  # Remove CNI network namespaces - limited to prevent hanging
   for netns in \$(ip netns list | grep -o 'cni-[a-f0-9-]*' | head -20); do
     sudo ip netns delete \$netns 2>/dev/null || true;
   done;
