@@ -1,0 +1,86 @@
+---
+- name: Configure containerd for Harbor registry access
+  block:
+    - name: Create containerd certificates directory for Harbor
+      file:
+        path: "{{ containerd_certs_path }}/{{ harbor_standalone_registry }}"
+        state: directory
+        mode: '0755'
+      become: yes
+
+    - name: Configure containerd hosts.toml for Harbor
+      template:
+        src: hosts.toml.j2
+        dest: "{{ containerd_certs_path }}/{{ harbor_standalone_registry }}/hosts.toml"
+        mode: '0644'
+      become: yes
+      notify: restart containerd
+
+    - name: Configure containerd main config for Harbor
+      template:
+        src: containerd-config.toml.j2
+        dest: "{{ containerd_config_path }}/config.toml"
+        mode: '0644'
+        backup: yes
+      become: yes
+      notify: restart containerd
+
+  when: >
+    inventory_hostname in groups.get('k3s_control_plane', []) or
+    inventory_hostname in groups.get('k3s_workers', []) or
+    inventory_hostname in groups.get('kubeadm_control_plane', []) or
+    inventory_hostname in groups.get('kubeadm_workers', [])
+  tags: [platform, harbor, containerd]
+
+- name: Create Harbor registry secrets in Kubernetes
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: harbor-registry-secret
+        namespace: "{{ item }}"
+      type: kubernetes.io/dockerconfigjson
+      data:
+        .dockerconfigjson: "{{ harbor_docker_config | to_json | b64encode }}"
+  vars:
+    harbor_docker_config:
+      auths:
+        "{{ harbor_standalone_registry }}":
+          username: "{{ harbor_standalone_user }}"
+          password: "{{ harbor_standalone_password }}"
+          auth: "{{ (harbor_standalone_user + ':' + harbor_standalone_password) | b64encode }}"
+  loop: "{{ harbor_standalone_namespaces }}"
+  when: >
+    harbor_create_secrets and (
+      (groups.get('k3s_control_plane', []) | length > 0 and inventory_hostname == groups['k3s_control_plane'][0]) or
+      (groups.get('kubeadm_control_plane', []) | length > 0 and inventory_hostname == groups['kubeadm_control_plane'][0]) or
+      inventory_hostname == 'localhost'
+    )
+  tags: [platform, harbor, secrets]
+
+- name: Display Harbor configuration summary
+  debug:
+    msg:
+      - "🎉 Harbor Standalone Registry Configuration Complete!"
+      - "🐳 Container Registry Ready!"
+      - ""
+      - "🌐 Access Information:"
+      - "- Harbor Web UI: {{ harbor_standalone_protocol }}://{{ harbor_standalone_registry }}"
+      - "- Registry endpoint: {{ harbor_standalone_registry }}"
+      - "- Username: {{ harbor_standalone_user }}"
+      - "- Password: {{ harbor_standalone_password }}"
+      - ""
+      - "🐳 Docker Commands:"
+      - "- Login: docker login {{ harbor_standalone_registry }} -u {{ harbor_standalone_user }} -p {{ harbor_standalone_password }}"
+      - "- Tag: docker tag nginx:latest {{ harbor_standalone_registry }}/library/nginx:latest"
+      - "- Push: docker push {{ harbor_standalone_registry }}/library/nginx:latest"
+      - "- Pull: docker pull {{ harbor_standalone_registry }}/library/nginx:latest"
+      - ""
+      - "🔧 Integration Status:"
+      - "- Containerd configured on all cluster nodes"
+      - "- Kubernetes secrets created in: {{ harbor_standalone_namespaces | join(', ') }}"
+      - "- Registry accessible via HTTP (insecure for development)"
+  run_once: true
+  tags: [platform, harbor, summary]

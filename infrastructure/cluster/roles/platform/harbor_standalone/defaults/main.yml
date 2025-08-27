@@ -1,0 +1,22 @@
+---
+# Harbor Standalone Configuration
+harbor_standalone_registry: "192.168.1.100"
+harbor_standalone_user: "admin"
+harbor_standalone_password: "Harbor12345"
+harbor_standalone_email: "admin@harbor.local"
+harbor_standalone_protocol: "http"
+harbor_standalone_port: 80
+
+# Containerd configuration
+containerd_config_path: "/etc/containerd"
+containerd_certs_path: "/etc/containerd/certs.d"
+
+# Kubernetes integration
+harbor_create_secrets: true
+harbor_standalone_namespaces:
+  - default
+  - kube-system
+  - seldon-system
+  - mlflow
+  - jupyterhub
+  - minio

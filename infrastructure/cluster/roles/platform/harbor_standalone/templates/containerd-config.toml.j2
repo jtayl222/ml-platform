@@ -1,0 +1,17 @@
+version = 2
+
+[plugins]
+  [plugins."io.containerd.grpc.v1.cri"]
+    [plugins."io.containerd.grpc.v1.cri".registry]
+      config_path = "{{ containerd_certs_path }}"
+      
+      [plugins."io.containerd.grpc.v1.cri".registry.mirrors]
+        [plugins."io.containerd.grpc.v1.cri".registry.mirrors."{{ harbor_standalone_registry }}"]
+          endpoint = ["{{ harbor_standalone_protocol }}://{{ harbor_standalone_registry }}"]
+      
+      [plugins."io.containerd.grpc.v1.cri".registry.configs]
+        [plugins."io.containerd.grpc.v1.cri".registry.configs."{{ harbor_standalone_registry }}".tls]
+          insecure_skip_verify = true
+        [plugins."io.containerd.grpc.v1.cri".registry.configs."{{ harbor_standalone_registry }}".auth]
+          username = "{{ harbor_standalone_user }}"
+          password = "{{ harbor_standalone_password }}"

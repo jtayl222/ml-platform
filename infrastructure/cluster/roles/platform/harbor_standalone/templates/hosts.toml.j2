@@ -1,0 +1,5 @@
+server = "{{ harbor_standalone_protocol }}://{{ harbor_standalone_registry }}"
+
+[host."{{ harbor_standalone_protocol }}://{{ harbor_standalone_registry }}"]
+  capabilities = ["pull", "resolve", "push"]
+  skip_verify = true
