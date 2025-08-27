@@ -267,6 +267,26 @@ This indicates network policies are blocking DNS traffic. The role automatically
 2. Creating network policies that allow DNS egress
 3. Allowing required communication between ML and Seldon namespaces
 
+## Known Issues
+
+### Critical: Cross-Namespace ServerConfig References (v2.9.1)
+
+**Issue**: Server resources cannot reference ServerConfig in different namespaces (e.g., `seldon-system/mlserver-config`)
+**Impact**: Application teams must copy ServerConfigs to their namespace
+**Status**: See `docs/seldon-v2-known-issues.md` for detailed workarounds
+
+Quick workaround for application teams:
+```bash
+# Copy ServerConfig from seldon-system to your namespace
+kubectl get serverconfig mlserver-config -n seldon-system -o yaml | \
+  sed 's/namespace: seldon-system/namespace: your-namespace/' | \
+  kubectl apply -f -
+
+# Reference without namespace prefix in Server spec
+spec:
+  serverConfig: mlserver-config  # NOT seldon-system/mlserver-config
+```
+
 ## Tags
 
 - `seldon`: All Seldon Core tasks
