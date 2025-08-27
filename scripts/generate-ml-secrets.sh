@@ -36,7 +36,13 @@ seal_and_annotate() {
     yq eval ".metadata.annotations.\"generated-by\" = \"infrastructure-team\"" | \
     yq eval ".metadata.annotations.\"generated-date\" = \"$(date -Iseconds)\"" | \
     yq eval ".metadata.annotations.\"approved-by\" = \"$REQUESTOR\"" | \
-    yq eval ".metadata.annotations.\"namespace\" = \"$NAMESPACE\"" \
+    yq eval ".metadata.annotations.\"namespace\" = \"$NAMESPACE\"" | \
+    yq eval ".metadata.annotations.\"meta.helm.sh/release-name\" = \"infrastructure-secrets\"" | \
+    yq eval ".metadata.annotations.\"meta.helm.sh/release-namespace\" = \"$NAMESPACE\"" | \
+    yq eval ".metadata.labels.\"app.kubernetes.io/managed-by\" = \"infrastructure\"" | \
+    yq eval ".spec.template.metadata.annotations.\"meta.helm.sh/release-name\" = \"infrastructure-secrets\"" | \
+    yq eval ".spec.template.metadata.annotations.\"meta.helm.sh/release-namespace\" = \"$NAMESPACE\"" | \
+    yq eval ".spec.template.metadata.labels.\"app.kubernetes.io/managed-by\" = \"infrastructure\"" \
     > "$output_file"
 }
 
