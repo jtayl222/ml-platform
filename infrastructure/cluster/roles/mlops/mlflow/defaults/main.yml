@@ -6,7 +6,7 @@
 mlflow_namespace: "mlflow"
 mlflow_release_name: "mlflow"
 mlflow_pvc_name: "mlflow-pvc"
-mlflow_image: "jtayl22/mlflow-postgresql:3.1.0-4"
+mlflow_image: "{{ harbor_standalone_registry | default('192.168.1.100') }}/library/mlflow-postgresql:3.1.0-4"
 mlflow_nodeport: 30800
 
 # Storage configuration

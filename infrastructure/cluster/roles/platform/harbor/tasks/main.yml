@@ -127,6 +127,8 @@
       # Harbor Registry Configuration - Use StatefulSet for persistence
       registry:
         replicas: 1
+        controller:
+          kind: StatefulSet
         resources:
           requests:
             cpu: "{{ harbor_registry_cpu_request }}"
@@ -202,18 +204,22 @@
             cpu: "{{ harbor_chartmuseum_cpu_limit }}"
             memory: "{{ harbor_chartmuseum_memory_limit }}"
       
-      # Persistence Configuration - Use existing PVCs
+      # Persistence Configuration - Use StatefulSet volumeClaimTemplates
       persistence:
         enabled: true
         persistentVolumeClaim:
           registry:
-            existingClaim: "harbor-registry-pvc"
+            storageClass: "{{ harbor_storage_class | default('local-path') }}"
+            size: "{{ harbor_registry_storage_size | default('5Gi') }}"
           database:
-            existingClaim: "harbor-database-pvc"
+            storageClass: "{{ harbor_storage_class | default('local-path') }}"
+            size: "{{ harbor_database_storage_size | default('1Gi') }}"
           redis:
-            existingClaim: "harbor-redis-pvc"
+            storageClass: "{{ harbor_storage_class | default('local-path') }}"
+            size: "{{ harbor_redis_storage_size | default('1Gi') }}"
           jobservice:
-            existingClaim: "harbor-jobservice"
+            storageClass: "{{ harbor_storage_class | default('local-path') }}"
+            size: "{{ harbor_jobservice_storage_size | default('1Gi') }}"
       
       # Security Configuration
       secretkey: "{{ harbor_secret_key }}"
@@ -266,6 +272,8 @@
       # Harbor Registry Configuration - Use StatefulSet for persistence
       registry:
         replicas: 1
+        controller:
+          kind: StatefulSet
         resources:
           requests:
             cpu: "{{ harbor_registry_cpu_request }}"
@@ -341,18 +349,22 @@
             cpu: "{{ harbor_chartmuseum_cpu_limit }}"
             memory: "{{ harbor_chartmuseum_memory_limit }}"
       
-      # Persistence Configuration - Use existing PVCs
+      # Persistence Configuration - Use StatefulSet volumeClaimTemplates
       persistence:
         enabled: true
         persistentVolumeClaim:
           registry:
-            existingClaim: "harbor-registry-pvc"
+            storageClass: "{{ harbor_storage_class | default('local-path') }}"
+            size: "{{ harbor_registry_storage_size | default('5Gi') }}"
           database:
-            existingClaim: "harbor-database-pvc"
+            storageClass: "{{ harbor_storage_class | default('local-path') }}"
+            size: "{{ harbor_database_storage_size | default('1Gi') }}"
           redis:
-            existingClaim: "harbor-redis-pvc"
+            storageClass: "{{ harbor_storage_class | default('local-path') }}"
+            size: "{{ harbor_redis_storage_size | default('1Gi') }}"
           jobservice:
-            existingClaim: "harbor-jobservice"
+            storageClass: "{{ harbor_storage_class | default('local-path') }}"
+            size: "{{ harbor_jobservice_storage_size | default('1Gi') }}"
       
       # Security Configuration
       secretkey: "{{ harbor_secret_key }}"

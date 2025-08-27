@@ -124,7 +124,7 @@
           spec:
             containers:
             - name: mc
-              image: minio/mc:latest
+              image: "{{ harbor_standalone_registry | default('192.168.1.100') }}/library/mc:latest"
               command: ["/bin/sh"]
               args:
                 - -c

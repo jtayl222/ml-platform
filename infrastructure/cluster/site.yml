@@ -85,8 +85,15 @@
         - name: Deploy Harbor Registry
           include_role:
             name: platform/harbor
-          when: enable_harbor | default(true)
+          when: enable_harbor | default(false)
           tags: [foundation, harbor, registry]
+
+        # Configure Standalone Harbor Registry Access (DEFAULT)
+        - name: Configure Standalone Harbor Registry
+          include_role:
+            name: platform/harbor_standalone
+          when: enable_harbor_standalone | default(true)
+          tags: [foundation, harbor, harbor-standalone, registry]
 
         # Create platform-appropriate secrets
         - name: Deploy Secrets
