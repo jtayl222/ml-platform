@@ -3,3 +3,6 @@ server = "{{ harbor_standalone_protocol }}://{{ harbor_standalone_registry }}"
 [host."{{ harbor_standalone_protocol }}://{{ harbor_standalone_registry }}"]
   capabilities = ["pull", "resolve", "push"]
   skip_verify = true
+  
+  [host."{{ harbor_standalone_protocol }}://{{ harbor_standalone_registry }}".header]
+    authorization = "Basic {{ (harbor_standalone_user + ':' + harbor_standalone_password) | b64encode }}"

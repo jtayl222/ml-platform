@@ -1,35 +1,50 @@
 ---
-- name: Configure containerd for Harbor registry access
-  block:
-    - name: Create containerd certificates directory for Harbor
-      file:
-        path: "{{ containerd_certs_path }}/{{ harbor_standalone_registry }}"
-        state: directory
-        mode: '0755'
-      become: yes
+- name: Create containerd certificates directory for Harbor
+  file:
+    path: "{{ containerd_certs_path }}/{{ harbor_standalone_registry }}"
+    state: directory
+    mode: '0755'
+  become: yes
+  delegate_to: "{{ item }}"
+  loop: "{{ groups.get('k3s_control_plane', []) + groups.get('k3s_workers', []) + groups.get('kubeadm_control_plane', []) + groups.get('kubeadm_workers', []) }}"
+  when: item in groups.get('k3s_control_plane', []) + groups.get('k3s_workers', []) + groups.get('kubeadm_control_plane', []) + groups.get('kubeadm_workers', [])
+  tags: [platform, harbor, containerd]
 
-    - name: Configure containerd hosts.toml for Harbor
-      template:
-        src: hosts.toml.j2
-        dest: "{{ containerd_certs_path }}/{{ harbor_standalone_registry }}/hosts.toml"
-        mode: '0644'
-      become: yes
-      notify: restart containerd
+- name: Configure containerd hosts.toml for Harbor
+  template:
+    src: hosts.toml.j2
+    dest: "{{ containerd_certs_path }}/{{ harbor_standalone_registry }}/hosts.toml"
+    mode: '0644'
+  become: yes
+  delegate_to: "{{ item }}"
+  loop: "{{ groups.get('k3s_control_plane', []) + groups.get('k3s_workers', []) + groups.get('kubeadm_control_plane', []) + groups.get('kubeadm_workers', []) }}"
+  when: item in groups.get('k3s_control_plane', []) + groups.get('k3s_workers', []) + groups.get('kubeadm_control_plane', []) + groups.get('kubeadm_workers', [])
+  register: hosts_toml_result
+  tags: [platform, harbor, containerd]
 
-    - name: Configure containerd main config for Harbor
-      template:
-        src: containerd-config.toml.j2
-        dest: "{{ containerd_config_path }}/config.toml"
-        mode: '0644'
-        backup: yes
-      become: yes
-      notify: restart containerd
+- name: Update containerd main config to enable config_path
+  lineinfile:
+    path: "{{ containerd_config_path }}/config.toml"
+    regexp: '^\s*config_path\s*='
+    line: '      config_path = "{{ containerd_certs_path }}"'
+    insertafter: '^\s*\[plugins\."io\.containerd\.grpc\.v1\.cri"\.registry\]'
+    create: yes
+    backup: yes
+  become: yes
+  delegate_to: "{{ item }}"
+  loop: "{{ groups.get('k3s_control_plane', []) + groups.get('k3s_workers', []) + groups.get('kubeadm_control_plane', []) + groups.get('kubeadm_workers', []) }}"
+  when: item in groups.get('k3s_control_plane', []) + groups.get('k3s_workers', []) + groups.get('kubeadm_control_plane', []) + groups.get('kubeadm_workers', [])
+  register: config_toml_result
+  tags: [platform, harbor, containerd]
 
-  when: >
-    inventory_hostname in groups.get('k3s_control_plane', []) or
-    inventory_hostname in groups.get('k3s_workers', []) or
-    inventory_hostname in groups.get('kubeadm_control_plane', []) or
-    inventory_hostname in groups.get('kubeadm_workers', [])
+- name: Restart containerd on cluster nodes after configuration changes
+  systemd:
+    name: containerd
+    state: restarted
+  become: yes
+  delegate_to: "{{ item }}"
+  loop: "{{ groups.get('k3s_control_plane', []) + groups.get('k3s_workers', []) + groups.get('kubeadm_control_plane', []) + groups.get('kubeadm_workers', []) }}"
+  when: item in groups.get('k3s_control_plane', []) + groups.get('k3s_workers', []) + groups.get('kubeadm_control_plane', []) + groups.get('kubeadm_workers', [])
   tags: [platform, harbor, containerd]
 
 - name: Create Harbor registry secrets in Kubernetes
