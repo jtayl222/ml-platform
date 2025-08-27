@@ -147,3 +147,6 @@ CLAUDE.md
 .claude-rag/cache.json
 .claude-rag/embeddings/
 .claude-rag/*.tmp
+
+# Working documents - not for version control
+working-docs/
