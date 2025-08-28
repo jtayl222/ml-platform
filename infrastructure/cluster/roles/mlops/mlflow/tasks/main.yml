@@ -199,7 +199,7 @@
         labels:
           app: mlflow
         annotations:
-          metallb.universe.tf/loadBalancer-ips: "192.168.1.201"
+          metallb.universe.tf/loadBalancer-ips: "{{ mlflow_loadbalancer_ip | default('192.168.1.215') }}"
       spec:
         type: LoadBalancer
         ports:

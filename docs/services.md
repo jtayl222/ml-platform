@@ -2,6 +2,13 @@
 
 **Live Platform Access** - Click the links below to access your running services!
 
+## 📌 **IP STABILITY UPDATE (Aug 28, 2025)**
+
+> **All LoadBalancer IPs are now permanently assigned and stable.**
+> - MLflow has moved to its permanent IP: `192.168.1.215:5000`
+> - Run `./scripts/stabilize-loadbalancer-ips.sh` after deployments to ensure IP stability
+> - See [LoadBalancer IP Stability Guide](loadbalancer-ip-stability.md) for details
+
 ## ⚠️ **SECURITY NOTICE**
 
 > **🔒 This is a development/demo environment with temporary credentials and configurations.**
@@ -27,12 +34,12 @@
 | **JupyterHub** | [http://192.168.1.206](http://192.168.1.206) | [http://192.168.1.85:30888](http://192.168.1.85:30888) | ✅ | **User:** Any username<br/>**Password:** `mlops123` ⚠️ *Demo only* |
 | **Grafana** | [http://192.168.1.207](http://192.168.1.207) | [http://192.168.1.85:30300](http://192.168.1.85:30300) | ✅ | **User:** `admin`<br/>**Password:** `admin123` ⚠️ *Demo only* |
 | **Kubernetes Dashboard** | [https://192.168.1.208](https://192.168.1.208) | [https://192.168.1.85:30444](https://192.168.1.85:30444) | ✅ | **Auth:** Service Account Token ([Get Token](#dashboard-token)) |
-| **MLflow** | [http://192.168.1.203:5000](http://192.168.1.203:5000) | [http://192.168.1.85:30800](http://192.168.1.85:30800) | ✅ | **Backend:** S3 via MinIO ⚠️ *No auth - enable for production*<br/>**Artifacts:** `s3://mlflow-artifacts/` |
+| **MLflow** | [http://192.168.1.215:5000](http://192.168.1.215:5000) | [http://192.168.1.85:30800](http://192.168.1.85:30800) | ✅ | **Backend:** S3 via MinIO ⚠️ *No auth - enable for production*<br/>**Artifacts:** `s3://mlflow-artifacts/` |
 | **MinIO API** | [http://192.168.1.200:9000](http://192.168.1.200:9000) | [http://192.168.1.85:30900](http://192.168.1.85:30900) | ✅ | **User:** `minioadmin`<br/>**Password:** `minioadmin123` ⚠️ *Demo only* |
-| **MinIO Console** | [http://192.168.1.202:9090](http://192.168.1.202:9090) | [http://192.168.1.85:31578](http://192.168.1.85:31578) | ✅ | **User:** `minioadmin`<br/>**Password:** `minioadmin123` ⚠️ *Demo only* |
+| **MinIO Console** | [http://192.168.1.200:9090](http://192.168.1.200:9090) | [http://192.168.1.85:31578](http://192.168.1.85:31578) | ✅ | **User:** `minioadmin`<br/>**Password:** `minioadmin123` ⚠️ *Demo only* |
 | **Prometheus** | *NodePort Only* | [http://192.168.1.85:30090](http://192.168.1.85:30090) | ✅ | **Metrics Collection** ⚠️ *No auth - secure for production* |
 | **Prometheus Pushgateway** | [http://192.168.1.209:9091](http://192.168.1.209:9091) | [http://192.168.1.85:32091](http://192.168.1.85:32091) | ✅ | **A/B Testing Metrics** - Push custom metrics for analysis |
-| **Seldon Core** | [http://192.168.1.202](http://192.168.1.202) | **API/CLI Only** | ✅ | **Model Serving Platform** - Deploy via kubectl |
+| **Seldon Core** | [http://192.168.1.201](http://192.168.1.201) (Scheduler), [http://192.168.1.202](http://192.168.1.202) (Mesh) | **API/CLI Only** | ✅ | **Model Serving Platform** - Deploy via kubectl |
 | **NGINX Ingress** | [http://192.168.1.249](http://192.168.1.249) | *LoadBalancer Only* | ✅ | **Routes:** ml-api.test → financial-inference services |
 
 ## 📊 **Prometheus Pushgateway**
@@ -196,7 +203,7 @@ kubectl -n kubernetes-dashboard create token admin-user
 open http://192.168.1.206  # JupyterHub (any-user/mlops123)
 
 # 2. Track experiments  
-open http://192.168.1.203:5000  # MLflow
+open http://192.168.1.215:5000  # MLflow
 
 # 3. Create ML pipelines
 open http://192.168.1.205  # Argo Workflows (admin/mlopsadmin123)

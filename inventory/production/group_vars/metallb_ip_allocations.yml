@@ -1,0 +1,50 @@
+# MetalLB IP Allocation Strategy
+# ================================
+# This file defines the stable IP allocation for all LoadBalancer services
+# to prevent IP reassignment issues.
+#
+# IP Range: 192.168.1.200-250 (as defined in metallb_ip_range)
+#
+# IMPORTANT: These IPs must be explicitly set in service annotations
+# to ensure stability across deployments.
+
+# Core Infrastructure Services (200-209)
+minio_loadbalancer_ip: "192.168.1.200"
+seldon_scheduler_loadbalancer_ip: "192.168.1.201"  
+seldon_mesh_loadbalancer_ip: "192.168.1.202"
+# 192.168.1.203 - Reserved (formerly fraud-detection seldon-scheduler)
+argocd_loadbalancer_ip: "192.168.1.204"
+argowf_loadbalancer_ip: "192.168.1.205"
+jupyterhub_loadbalancer_ip: "192.168.1.206"
+grafana_loadbalancer_ip: "192.168.1.207"
+dashboard_loadbalancer_ip: "192.168.1.208"
+prometheus_pushgateway_loadbalancer_ip: "192.168.1.209"
+
+# Registry & ML Services (210-219)
+harbor_loadbalancer_ip: "192.168.1.210"
+# 192.168.1.211-212 - Reserved for namespace-specific Seldon deployments
+# 192.168.1.213-214 - Reserved for namespace-specific Seldon deployments
+mlflow_loadbalancer_ip: "192.168.1.215"  # STABLE ASSIGNMENT
+# 192.168.1.216-219 - Reserved for future ML services
+
+# Observability & Service Mesh (240-249)
+istio_gateway_loadbalancer_ip: "192.168.1.240"
+kiali_loadbalancer_ip: "192.168.1.241"
+jaeger_loadbalancer_ip: "192.168.1.242"
+# 192.168.1.243-248 - Reserved for future observability
+nginx_ingress_loadbalancer_ip: "192.168.1.249"
+
+# Application-Specific Seldon Deployments (220-239)
+# These should be assigned per namespace to avoid conflicts
+financial_inference_scheduler_ip: "192.168.1.220"
+financial_inference_mesh_ip: "192.168.1.221"
+financial_mlops_scheduler_ip: "192.168.1.222"
+financial_mlops_mesh_ip: "192.168.1.223"
+fraud_detection_scheduler_ip: "192.168.1.224"
+fraud_detection_mesh_ip: "192.168.1.225"
+# 192.168.1.226-239 - Reserved for additional ML namespaces
+
+# Usage in Ansible:
+# In your service definitions, use:
+# annotations:
+#   metallb.universe.tf/loadBalancer-ips: "{{ mlflow_loadbalancer_ip }}"
